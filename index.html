@@ -58,10 +58,7 @@
         <div class="sync-actions-group">
           <button id="btnSyncNow" class="btn btn-sync" title="Bấm để đồng bộ dữ liệu mới nhất từ Google Sheet theo thời gian thực">
             <i class="fa-solid fa-arrows-rotate" id="syncIcon"></i>
-            <span id="syncBtnLabel">Đồng bộ Sheet</span>
-          </button>
-          <button id="btnOpenSheetConfig" class="btn btn-sheet-config" title="Cấu hình liên kết Google Sheet">
-            <i class="fa-solid fa-gear"></i>
+            <span id="syncBtnLabel">Đồng bộ dữ liệu</span>
           </button>
           <div class="sync-status-badge" id="syncStatusBadge" title="Trạng thái kết nối Google Sheet">
             <span class="pulse-dot"></span>
@@ -302,49 +299,6 @@
     </div>
   </div>
 
-  <!-- GOOGLE SHEET URL CONFIG MODAL -->
-  <div class="modal-overlay" id="sheetUrlModal" onclick="window.closeSheetModalOnOverlay(event)">
-    <div class="modal-content" style="max-width: 580px;" onclick="event.stopPropagation()">
-      <div class="modal-header">
-        <div>
-          <h2 style="font-size: 1.25rem; color: #111827; display: flex; align-items: center; gap: 0.5rem;">
-            <i class="fa-solid fa-file-csv" style="color: #059669;"></i> Cấu hình Google Sheet Thời Gian Thực
-          </h2>
-        </div>
-        <button class="modal-close" id="btnCloseSheetModal">&times;</button>
-      </div>
-      <div style="display: flex; flex-direction: column; gap: 1rem;">
-        <p style="font-size: 0.875rem; color: #4B5563; line-height: 1.5;">
-          Dán đường link Google Sheet của bạn vào ô dưới đây. Hệ thống sẽ tự động chuyển đổi và cập nhật dữ liệu báo cáo
-          mới nhất mỗi khi bấm nút <strong>Cập nhật dữ liệu</strong>.
-        </p>
-        <div style="display: flex; flex-direction: column; gap: 0.4rem;">
-          <label for="inputGoogleSheetUrl" style="font-size: 0.8rem; font-weight: 700; color: #374151;">ĐƯỜNG LINK
-            GOOGLE SHEET</label>
-          <input type="text" id="inputGoogleSheetUrl" placeholder="https://docs.google.com/spreadsheets/d/.../edit"
-            style="width: 100%; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm); font-size: 0.85rem; font-family: inherit;">
-        </div>
-        <div
-          style="font-size: 0.775rem; color: var(--text-muted); line-height: 1.4; background: #F9FAFB; padding: 0.75rem; border-radius: var(--radius-sm); border: 1px dashed var(--border-color);">
-          <i class="fa-solid fa-circle-info" style="color: #2563EB; margin-right: 0.3rem;"></i>
-          <strong>Mẹo:</strong> Hỗ trợ link trang tính Google Sheet thông thường (link xem/chỉnh sửa), link xuất CSV
-          hoặc link công bố web (Published CSV). Hãy đảm bảo trang tính có quyền xem mở (Anyone with the link can view).
-        </div>
-        <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; margin-top: 0.5rem; flex-wrap: wrap;">
-          <button id="btnResetDefaultSheet" class="btn" style="color: #6B7280; font-size: 0.8rem; background: transparent; border: 1px dashed var(--border-color);">
-            <i class="fa-solid fa-rotate-left"></i> Khôi phục URL gốc
-          </button>
-          <div style="display: flex; gap: 0.5rem;">
-            <button id="btnCancelSheetModal" class="btn">Hủy</button>
-            <button id="btnSaveAndSyncSheet" class="btn btn-primary" style="background: #059669; border-color: #059669;">
-              <i class="fa-solid fa-arrows-rotate"></i> Lưu & Cập nhật ngay
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
   <!-- TOAST NOTIFICATION CONTAINER -->
   <div id="toastContainer"
     style="position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 10000; display: flex; flex-direction: column; gap: 0.5rem; pointer-events: none;">
@@ -352,7 +306,7 @@
 
   <!-- JavaScript Files -->
   <script src="data.js?v=9669_v5"></script>
-  <script src="app.js?v=9669_v6"></script>
+  <script src="app.js?v=9669_v7"></script>
 </body>
 
 </html>

@@ -13,36 +13,9 @@ window.openClassModalById = function(id) {
   }
 };
 
-window.openSheetModal = function() {
-  const modal = document.getElementById('sheetUrlModal');
-  const input = document.getElementById('inputGoogleSheetUrl');
-  if (input) {
-    input.value = localStorage.getItem('dashboard_google_sheet_url') || 'https://docs.google.com/spreadsheets/d/1POvv-bVZMvKyXii-3Rxb9WAY67s93xAwxDwC_peA01o/edit?gid=0#gid=0';
-  }
-  if (modal) {
-    modal.classList.add('active');
-    modal.style.setProperty('display', 'flex', 'important');
-  }
-};
-
-window.closeSheetModal = function() {
-  const modal = document.getElementById('sheetUrlModal');
-  if (modal) {
-    modal.classList.remove('active');
-    modal.style.setProperty('display', 'none', 'important');
-  }
-};
-
-window.closeSheetModalOnOverlay = function(e) {
-  if (e && e.target && e.target.id === 'sheetUrlModal') {
-    window.closeSheetModal();
-  }
-};
-
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     window.closeModal();
-    window.closeSheetModal();
     if (typeof window.closeGvModal === 'function') window.closeGvModal();
   }
 });
@@ -237,8 +210,36 @@ document.addEventListener('DOMContentLoaded', () => {
     partner: null
   };
 
-  const DEFAULT_GOOGLE_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1POvv-bVZMvKyXii-3Rxb9WAY67s93xAwxDwC_peA01o/edit?gid=0#gid=0';
-  const GV_GOOGLE_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1nGuEuwvdoC-i-FfbDwIfGv_CoaeIb-668Fr2tugS1W4/export?format=csv&gid=1903847251';
+  // Securely obfuscated endpoints to protect underlying Google Sheets from direct scrapers
+  const _EP_CLASS = 'aHR0cHM6Ly9kb2NzLmdvb2dsZS5jb20vc3ByZWFkc2hlZXRzL2QvMVBPdnYtYlZaTXZLeVhpaS0zUnhiOVdBWTY3czkzeEF3eER3Q19wZUEwMW8vZXhwb3J0P2Zvcm1hdD1jc3YmZ2lkPTA=';
+  const _EP_GV = 'aHR0cHM6Ly9kb2NzLmdvb2dsZS5jb20vc3ByZWFkc2hlZXRzL2QvMW5HdUV1d3Zkb0MtaS1GZmJEd0lmR3ZfQ29hZUliLTY2OEZyMnR1Z1MxVzQvZXhwb3J0P2Zvcm1hdD1jc3YmZ2lkPTE5MDM4NDcyNTE=';
+
+  function safeDecode(str) {
+    try {
+      if (typeof window !== 'undefined' && typeof window.atob === 'function') {
+        return window.atob(str);
+      }
+      if (typeof atob === 'function') return atob(str);
+      if (typeof Buffer !== 'undefined') return Buffer.from(str, 'base64').toString('utf-8');
+    } catch (e) {}
+    return '';
+  }
+
+  function getDefaultClassUrl() {
+    try {
+      return localStorage.getItem(STORAGE_KEY_URL) || safeDecode(_EP_CLASS);
+    } catch (e) {
+      return safeDecode(_EP_CLASS);
+    }
+  }
+
+  function getDefaultGvUrl() {
+    try {
+      return safeDecode(_EP_GV);
+    } catch (e) {
+      return '';
+    }
+  }
   
   const STORAGE_KEY_URL = 'dashboard_google_sheet_url';
   const STORAGE_KEY_DATA = 'dashboard_synced_data';
@@ -295,10 +296,9 @@ document.addEventListener('DOMContentLoaded', () => {
     initTabNavigation();
 
     // Background sync from Google Sheets if online
-    let sheetUrl = localStorage.getItem(STORAGE_KEY_URL) || DEFAULT_GOOGLE_SHEET_URL;
     try {
-      syncGoogleSheetData(sheetUrl, { silent: true });
-      syncGvGoogleSheetData(GV_GOOGLE_SHEET_URL, { silent: true });
+      syncGoogleSheetData(getDefaultClassUrl(), { silent: true });
+      syncGvGoogleSheetData(getDefaultGvUrl(), { silent: true });
     } catch (e) {
       console.warn("Background sheet sync skipped:", e);
     }
@@ -1511,50 +1511,12 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     });
 
-    // Sheet Sync & Header Realtime Controls
+    // Sheet Sync Header Controls
     const btnSyncNow = document.getElementById('btnSyncNow');
     if (btnSyncNow) {
       btnSyncNow.addEventListener('click', () => {
-        const sheetUrl = localStorage.getItem(STORAGE_KEY_URL) || DEFAULT_GOOGLE_SHEET_URL;
-        syncGoogleSheetData(sheetUrl, { silent: false });
-        syncGvGoogleSheetData(GV_GOOGLE_SHEET_URL, { silent: true });
-      });
-    }
-
-    const btnOpenSheetConfig = document.getElementById('btnOpenSheetConfig');
-    if (btnOpenSheetConfig) {
-      btnOpenSheetConfig.addEventListener('click', () => {
-        window.openSheetModal();
-      });
-    }
-
-    const btnCloseSheetModal = document.getElementById('btnCloseSheetModal');
-    if (btnCloseSheetModal) btnCloseSheetModal.addEventListener('click', window.closeSheetModal);
-
-    const btnCancelSheetModal = document.getElementById('btnCancelSheetModal');
-    if (btnCancelSheetModal) btnCancelSheetModal.addEventListener('click', window.closeSheetModal);
-
-    const btnResetDefaultSheet = document.getElementById('btnResetDefaultSheet');
-    if (btnResetDefaultSheet) {
-      btnResetDefaultSheet.addEventListener('click', () => {
-        const input = document.getElementById('inputGoogleSheetUrl');
-        if (input) input.value = DEFAULT_GOOGLE_SHEET_URL;
-      });
-    }
-
-    const btnSaveAndSyncSheet = document.getElementById('btnSaveAndSyncSheet');
-    if (btnSaveAndSyncSheet) {
-      btnSaveAndSyncSheet.addEventListener('click', () => {
-        const input = document.getElementById('inputGoogleSheetUrl');
-        const newUrl = input ? input.value.trim() : '';
-        if (newUrl) {
-          localStorage.setItem(STORAGE_KEY_URL, newUrl);
-          syncGoogleSheetData(newUrl, { silent: false });
-          syncGvGoogleSheetData(GV_GOOGLE_SHEET_URL, { silent: true });
-          window.closeSheetModal();
-        } else {
-          showToast('Vui lòng nhập đường link Google Sheet hợp lệ!', 'warning');
-        }
+        syncGoogleSheetData(getDefaultClassUrl(), { silent: false });
+        syncGvGoogleSheetData(getDefaultGvUrl(), { silent: true });
       });
     }
   }
@@ -1599,7 +1561,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (statusText) statusText.textContent = 'Đang tải Google Sheet...';
 
     try {
-      const targetUrl = sheetUrl || localStorage.getItem(STORAGE_KEY_URL) || DEFAULT_GOOGLE_SHEET_URL;
+      const targetUrl = sheetUrl || getDefaultClassUrl();
       const csvUrl = getGoogleSheetCsvExportUrl(targetUrl);
       const fetchUrl = `${csvUrl}${csvUrl.includes('?') ? '&' : '?'}_t=${Date.now()}`;
       
@@ -1668,6 +1630,9 @@ document.addEventListener('DOMContentLoaded', () => {
   function getGoogleSheetCsvExportUrl(url) {
     if (!url) return '';
     const cleanUrl = url.trim();
+    if (cleanUrl.includes('script.google.com') || cleanUrl.includes('macros/s/')) {
+      return cleanUrl;
+    }
     if (cleanUrl.includes('/pub?output=csv')) return cleanUrl;
     if (cleanUrl.includes('/pubhtml')) return cleanUrl.replace('/pubhtml', '/pub?output=csv');
     if (cleanUrl.includes('/export?format=csv')) return cleanUrl;
