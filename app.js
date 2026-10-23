@@ -1557,18 +1557,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       });
     }
-
-    // Auto Periodic Sync every 60 seconds for Realtime Live Dashboard
-    setInterval(() => {
-      const currentUrl = localStorage.getItem(STORAGE_KEY_URL) || DEFAULT_GOOGLE_SHEET_URL;
-      syncGoogleSheetData(currentUrl, { silent: true });
-    }, 60000);
-
-    // Sync when returning to tab
-    window.addEventListener('focus', () => {
-      const currentUrl = localStorage.getItem(STORAGE_KEY_URL) || DEFAULT_GOOGLE_SHEET_URL;
-      syncGoogleSheetData(currentUrl, { silent: true });
-    });
   }
 
   // --- GOOGLE SHEET SYNCING LOGIC ---
