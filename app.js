@@ -32,7 +32,7 @@ window.openModal = function(c) {
   if (elemCode) elemCode.textContent = c.ma_lop || c.ma_ct || 'Chi tiết lớp học';
   if (elemName) elemName.textContent = c.ten_ct || 'Chi tiết lớp học';
 
-  const planned = c.hv_trieu_tap || 0;
+  const planned = c.hv_kh || 0;
   const actual = c.hv_thuc_te || 0;
   const rate = planned > 0 ? ((actual / planned) * 100).toFixed(1) : '0.0';
   const startDate = c.ngay_bd_raw || c.ngay_bd || 'Chưa có';
@@ -541,7 +541,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // --- CLASS OVERVIEW METRICS & CHARTS ---
   function updateKPIs() {
     const uniquePrograms = new Set(filteredClasses.map(c => c.ma_ct).filter(Boolean));
-    const totalPlanned = filteredClasses.reduce((sum, c) => sum + (c.hv_trieu_tap || 0), 0);
+    const totalPlanned = filteredClasses.reduce((sum, c) => sum + (c.hv_kh || 0), 0);
     const totalActual = filteredClasses.reduce((sum, c) => sum + (c.hv_thuc_te || 0), 0);
     const attendanceRate = totalPlanned > 0 ? ((totalActual / totalPlanned) * 100).toFixed(1) : '0.0';
 
@@ -630,7 +630,7 @@ document.addEventListener('DOMContentLoaded', () => {
           classMap[code].ngay_bd = c.ngay_bd;
         }
       }
-      classMap[code].planned += (c.hv_trieu_tap || 0);
+      classMap[code].planned += (c.hv_kh || 0);
       classMap[code].actual += (c.hv_thuc_te || 0);
     });
 
@@ -798,7 +798,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!progMap[code]) {
         progMap[code] = { name: c.ten_ct || code, planned: 0, actual: 0 };
       }
-      progMap[code].planned += (c.hv_trieu_tap || 0);
+      progMap[code].planned += (c.hv_kh || 0);
       progMap[code].actual += (c.hv_thuc_te || 0);
     });
 
@@ -856,7 +856,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     tbody.innerHTML = sorted.map(c => {
-      const rate = c.hv_trieu_tap > 0 ? ((c.hv_thuc_te / c.hv_trieu_tap) * 100).toFixed(1) : '0.0';
+      const rate = c.hv_kh > 0 ? ((c.hv_thuc_te / c.hv_kh) * 100).toFixed(1) : '0.0';
       const badge = getFormatBadge(c);
       const jsonStr = JSON.stringify(c).replace(/'/g, "&apos;").replace(/"/g, "&quot;");
 
@@ -871,7 +871,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <div style="font-weight: 600;">${c.dia_diem || 'N/A'}</div>
             <div style="font-size: 0.775rem; color: var(--text-muted);">${c.ngay_bd_raw || ''} - ${c.ngay_kt_raw || ''}</div>
           </td>
-          <td style="text-align: center; font-weight: 600;">${c.hv_trieu_tap || 0}</td>
+          <td style="text-align: center; font-weight: 600;">${c.hv_kh || 0}</td>
           <td style="text-align: center; font-weight: 700; color: var(--brand-crimson);">${c.hv_thuc_te || 0}</td>
           <td style="text-align: center;">
             <span style="font-weight: 800; color: #059669;">${rate}%</span>
