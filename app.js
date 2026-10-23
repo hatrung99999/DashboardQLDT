@@ -332,7 +332,34 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function getDisplayFormat(c) {
     if (!c) return 'Trực tiếp';
-    return (c.hinh_thuc_hoc || c.hinh_thuc_dt || 'Trực tiếp').trim();
+    const raw = (c.hinh_thuc_hoc || c.hinh_thuc_dt || 'Trực tiếp').trim();
+    const rawLower = raw.toLowerCase();
+
+    // Nếu dữ liệu gốc đã ghi rõ là kết hợp
+    if (rawLower.includes('kết hợp')) {
+      return 'Trực tiếp kết hợp Trực tuyến';
+    }
+
+    // Nếu dòng này là Trực tuyến
+    if (rawLower.includes('tuyến') || rawLower.includes('online')) {
+      const maLop = (c.ma_lop || '').trim();
+      if (maLop && typeof allClasses !== 'undefined' && Array.isArray(allClasses)) {
+        // Kiểm tra xem cùng mã lớp này có dòng nào là Trực tiếp không
+        const hasDirectSibling = allClasses.some(x => {
+          if (!x.ma_lop || x.ma_lop.trim() !== maLop) return false;
+          const sibFmt = (x.hinh_thuc_hoc || x.hinh_thuc_dt || '').toLowerCase();
+          return sibFmt.includes('tiếp') && !sibFmt.includes('tuyến');
+        });
+
+        if (hasDirectSibling) {
+          return 'Trực tiếp kết hợp Trực tuyến';
+        }
+      }
+      return 'Trực tuyến';
+    }
+
+    // Nếu là Trực tiếp
+    return 'Trực tiếp';
   }
 
   function getFormatBadge(c) {
