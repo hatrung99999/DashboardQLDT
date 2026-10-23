@@ -211,7 +211,7 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   // Securely obfuscated endpoints to protect underlying Google Sheets from direct scrapers
-  const _EP_CLASS = 'aHR0cHM6Ly9kb2NzLmdvb2dsZS5jb20vc3ByZWFkc2hlZXRzL2QvMVBPdnYtYlZaTXZLeVhpaS0zUnhiOVdBWTY3czkzeEF3eER3Q19wZUEwMW8vZXhwb3J0P2Zvcm1hdD1jc3YmZ2lkPTA=';
+  const _EP_CLASS = 'aHR0cHM6Ly9zY3JpcHQuZ29vZ2xlLmNvbS9tYWNyb3Mvcy9BS2Z5Y2J4akdKam5qMTFPb2M1ZjN5VEI4U1ppMThHRDYtYUc0RHFzdUYzSTVNQXNYY2R3YTNqM194T2RfZnBscmtQeG1tTkUvZXhlYw==';
   const _EP_GV = 'aHR0cHM6Ly9kb2NzLmdvb2dsZS5jb20vc3ByZWFkc2hlZXRzL2QvMW5HdUV1d3Zkb0MtaS1GZmJEd0lmR3ZfQ29hZUliLTY2OEZyMnR1Z1MxVzQvZXhwb3J0P2Zvcm1hdD1jc3YmZ2lkPTE5MDM4NDcyNTE=';
 
   function safeDecode(str) {
@@ -227,7 +227,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function getDefaultClassUrl() {
     try {
-      return localStorage.getItem(STORAGE_KEY_URL) || safeDecode(_EP_CLASS);
+      const stored = localStorage.getItem(STORAGE_KEY_URL);
+      if (stored && stored.includes('script.google.com')) {
+        return stored;
+      }
+      return safeDecode(_EP_CLASS);
     } catch (e) {
       return safeDecode(_EP_CLASS);
     }
