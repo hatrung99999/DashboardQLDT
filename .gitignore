@@ -1,0 +1,8 @@
+# Temporary and scratch files
+scratch/
+node_modules/
+.vscode/
+.agents/
+*.log
+.DS_Store
+Thumbs.db

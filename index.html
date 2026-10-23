@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Trường Đào Tạo Cán Bộ Agribank - Dashboard Quản Lý Đào Tạo</title>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
+    rel="stylesheet">
+
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- Dashboard Stylesheet -->
+  <link rel="stylesheet" href="styles.css?v=9669_v5">
+</head>
+
+<body>
+
+  <div class="dashboard-container">
+
+    <!-- APP HEADER (Matching User Screenshot) -->
+    <header class="app-header">
+      <div class="brand-title">
+        <div class="brand-logo-img">
+          <img src="agribank-logo.jpg" alt="Logo Agribank" class="logo-img">
+        </div>
+        <div class="brand-text">
+          <h1 class="brand-org-name">TRƯỜNG ĐÀO TẠO CÁN BỘ AGRIBANK</h1>
+          <div class="brand-dash-title"><span class="dot-green"></span> DASHBOARD QUẢN LÝ ĐÀO TẠO</div>
+        </div>
+      </div>
+
+      <!-- Header Controls: Date Filter & Realtime Google Sheet Sync -->
+      <div class="header-right-actions">
+        <div class="date-range-inputs">
+          <div class="input-group">
+            <label for="startDate">TỪ</label>
+            <input type="date" id="startDate" value="2026-01-01">
+          </div>
+          <span style="color: var(--text-muted); font-weight: 700;">—</span>
+          <div class="input-group">
+            <label for="endDate">ĐẾN</label>
+            <input type="date" id="endDate" value="2026-12-31">
+          </div>
+          <button id="btnApplyCustomDate" class="btn btn-primary" style="padding: 0.45rem 0.85rem; font-size: 0.8rem;">
+            Áp dụng
+          </button>
+        </div>
+
+        <div class="sync-actions-group">
+          <button id="btnSyncNow" class="btn btn-sync" title="Bấm để đồng bộ dữ liệu mới nhất từ Google Sheet theo thời gian thực">
+            <i class="fa-solid fa-arrows-rotate" id="syncIcon"></i>
+            <span id="syncBtnLabel">Đồng bộ Sheet</span>
+          </button>
+          <button id="btnOpenSheetConfig" class="btn btn-sheet-config" title="Cấu hình liên kết Google Sheet">
+            <i class="fa-solid fa-gear"></i>
+          </button>
+          <div class="sync-status-badge" id="syncStatusBadge" title="Trạng thái kết nối Google Sheet">
+            <span class="pulse-dot"></span>
+            <span id="syncStatusText">Realtime: Đang kết nối</span>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- SCREEN NAVIGATION TABS -->
+    <nav class="screen-tabs-bar">
+      <button class="screen-tab active" id="tabClassStatus" data-screen="screenClassStatus">
+        <i class="fa-solid fa-graduation-cap"></i> Tình hình lớp học
+      </button>
+    </nav>
+
+    <!-- SCREEN 1: TÌNH HÌNH LỚP HỌC (LOCKED & PRESERVED) -->
+    <main id="screenClassStatus" class="screen-content active">
+      <!-- TIME INTELLIGENCE SLICER BAR -->
+      <section class="slicer-card">
+      <div class="slicer-header">
+        <div class="slicer-title">
+          <i class="fa-solid fa-filter"></i>
+          <span>BỘ LỌC THỜI GIAN</span>
+        </div>
+
+        <div class="header-actions">
+          <button id="btnToggleMobileFilter" class="btn btn-mobile-filter" title="Mở/Thu gọn bộ lọc nâng cao">
+            <i class="fa-solid fa-sliders"></i> <span>Lọc chi tiết</span> <i
+              class="fa-solid fa-chevron-down toggle-icon"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Quick Preset Filter Pills -->
+      <div class="preset-pills-wrapper">
+        <div class="preset-pills">
+          <span class="pill active" data-preset="today">Hôm nay</span>
+          <span class="pill" data-preset="all">Tất cả năm 2026</span>
+          <span class="pill" data-preset="q1">Quý 1 (T1-T3)</span>
+          <span class="pill" data-preset="q2">Quý 2 (T4-T6)</span>
+          <span class="pill" data-preset="q3">Quý 3 (T7-T9)</span>
+          <span class="pill" data-preset="q4">Quý 4 (T10-T12)</span>
+          <span class="pill" data-preset="completed">Đã diễn ra</span>
+          <span class="pill" data-preset="ongoing">Đang diễn ra</span>
+          <span class="pill" data-preset="upcoming">Sắp diễn ra</span>
+        </div>
+      </div>
+
+      <!-- Secondary Filters (Location, Format, Search) -->
+      <div class="secondary-filters" id="secondaryFiltersPanel">
+        <select id="filterLocation" class="filter-select">
+          <option value="">-- Tất cả Địa điểm --</option>
+        </select>
+
+        <select id="filterFormat" class="filter-select">
+          <option value="">-- Tất cả Hình thức --</option>
+        </select>
+
+        <select id="filterProgramType" class="filter-select">
+          <option value="">-- Tất cả Loại chương trình --</option>
+        </select>
+
+        <div class="search-box">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input type="text" id="searchInput" placeholder="Tìm theo Mã lớp, Tên lớp, Cán bộ QL...">
+        </div>
+      </div>
+    </section>
+
+    <!-- 5 KPI METRICS GRID (Matching User Screenshot) -->
+    <section class="kpi-grid-5">
+      <!-- KPI 1: Số lượng Chương trình -->
+      <div class="kpi-card-light">
+        <div class="kpi-card-top">
+          <span class="kpi-label-light">SỐ LƯỢNG CHƯƠNG TRÌNH</span>
+          <div class="kpi-icon-circle"><i class="fa-solid fa-book-bookmark"></i></div>
+        </div>
+        <div class="kpi-val-light" id="kpiProgramCount">9</div>
+      </div>
+
+      <!-- KPI 2: Số lớp học -->
+      <div class="kpi-card-light">
+        <div class="kpi-card-top">
+          <span class="kpi-label-light">SỐ LỚP HỌC</span>
+          <div class="kpi-icon-circle"><i class="fa-solid fa-border-all"></i></div>
+        </div>
+        <div class="kpi-val-light" id="kpiClassCount">11</div>
+      </div>
+
+      <!-- KPI 3: HV Kế hoạch -->
+      <div class="kpi-card-light">
+        <div class="kpi-card-top">
+          <span class="kpi-label-light">HV KẾ HOẠCH</span>
+          <div class="kpi-icon-circle"><i class="fa-solid fa-user-group"></i></div>
+        </div>
+        <div class="kpi-val-light" id="kpiPlannedHV">1.054</div>
+      </div>
+
+      <!-- KPI 4: HV Thực tế -->
+      <div class="kpi-card-light">
+        <div class="kpi-card-top">
+          <span class="kpi-label-light">HV THỰC TẾ</span>
+          <div class="kpi-icon-circle"><i class="fa-solid fa-graduation-cap"></i></div>
+        </div>
+        <div class="kpi-val-light" id="kpiActualHV">709</div>
+      </div>
+
+      <!-- KPI 5: Tỉ lệ HV Tham dự (Gauge Visual) -->
+      <div class="kpi-card-light kpi-gauge-card">
+        <div class="kpi-card-top">
+          <span class="kpi-label-light">TỈ LỆ HV THAM DỰ</span>
+          <div class="kpi-icon-circle" style="background: #ECFDF5; color: #059669;">
+            <i class="fa-solid fa-chart-pie"></i>
+          </div>
+        </div>
+        <div class="gauge-wrapper">
+          <canvas id="gaugeAttendanceChart"></canvas>
+          <div class="gauge-center-content">
+            <div class="gauge-val"><span id="kpiAttendanceRate">67.3</span> %</div>
+            <div class="gauge-subtext">Thực tế / Kế hoạch</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- CHARTS SECTION (Matching User Screenshot) -->
+    <section class="charts-grid">
+      <!-- Visual 1: SO SÁNH HỌC VIÊN KẾ HOẠCH & THỰC TẾ THEO LỚP (Scrollable) -->
+      <div class="chart-card chart-col-8">
+        <div class="chart-header">
+          <div class="chart-title-group">
+            <h3 style="font-size: 1.1rem;"><i class="fa-regular fa-calendar"
+                style="color: var(--brand-crimson); margin-right: 0.4rem;"></i> SO SÁNH HỌC VIÊN KẾ HOẠCH & THỰC TẾ THEO
+              LỚP</h3>
+          </div>
+        </div>
+        <div class="chart-scroll-wrapper" id="classChartScrollWrapper">
+          <div class="chart-scroll-inner" id="classChartScrollInner">
+            <canvas id="classAttendanceChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Visual 3: TỈ LỆ THAM DỰ THEO CHƯƠNG TRÌNH (Progress Bars matching user screenshot) -->
+      <div class="chart-card chart-col-4">
+        <div class="chart-header">
+          <div class="chart-title-group">
+            <h3 style="font-size: 1.1rem; color: #059669; font-weight: 800;">
+              <i class="fa-solid fa-graduation-cap" style="color: #059669; margin-right: 0.4rem;"></i> TỈ LỆ THAM DỰ
+              THEO CHƯƠNG TRÌNH
+            </h3>
+          </div>
+        </div>
+        <div class="program-progress-list" id="programAttendanceList">
+          <!-- Dynamic progress bars rendered by JS -->
+        </div>
+      </div>
+    </section>
+
+    <!-- DATA TABLE SECTION -->
+    <section class="table-card">
+      <div class="table-header">
+        <div class="table-title">
+          <h3><i class="fa-solid fa-table-list" style="color: var(--brand-crimson);"></i> DANH SÁCH LỚP HỌC CHI TIẾT
+          </h3>
+        </div>
+        <div class="table-info-badge">
+          Hiển thị <span id="tableFilteredCount">0</span> / <span id="tableTotalCount">0</span> bản ghi
+        </div>
+      </div>
+
+      <div class="scroll-hint-mobile">
+        <i class="fa-solid fa-arrows-left-right"></i> Vuốt ngang để xem đầy đủ cột ➔
+      </div>
+
+      <!-- Table container (Scroll Mode) -->
+      <div class="table-wrapper">
+        <table id="classesTable">
+          <thead>
+            <tr>
+              <th data-sort="ma_lop">MÃ LỚP / TÊN CHƯƠNG TRÌNH <i class="fa-solid fa-sort"></i></th>
+              <th data-sort="hinh_thuc_hoc">HÌNH THỨC ĐÀO TẠO <i class="fa-solid fa-sort"></i></th>
+              <th data-sort="dia_diem">ĐỊA ĐIỂM / THỜI GIAN <i class="fa-solid fa-sort"></i></th>
+              <th data-sort="hv_trieu_tap" style="text-align: center;">HV KẾ HOẠCH <i class="fa-solid fa-sort"></i></th>
+              <th data-sort="hv_thuc_te" style="text-align: center;">HV THỰC TẾ <i class="fa-solid fa-sort"></i></th>
+              <th data-sort="rate" style="text-align: center;">TỈ LỆ <i class="fa-solid fa-sort"></i></th>
+              <th data-sort="can_bo_ql">QUẢN LÝ <i class="fa-solid fa-sort"></i></th>
+            </tr>
+          </thead>
+          <tbody id="tableBody">
+            <!-- Rendered dynamically -->
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Table Scroll Footer Status Bar -->
+      <div
+        style="display: flex; justify-content: space-between; align-items: center; padding-top: 0.75rem; font-size: 0.85rem; color: var(--text-secondary); border-top: 1px solid var(--border-color); margin-top: 0.5rem; flex-wrap: wrap; gap: 0.5rem;">
+        <span style="font-weight: 600;"><i class="fa-solid fa-list-check"
+            style="color: #059669; margin-right: 0.4rem;"></i> Đang hiển thị toàn bộ <strong><span
+              id="scrollModeTotalCount">0</span></strong> dòng dữ liệu trong kỳ chọn</span>
+        <span
+          style="font-size: 0.8rem; color: var(--brand-crimson); font-weight: 700; display: inline-flex; align-items: center; gap: 0.35rem;"><i
+            class="fa-solid fa-arrow-down-long"></i> Cuộn chuột xuống để xem tất cả</span>
+      </div>
+    </section>
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="app-footer">
+      Dashboard Quản lý Đào tạo 2026 &copy; Trường Đào tạo Cán bộ Agribank | Hệ thống Phân tích Dữ liệu Cao cấp
+    </footer>
+
+  </div>
+
+  <!-- DETAIL MODAL -->
+  <div class="modal-overlay" id="detailModal" onclick="window.closeModalOnOverlay(event)">
+    <div class="modal-content" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <div>
+          <span class="badge badge-info" id="modalClassCode">Mã Lớp</span>
+          <h2 id="modalClassName" style="margin-top: 0.3rem;">Tên Lớp Học</h2>
+        </div>
+        <button class="modal-close" id="btnCloseModal" type="button" onclick="window.closeModal(event)"
+          aria-label="Đóng">&times;</button>
+      </div>
+      <div class="modal-grid" id="modalGridContent">
+        <!-- Rendered dynamically -->
+      </div>
+      <div
+        style="display: flex; justify-content: flex-end; margin-top: 1rem; padding-top: 0.85rem; border-top: 1px solid var(--border-color);">
+        <button type="button" class="btn" onclick="window.closeModal(event)"
+          style="padding: 0.5rem 1.25rem; font-size: 0.85rem; font-weight: 700; background: #F3F4F6; color: #374151; border: 1px solid var(--border-color); border-radius: var(--radius-sm); cursor: pointer; display: inline-flex; align-items: center; gap: 0.35rem;">
+          <i class="fa-solid fa-xmark"></i> Đóng cửa sổ
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- GOOGLE SHEET URL CONFIG MODAL -->
+  <div class="modal-overlay" id="sheetUrlModal" onclick="window.closeSheetModalOnOverlay(event)">
+    <div class="modal-content" style="max-width: 580px;" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <div>
+          <h2 style="font-size: 1.25rem; color: #111827; display: flex; align-items: center; gap: 0.5rem;">
+            <i class="fa-solid fa-file-csv" style="color: #059669;"></i> Cấu hình Google Sheet Thời Gian Thực
+          </h2>
+        </div>
+        <button class="modal-close" id="btnCloseSheetModal">&times;</button>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 1rem;">
+        <p style="font-size: 0.875rem; color: #4B5563; line-height: 1.5;">
+          Dán đường link Google Sheet của bạn vào ô dưới đây. Hệ thống sẽ tự động chuyển đổi và cập nhật dữ liệu báo cáo
+          mới nhất mỗi khi bấm nút <strong>Cập nhật dữ liệu</strong>.
+        </p>
+        <div style="display: flex; flex-direction: column; gap: 0.4rem;">
+          <label for="inputGoogleSheetUrl" style="font-size: 0.8rem; font-weight: 700; color: #374151;">ĐƯỜNG LINK
+            GOOGLE SHEET</label>
+          <input type="text" id="inputGoogleSheetUrl" placeholder="https://docs.google.com/spreadsheets/d/.../edit"
+            style="width: 100%; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm); font-size: 0.85rem; font-family: inherit;">
+        </div>
+        <div
+          style="font-size: 0.775rem; color: var(--text-muted); line-height: 1.4; background: #F9FAFB; padding: 0.75rem; border-radius: var(--radius-sm); border: 1px dashed var(--border-color);">
+          <i class="fa-solid fa-circle-info" style="color: #2563EB; margin-right: 0.3rem;"></i>
+          <strong>Mẹo:</strong> Hỗ trợ link trang tính Google Sheet thông thường (link xem/chỉnh sửa), link xuất CSV
+          hoặc link công bố web (Published CSV). Hãy đảm bảo trang tính có quyền xem mở (Anyone with the link can view).
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; margin-top: 0.5rem; flex-wrap: wrap;">
+          <button id="btnResetDefaultSheet" class="btn" style="color: #6B7280; font-size: 0.8rem; background: transparent; border: 1px dashed var(--border-color);">
+            <i class="fa-solid fa-rotate-left"></i> Khôi phục URL gốc
+          </button>
+          <div style="display: flex; gap: 0.5rem;">
+            <button id="btnCancelSheetModal" class="btn">Hủy</button>
+            <button id="btnSaveAndSyncSheet" class="btn btn-primary" style="background: #059669; border-color: #059669;">
+              <i class="fa-solid fa-arrows-rotate"></i> Lưu & Cập nhật ngay
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST NOTIFICATION CONTAINER -->
+  <div id="toastContainer"
+    style="position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 10000; display: flex; flex-direction: column; gap: 0.5rem; pointer-events: none;">
+  </div>
+
+  <!-- JavaScript Files -->
+  <script src="data.js?v=9669_v5"></script>
+  <script src="app.js?v=9669_v5"></script>
+</body>
+
+</html>
