@@ -19,7 +19,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
   <!-- Dashboard Stylesheet -->
-  <link rel="stylesheet" href="styles.css?v=9669_v5">
+  <link rel="stylesheet" href="styles.css?v=9669_v15">
 </head>
 
 <body>
@@ -56,13 +56,13 @@
         </div>
 
         <div class="sync-actions-group">
-          <button id="btnSyncNow" class="btn btn-sync" title="Bấm để đồng bộ dữ liệu mới nhất từ Google Sheet theo thời gian thực">
+          <button id="btnSyncNow" class="btn btn-sync" title="Bấm để đồng bộ dữ liệu mới nhất từ Google Sheet">
             <i class="fa-solid fa-arrows-rotate" id="syncIcon"></i>
             <span id="syncBtnLabel">Đồng bộ dữ liệu</span>
           </button>
           <div class="sync-status-badge" id="syncStatusBadge" title="Trạng thái kết nối Google Sheet">
             <span class="pulse-dot"></span>
-            <span id="syncStatusText">Realtime: Đang kết nối</span>
+            <span id="syncStatusText">Đồng bộ dữ liệu</span>
           </div>
         </div>
       </div>
@@ -72,6 +72,9 @@
     <nav class="screen-tabs-bar">
       <button class="screen-tab active" id="tabClassStatus" data-screen="screenClassStatus">
         <i class="fa-solid fa-graduation-cap"></i> Tình hình lớp học
+      </button>
+      <button class="screen-tab" id="tabContentEval" data-screen="screenContentEval">
+        <i class="fa-solid fa-book-open"></i> Nội dung đào tạo
       </button>
     </nav>
 
@@ -268,6 +271,276 @@
     </section>
     </main>
 
+    <!-- SCREEN 2: NỘI DUNG ĐÀO TẠO (PHÂN HỆ 3) -->
+    <main id="screenContentEval" class="screen-content">
+            <!-- BOOKMARK CHUYỂN ĐỔI MẪU KHẢO SÁT (MẪU MỚI / MẪU CŨ) -->
+      <div class="nddt-bookmark-bar">
+        <div class="nddt-bookmark-title">
+          <i class="fa-solid fa-bookmark" style="color: var(--brand-primary); font-size: 0.95rem;"></i>
+          <span>BOOKMARK MẪU KHẢO SÁT:</span>
+        </div>
+        <div class="nddt-bookmark-group">
+          <button type="button" class="bookmark-btn active" id="bmNddtNew" data-template="new" title="Mẫu đánh giá nội dung hiện hành (115 lớp)">
+            <i class="fa-solid fa-file-circle-check"></i>
+            <span>Mẫu mới (Hiện hành)</span>
+            <span class="bm-count-pill" id="bmCountNew">115 lớp</span>
+          </button>
+          <button type="button" class="bookmark-btn" id="bmNddtOld" data-template="old" title="Mẫu đánh giá nội dung cũ (127 lớp)">
+            <i class="fa-solid fa-clock-rotate-left"></i>
+            <span>Mẫu cũ</span>
+            <span class="bm-count-pill" id="bmCountOld">127 lớp</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- TIME & CRITERIA SLICER BAR -->
+      <section class="slicer-card">
+        <div class="slicer-header">
+          <div class="slicer-title">
+            <i class="fa-solid fa-filter"></i>
+            <span>BỘ LỌC ĐÁNH GIÁ NỘI DUNG ĐÀO TẠO</span>
+          </div>
+
+          <div class="header-actions" style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+            <button id="btnExportNddtExcel" class="btn" style="color: #0F5132; border-color: #0F5132; font-size: 0.82rem; padding: 0.45rem 0.85rem;" title="Xuất dữ liệu Excel">
+              <i class="fa-solid fa-file-excel"></i> <span>Xuất Excel</span>
+            </button>
+            <button id="btnExportNddtCsv" class="btn" style="color: var(--brand-primary); border-color: var(--brand-primary); font-size: 0.82rem; padding: 0.45rem 0.85rem;" title="Xuất dữ liệu CSV">
+              <i class="fa-solid fa-file-csv"></i> <span>Xuất CSV</span>
+            </button>
+            <button id="btnResetNddtFilters" class="btn" style="font-size: 0.82rem; padding: 0.45rem 0.85rem;" title="Đặt lại toàn bộ bộ lọc">
+              <i class="fa-solid fa-rotate-left"></i> <span>Đặt lại</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Quick Preset Filter Pills -->
+        <div class="preset-pills-wrapper">
+          <div class="preset-pills" id="nddtPresetPills">
+            <span class="pill active" data-preset="all">Tất cả</span>
+            <span class="pill" data-preset="2026">Năm 2026</span>
+            <span class="pill" data-preset="q1">Quý 1</span>
+            <span class="pill" data-preset="q2">Quý 2</span>
+            <span class="pill" data-preset="q3">Quý 3</span>
+            <span class="pill" data-preset="q4">Quý 4</span>
+          </div>
+        </div>
+
+        <!-- Secondary Filters (Program, Format, Manager, Rating, Search) -->
+        <div class="secondary-filters" id="nddtSecondaryFilters">
+          <select id="filterNddtProgram" class="filter-select">
+            <option value="">-- Tất cả Chương trình --</option>
+          </select>
+
+          <select id="filterNddtFormat" class="filter-select">
+            <option value="">-- Tất cả Hình thức --</option>
+          </select>
+
+          <select id="filterNddtCbql" class="filter-select">
+            <option value="">-- Tất cả Cán bộ QL --</option>
+          </select>
+
+          <select id="filterNddtRatingLevel" class="filter-select">
+            <option value="">-- Tất cả Mức điểm --</option>
+            <option value="high">Xuất sắc / Rất tốt (≥ 3.8)</option>
+            <option value="medium">Tốt / Khá (3.5 - 3.79)</option>
+            <option value="low">Cần lưu ý (< 3.5)</option>
+          </select>
+
+          <div class="search-box" style="flex: 1; min-width: 250px;">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <input type="text" id="searchNddtInput" placeholder="Tìm theo Mã lớp, Tên CT, Cán bộ QL...">
+          </div>
+        </div>
+      </section>
+
+      <!-- 6 KPI METRICS GRID -->
+      <section class="kpi-grid-6">
+        <!-- KPI 1: Số lớp có đánh giá -->
+        <div class="kpi-card-light">
+          <div class="kpi-card-top">
+            <span class="kpi-label-light">SỐ LỚP CÓ ĐÁNH GIÁ</span>
+            <div class="kpi-icon-circle"><i class="fa-solid fa-chalkboard-user"></i></div>
+          </div>
+          <div class="kpi-val-light" id="kpiNddtClassCount">0</div>
+          <div class="kpi-subtext" style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.35rem;">Lớp học có phiếu hợp lệ</div>
+        </div>
+
+        <!-- KPI 2: Số chương trình -->
+        <div class="kpi-card-light">
+          <div class="kpi-card-top">
+            <span class="kpi-label-light">SỐ CHƯƠNG TRÌNH</span>
+            <div class="kpi-icon-circle"><i class="fa-solid fa-layer-group"></i></div>
+          </div>
+          <div class="kpi-val-light" id="kpiNddtProgramCount">0</div>
+          <div class="kpi-subtext" style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.35rem;">Chương trình đào tạo</div>
+        </div>
+
+        <!-- KPI 3: Tổng số phiếu phản hồi -->
+        <div class="kpi-card-light">
+          <div class="kpi-card-top">
+            <span class="kpi-label-light">TỔNG PHIẾU PHẢN HỒI</span>
+            <div class="kpi-icon-circle"><i class="fa-solid fa-square-poll-vertical"></i></div>
+          </div>
+          <div class="kpi-val-light" id="kpiNddtTotalVotes">0</div>
+          <div class="kpi-subtext" style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.35rem;">Lượt học viên đánh giá</div>
+        </div>
+
+        <!-- KPI 4: Điểm TB Nội dung đào tạo -->
+        <div class="kpi-card-light">
+          <div class="kpi-card-top">
+            <span class="kpi-label-light">ĐIỂM TB NỘI DUNG</span>
+            <div class="kpi-icon-circle" style="background: #FDF2F8; color: var(--brand-primary);">
+              <i class="fa-solid fa-star"></i>
+            </div>
+          </div>
+          <div style="display: flex; align-items: baseline; gap: 0.4rem;">
+            <div class="kpi-val-light" id="kpiNddtAvgScore" style="color: var(--brand-primary);">0.00</div>
+            <span style="font-size: 0.95rem; font-weight: 700; color: var(--text-muted);">/ 4.0</span>
+          </div>
+          <div id="kpiNddtScoreRatingBadge" class="kpi-subtext" style="font-size: 0.78rem; font-weight: 700; color: #0F5132; margin-top: 0.35rem;">
+            Đánh giá chung: Rất tốt
+          </div>
+        </div>
+
+        <!-- KPI 5: Tỷ lệ đánh giá tích cực -->
+        <div class="kpi-card-light">
+          <div class="kpi-card-top">
+            <span class="kpi-label-light">TỶ LỆ TÍCH CỰC</span>
+            <div class="kpi-icon-circle" style="background: #ECFDF5; color: #059669;">
+              <i class="fa-solid fa-thumbs-up"></i>
+            </div>
+          </div>
+          <div style="display: flex; align-items: baseline; gap: 0.3rem;">
+            <div class="kpi-val-light" id="kpiNddtPosRate" style="color: #0F5132;">0.0</div>
+            <span style="font-size: 1rem; font-weight: 700; color: #0F5132;">%</span>
+          </div>
+          <div class="kpi-subtext" style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.35rem;">Phiếu Tốt (4) & Khá (3)</div>
+        </div>
+
+        <!-- KPI 6: Điểm 3 Tiêu chí cốt lõi -->
+        <div class="kpi-card-light" style="display: flex; flex-direction: column; justify-content: space-between;">
+          <div class="kpi-card-top" style="margin-bottom: 0.25rem;">
+            <span class="kpi-label-light">ĐIỂM 3 TIÊU CHÍ (4.0)</span>
+            <div class="kpi-icon-circle"><i class="fa-solid fa-list-check"></i></div>
+          </div>
+          <div class="criteria-kpi-list">
+            <div class="criteria-kpi-item">
+              <span class="crit-name" id="kpiCrit1Label" title="Phù hợp vị trí công việc & mục tiêu">1. Phù hợp vị trí:</span>
+              <strong id="kpiCrit1Score" class="crit-val">0.00</strong>
+            </div>
+            <div class="criteria-kpi-item">
+              <span class="crit-name" id="kpiCrit2Label" title="Tính thực tiễn sát yêu cầu công việc">2. Tính thực tiễn:</span>
+              <strong id="kpiCrit2Score" class="crit-val">0.00</strong>
+            </div>
+            <div class="criteria-kpi-item">
+              <span class="crit-name" id="kpiCrit3Label" title="Khả năng áp dụng vào thực tế">3. Khả năng áp dụng:</span>
+              <strong id="kpiCrit3Score" class="crit-val">0.00</strong>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- CHARTS SECTION -->
+      <section class="charts-grid">
+        <!-- Visual 1: CƠ CẤU 4 MỨC ĐÁNH GIÁ THEO TIÊU CHÍ (100% Stacked Bar) -->
+        <div class="chart-card chart-col-5">
+          <div class="chart-header">
+            <div class="chart-title-group">
+              <h3 style="font-size: 1.05rem; font-weight: 800; color: var(--brand-primary);">
+                <i class="fa-solid fa-chart-column" style="margin-right: 0.4rem; color: var(--brand-primary);"></i>
+                CƠ CẤU 4 MỨC ĐÁNH GIÁ THEO TIÊU CHÍ (100%)
+              </h3>
+              <p style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.15rem;">
+                Phân bố mức Tốt (4) - Khá (3) - Bình thường (2) - Hạn chế (1) của từng tiêu chí
+              </p>
+            </div>
+          </div>
+          <div class="chart-canvas-wrapper" style="height: 290px; position: relative;">
+            <canvas id="nddtStackedBarChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Visual 2: SO SÁNH ĐIỂM ĐÁNH GIÁ NỘI DUNG (BIỂU ĐỒ ĐƯỜNG 3 TIÊU CHÍ - SCROLL NGANG) -->
+        <div class="chart-card chart-col-7">
+          <div class="chart-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+            <div class="chart-title-group">
+              <h3 style="font-size: 1.05rem; font-weight: 800; color: #1E5E47;">
+                <i class="fa-solid fa-chart-line" style="margin-right: 0.4rem; color: #1E5E47;"></i>
+                SO SÁNH ĐIỂM ĐÁNH GIÁ NỘI DUNG
+              </h3>
+              <p style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.15rem;">
+                Xu hướng điểm 3 tiêu chí cốt lõi của tất cả các chương trình đào tạo
+              </p>
+            </div>
+            <div class="scroll-chart-hint" style="font-size: 0.75rem; font-weight: 700; color: var(--brand-primary); background: #FFF1F2; padding: 0.2rem 0.6rem; border-radius: 12px; border: 1px solid #FECDD3; display: inline-flex; align-items: center; gap: 0.35rem;">
+              <i class="fa-solid fa-arrows-left-right"></i> Kéo ngang xem tất cả <strong id="nddtProgCountHint">0</strong> chương trình
+            </div>
+          </div>
+          <div class="chart-scroll-outer" id="nddtComparisonScrollOuter">
+            <div class="chart-scroll-inner" id="nddtComparisonScrollInner" style="min-width: 100%; height: 290px; position: relative;">
+              <canvas id="nddtComparisonChart"></canvas>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- DATA TABLE SECTION -->
+      <section class="table-card">
+        <div class="table-header">
+          <div class="table-title">
+            <h3>
+              <i class="fa-solid fa-table-list" style="color: var(--brand-primary);"></i>
+              KẾT QUẢ ĐÁNH GIÁ NỘI DUNG CHI TIẾT THEO LỚP
+            </h3>
+          </div>
+          <div class="table-info-badge">
+            Hiển thị <span id="nddtTableFilteredCount">0</span> / <span id="nddtTableTotalCount">0</span> lớp
+          </div>
+        </div>
+
+        <div class="scroll-hint-mobile">
+          <i class="fa-solid fa-arrows-left-right"></i> Vuốt ngang để xem đầy đủ cột ➔
+        </div>
+
+        <div class="table-wrapper">
+          </div>
+        <div class="table-wrapper nddt-table-wrapper">
+          <table id="nddtClassesTable">
+            <thead>
+              <tr>
+                <th style="width: 3.5%; text-align: center;">STT</th>
+                <th data-nddt-sort="ma_lop" style="width: 22.5%;">MÃ LỚP / CHƯƠNG TRÌNH <i class="fa-solid fa-sort"></i></th>
+                <th data-nddt-sort="hinh_thuc_hoc" style="width: 9%; text-align: center;">HÌNH THỨC <i class="fa-solid fa-sort"></i></th>
+                <th data-nddt-sort="ngay_bd" style="width: 12%;">THỜI GIAN & CBQL <i class="fa-solid fa-sort"></i></th>
+                <th data-nddt-sort="tong_phieu" style="width: 5.5%; text-align: center;" title="Tổng số phiếu đánh giá">PHIẾU <i class="fa-solid fa-sort"></i></th>
+                <th data-nddt-sort="c1_score" style="width: 8.5%; text-align: center;" id="thNddtCrit1" title="Tiêu chí 1">TC1: PHÙ HỢP <i class="fa-solid fa-sort"></i></th>
+                <th data-nddt-sort="c2_score" style="width: 8.5%; text-align: center;" id="thNddtCrit2" title="Tiêu chí 2">TC2: THỰC TIỄN <i class="fa-solid fa-sort"></i></th>
+                <th data-nddt-sort="c3_score" style="width: 8.5%; text-align: center;" id="thNddtCrit3" title="Tiêu chí 3">TC3: ÁP DỤNG <i class="fa-solid fa-sort"></i></th>
+                <th data-nddt-sort="diem_tb" style="width: 7%; text-align: center;" title="Điểm trung bình cộng 3 tiêu chí">ĐIỂM TB <i class="fa-solid fa-sort"></i></th>
+                <th data-nddt-sort="ty_le_tich_cuc" style="width: 7.5%; text-align: center;" title="Tỷ lệ đánh giá Tốt & Khá">% TÍCH CỰC <i class="fa-solid fa-sort"></i></th>
+                <th style="width: 8%; text-align: center;">CHI TIẾT</th>
+              </tr>
+            </thead>
+            <tbody id="nddtTableBody">
+              <!-- Rendered dynamically -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Table Footer Status Bar -->
+        <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 0.75rem; font-size: 0.85rem; color: var(--text-secondary); border-top: 1px solid var(--border-color); margin-top: 0.5rem; flex-wrap: wrap; gap: 0.5rem;">
+          <span style="font-weight: 600;">
+            <i class="fa-solid fa-list-check" style="color: #0F5132; margin-right: 0.4rem;"></i>
+            Đang hiển thị <strong id="nddtTableStatusCount">0</strong> lớp học có đánh giá nội dung
+          </span>
+          <span style="font-size: 0.8rem; color: var(--brand-primary); font-weight: 700; display: inline-flex; align-items: center; gap: 0.35rem;">
+            <i class="fa-solid fa-arrow-down-long"></i> Bấm "Chi tiết" tại từng dòng để xem phân rã số phiếu và tỷ lệ từng mức
+          </span>
+        </div>
+      </section>
+    </main>
+
     <!-- FOOTER -->
     <footer class="app-footer">
       Dashboard Quản lý Đào tạo 2026 &copy; Trường Đào tạo Cán bộ Agribank | Hệ thống Phân tích Dữ liệu Cao cấp
@@ -299,14 +572,50 @@
     </div>
   </div>
 
+  <!-- NDDT DETAIL MODAL -->
+  <div class="modal-overlay" id="nddtDetailModal" onclick="window.closeNddtModalOnOverlay(event)">
+    <div class="modal-content" onclick="event.stopPropagation()" style="max-width: 860px;">
+      <div class="modal-header">
+        <div>
+          <span class="badge" id="modalNddtClassCode" style="background: var(--brand-primary); color: white;">Mã Lớp</span>
+          <h2 id="modalNddtClassName" style="margin-top: 0.3rem; font-size: 1.25rem;">Tên Chương Trình Đào Tạo</h2>
+        </div>
+        <button class="modal-close" id="btnCloseNddtModal" type="button" onclick="window.closeNddtModal(event)" aria-label="Đóng">&times;</button>
+      </div>
+
+      <div class="modal-grid" id="modalNddtInfoGrid" style="margin-bottom: 1.25rem;">
+        <!-- Class Meta info rendered dynamically -->
+      </div>
+
+      <div style="border-top: 1px solid var(--border-color); padding-top: 1rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.85rem; flex-wrap: wrap; gap: 0.5rem;">
+          <h3 style="font-size: 1.05rem; font-weight: 800; color: var(--brand-primary); display: flex; align-items: center; gap: 0.5rem; margin: 0;">
+            <i class="fa-solid fa-chart-pie"></i> PHÂN BỐ ĐÁNH GIÁ THEO 3 TIÊU CHÍ CỐT LÕI
+          </h3>
+          <span style="font-size: 0.8rem; color: var(--text-muted); font-weight: 600;">Thang điểm 4 mức (Tốt: 4, Khá: 3, Bình thường: 2, Hạn chế: 1)</span>
+        </div>
+        <div id="modalNddtCriteriaContent" style="display: flex; flex-direction: column; gap: 1rem;">
+          <!-- 3 criteria breakdown boxes rendered dynamically -->
+        </div>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; margin-top: 1.25rem; padding-top: 0.85rem; border-top: 1px solid var(--border-color);">
+        <button type="button" class="btn" onclick="window.closeNddtModal(event)"
+          style="padding: 0.5rem 1.25rem; font-size: 0.85rem; font-weight: 700; background: #F3F4F6; color: #374151; border: 1px solid var(--border-color); border-radius: var(--radius-sm); cursor: pointer; display: inline-flex; align-items: center; gap: 0.35rem;">
+          <i class="fa-solid fa-xmark"></i> Đóng cửa sổ
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- TOAST NOTIFICATION CONTAINER -->
   <div id="toastContainer"
     style="position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 10000; display: flex; flex-direction: column; gap: 0.5rem; pointer-events: none;">
   </div>
 
   <!-- JavaScript Files -->
-  <script src="data.js?v=9669_v5"></script>
-  <script src="app.js?v=9669_v8"></script>
+  <script src="data.js?v=9669_v17"></script>
+  <script src="app.js?v=9669_v17"></script>
 </body>
 
 </html>

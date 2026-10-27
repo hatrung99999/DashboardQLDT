@@ -1,0 +1,211 @@
+# .antigravityrules
+# Project: Smart Training Management Dashboard System
+# Organization: Trường Đào tạo cán bộ Agribank
+# Purpose: Rules for AI coding agents working in this repository.
+# Language: Vietnamese for UI, documentation, business terms, and user-facing messages.
+
+## 1. Mục tiêu và nguyên tắc cốt lõi
+
+- **Cổng phục vụ Web Server bắt buộc:** Tất cả các dashboard khi phục vụ web server phải luôn chạy trên cổng **9669** (`http://localhost:9669`).
+- **Quy tắc GitHub:** Tuyệt đối **KHÔNG tự động push code lên GitHub**. Mọi tính năng, màn hình mới và link dữ liệu chỉ phát triển, kiểm thử trên môi trường cục bộ (localhost:9669). Chỉ đẩy code lên GitHub khi người dùng yêu cầu trực tiếp.
+- **Quy tắc hiển thị Hình thức đào tạo:** Hiển thị theo dữ liệu gốc tại bảng dữ liệu data (`hinh_thuc_hoc` / `hinh_thuc_dt`); riêng trường hợp lớp học có cả phần trực tuyến và trực tiếp cùng mã lớp thì dòng trực tuyến được tự động suy diễn gộp tên thành "Trực tiếp kết hợp Trực tuyến".
+- Xây dựng hệ thống dashboard quản lý đào tạo có độ tin cậy cao, trực quan, dễ sử dụng, hỗ trợ cán bộ quản lý đào tạo và lãnh đạo theo dõi tình hình tổ chức đào tạo, chất lượng đào tạo và báo cáo đánh giá.
+- Ưu tiên tính chính xác của dữ liệu, tính nhất quán nghiệp vụ, khả năng truy vết và khả năng bảo trì hơn hiệu ứng giao diện hoặc tốc độ triển khai.
+- Đọc `PROJECT_CONTEXT.md`, `spec.md`, README và cấu trúc mã nguồn hiện có trước khi thay đổi kiến trúc hoặc triển khai tính năng.
+- Khi tài liệu có mâu thuẫn: tuân thủ yêu cầu mới nhất được người dùng xác nhận; tiếp theo là `spec.md`; sau đó là `PROJECT_CONTEXT.md`; cuối cùng mới đến giả định kỹ thuật của agent. Nếu vẫn chưa rõ và ảnh hưởng đến số liệu/nghiệp vụ, phải nêu rõ điểm chưa xác định, không tự ý đoán.
+- Không tự tạo, sửa hoặc làm tròn dữ liệu nghiệp vụ để khiến dashboard trông đầy đủ hơn.
+- Không được tuyên bố đã hoàn thành, đã kiểm thử hoặc đã kết nối dữ liệu nếu chưa thực hiện và xác minh thực tế.
+
+## 2. Quy trình bắt buộc trước khi sửa mã
+
+1. Khảo sát cấu trúc thư mục, framework, scripts, package manager, các trang, components, stores, services, types và nguồn dữ liệu đang có.
+2. Đọc các file hướng dẫn liên quan, tối thiểu `PROJECT_CONTEXT.md` và `spec.md` nếu tồn tại.
+3. Xác định phạm vi thay đổi, các thành phần bị ảnh hưởng và cách kiểm thử.
+4. Giữ lại các chức năng đang hoạt động; không viết lại toàn bộ ứng dụng chỉ để thêm một tính năng cục bộ.
+5. Trước khi thêm dependency, kiểm tra xem thư viện hiện có đã đáp ứng được yêu cầu chưa. Chỉ thêm thư viện khi có lợi ích rõ ràng.
+6. Nếu phát hiện yêu cầu mơ hồ có thể làm sai dữ liệu, sai công thức, sai nhóm báo cáo hoặc phá vỡ hành vi hiện hữu, hãy hỏi lại hoặc trình bày giả định trước khi triển khai.
+7. Khi có thể, chia thay đổi thành các bước nhỏ, có thể kiểm tra độc lập.
+
+## 3. Quy tắc về dữ liệu và tính trung thực
+
+- Dữ liệu nguồn đã được xác minh là nguồn sự thật duy nhất cho các chỉ tiêu báo cáo.
+- Không bịa dữ liệu, không tự thêm bản ghi học viên/lớp học/giảng viên/đơn vị/điểm khảo sát.
+- Dữ liệu mẫu chỉ được dùng cho phát triển giao diện hoặc kiểm thử; phải được đánh dấu rõ `DEMO`, `MOCK` hoặc “Dữ liệu minh họa”, không được trộn lẫn với dữ liệu thật.
+- Không hiển thị số liệu giả như số liệu thực tế trong KPI, biểu đồ, bảng xếp hạng hoặc báo cáo xuất file.
+- Khi không có dữ liệu, hiển thị trạng thái phù hợp như “Chưa có dữ liệu”, “Chưa có đánh giá” hoặc dấu “-”; không hiển thị `NaN`, `Infinity`, `undefined`, `null` hay số 0 gây hiểu nhầm.
+- Phân biệt rõ:
+  - Giá trị bằng 0 thực sự;
+  - Ô dữ liệu trống hoặc không có phản hồi;
+  - Dữ liệu chưa được cung cấp;
+  - Dữ liệu không hợp lệ;
+  - Dữ liệu không áp dụng.
+- Không tự động thay dữ liệu thiếu bằng 0 nếu việc đó làm sai mẫu số, tỷ lệ hoặc điểm trung bình. Chỉ dùng 0 khi công thức và ý nghĩa nghiệp vụ xác định rõ đó là số lượt của một mức đánh giá không có phản hồi.
+- Không suy diễn khóa liên kết. Chỉ join bảng khi đã xác nhận khóa, cấp độ hạt dữ liệu (grain), tính duy nhất và quan hệ. Ưu tiên mã định danh ổn định thay cho tên hiển thị.
+- Mọi phép tổng hợp phải xác định rõ grain: theo lớp, chương trình, giảng viên, đơn vị, hình thức đào tạo hay thời gian.
+- Tránh đếm trùng học viên, lớp, phiếu khảo sát hoặc giảng viên khi join nhiều bảng.
+- Nếu cùng một lớp có nhiều hình thức đào tạo hoặc nhiều phần đánh giá, phải giữ đúng ngữ cảnh và không gộp kết quả nếu nghiệp vụ không cho phép.
+- Các số liệu trên dashboard, bảng chi tiết, báo cáo in và file xuất phải dùng chung một logic tính toán hoặc cùng một lớp nghiệp vụ dùng chung.
+- Khi dữ liệu nguồn thay đổi, không âm thầm sửa dữ liệu gốc. Nếu cần làm sạch, hãy tạo bước biến đổi có thể giải thích, kiểm tra và truy vết.
+
+## 4. Quy tắc nghiệp vụ khảo sát và đánh giá
+
+- Tuân thủ thang điểm được cấu hình theo từng nhóm tiêu chí; không dùng chung một thang điểm cho mọi phần.
+- Đánh giá Nội dung đào tạo, Phương pháp/Hình thức đào tạo và Công tác tổ chức/Cơ sở vật chất sử dụng thang 4 mức khi dữ liệu nghiệp vụ quy định:
+  - Tốt = 4
+  - Khá = 3
+  - Bình thường = 2
+  - Hạn chế = 1
+- Đánh giá Giảng viên và Đánh giá chung sử dụng thang 5 mức khi dữ liệu nghiệp vụ quy định:
+  - Xuất sắc = 5
+  - Tốt = 4
+  - Khá = 3
+  - Bình thường = 2
+  - Hạn chế = 1
+- Với câu hỏi cải thiện kiến thức/kỹ năng, giữ đúng nhãn và thang điểm trong biểu mẫu nguồn; không tự quy đổi sang thang khác nếu chưa được xác nhận.
+- Điểm trung bình có trọng số phải được tính từ số lượt theo từng mức và điểm tương ứng, chia cho tổng số phản hồi hợp lệ của chính tiêu chí đó.
+- Tỷ lệ đánh giá tích cực chỉ được tính theo định nghĩa nghiệp vụ đã xác nhận. Với thang 4 mức nói trên, nếu quy định đánh giá tích cực là Tốt + Khá, dùng `(N_Tốt + N_Khá) / N_phản_hồi_hợp_lệ`; không mặc định áp dụng công thức này cho thang khác.
+- Nếu mẫu số bằng 0, trả về trạng thái chưa có dữ liệu/đánh giá; không chia cho 0 và không hiển thị `NaN`.
+- Không giả định mọi tiêu chí có cùng số phản hồi. Từng tiêu chí phải dùng đúng số phản hồi hợp lệ của tiêu chí đó.
+- Các lượt không trả lời hoặc câu trả lời không hợp lệ không được tự động tính vào mẫu số.
+- Nếu cần xếp hạng, hiển thị rõ tiêu chí xếp hạng, số phản hồi và quy tắc xử lý trường hợp bằng điểm. Không kết luận lớp/giảng viên “kém” chỉ từ số lượng phản hồi quá thấp nếu không có ngưỡng nghiệp vụ đã thống nhất.
+- Không dùng màu sắc đơn lẻ để truyền đạt kết quả; luôn có nhãn, số liệu hoặc chú giải hỗ trợ.
+
+## 5. Quy tắc báo cáo chi tiết lớp học/chương trình
+
+- Báo cáo phải tuân thủ cấu trúc và thứ tự các phần đã được xác nhận trong `spec.md` và biểu mẫu nguồn.
+- Có thể tra cứu theo mã lớp học hoặc mã chương trình, nhưng phải làm rõ phạm vi kết quả trả về và cấp độ tổng hợp.
+- Khi báo cáo theo chương trình gồm nhiều lớp, không cộng trực tiếp các điểm trung bình của lớp. Phải tính lại từ dữ liệu phản hồi ở cấp độ phù hợp, hoặc dùng phương pháp tổng hợp đã được nghiệp vụ phê duyệt.
+- Với lớp Hybrid, phải tách riêng kết quả đánh giá trực tiếp và trực tuyến nếu nguồn dữ liệu phân biệt hai hình thức. Không gộp hai nhóm hoặc nhân đôi cùng một phản hồi.
+- Với lớp chỉ tổ chức trực tiếp hoặc trực tuyến, chỉ hiển thị phần áp dụng. Không tạo phần đánh giá không tồn tại.
+- Báo cáo cần giữ rõ tên chương trình, mã lớp, địa điểm, thời gian, số học viên tham gia và số người phản hồi khi các trường này có trong nguồn dữ liệu.
+- Mỗi số liệu báo cáo phải truy vết được về dữ liệu nguồn hoặc quy tắc tính toán đã công bố.
+- Nếu xuất PDF, Excel hoặc CSV, bảo đảm số liệu và bộ lọc giống nội dung đang xem trên màn hình; thông báo rõ nếu định dạng xuất không hỗ trợ một thành phần trực quan.
+- Không tự tạo chữ ký, con dấu, người phê duyệt hoặc thông tin hành chính chưa có trong dữ liệu/biểu mẫu được duyệt.
+
+## 6. Quy tắc UI/UX và nhận diện
+
+- Giao diện mặc định dùng tiếng Việt, thuật ngữ thống nhất với môi trường đào tạo Agribank.
+- Duy trì phong cách dashboard doanh nghiệp: rõ ràng, gọn, dễ quét thông tin, ưu tiên khả năng đọc và thao tác.
+- Màu thương hiệu chính: Bordeaux Agribank `#8C1D40`; màu đỏ nhấn `#AE1C3F`; xanh ESG `#0F5132` / `#10B981`; màu cảnh báo `#D97706`; nền sáng `#F8FAFC`; viền `#E2E8F0`; chữ trung tính `#374151` và `#9CA3AF`.
+- Dùng màu theo mục đích có ý nghĩa, không tùy tiện đổi màu thương hiệu giữa các màn hình. Đảm bảo độ tương phản và trạng thái focus dễ nhìn.
+- Dùng hệ thống spacing, typography, border-radius, shadow và kích thước thành phần thống nhất. Ưu tiên tái sử dụng design tokens/components thay vì hard-code rải rác.
+- Nếu dự án đã có font hoặc design system đang hoạt động, ưu tiên giữ nhất quán; nếu cần lựa chọn mới, ưu tiên font hỗ trợ đầy đủ tiếng Việt như Inter hoặc Plus Jakarta Sans.
+- Các màn hình phải đáp ứng desktop trước nhưng vẫn sử dụng được ở kích thước nhỏ hơn; không để bảng/biểu đồ làm vỡ bố cục.
+- Các trạng thái bắt buộc cần thiết kế: loading, empty, error, success, disabled, no permission (nếu có phân quyền) và dữ liệu đang cập nhật.
+- Không dùng icon hoặc biểu đồ chỉ để trang trí nếu không tăng khả năng hiểu dữ liệu.
+- Không hiển thị biểu đồ 3D làm sai lệch cảm nhận tỷ lệ. Ưu tiên biểu đồ 2D dễ so sánh.
+- Trên biểu đồ, luôn có tiêu đề rõ nghĩa, đơn vị đo, chú giải khi cần và tooltip chứa số liệu chính xác.
+- Bảo đảm hỗ trợ bàn phím, focus state, nhãn accessible và màu tương phản đủ tốt.
+
+## 7. Bộ lọc, tương tác và biểu đồ
+
+- Bộ lọc toàn cục chỉ được hiển thị trường thực sự tồn tại trong dữ liệu hoặc có nguồn tính hợp lệ.
+- Bộ lọc phải có nhãn dễ hiểu, trạng thái đang chọn rõ ràng và khả năng xóa từng lựa chọn/đặt lại bộ lọc.
+- Các KPI, biểu đồ, bảng và báo cáo phải phản ánh cùng một ngữ cảnh lọc.
+- Khi người dùng chọn một điểm dữ liệu/nhóm trên biểu đồ, chỉ lọc chéo các thành phần theo quy tắc đã xác định; phải thể hiện trực quan trạng thái đang lọc.
+- Hỗ trợ xóa chọn/đặt lại lọc bằng thao tác dễ tìm; chỉ gán phím tắt như `Esc` khi không xung đột với hành vi truy cập hoặc thành phần đang mở.
+- Không để lựa chọn biểu đồ âm thầm thay đổi bộ lọc toàn cục mà không có dấu hiệu nhận biết.
+- Biểu đồ phải xử lý được trường hợp một nhóm không có dữ liệu, dữ liệu lớn, nhãn dài và giá trị trùng nhau.
+- Sắp xếp mặc định phải có ý nghĩa nghiệp vụ và được thể hiện rõ; không sắp xếp ngẫu nhiên.
+- Với bảng dữ liệu lớn, dùng phân trang hoặc ảo hóa khi cần; giữ bộ lọc, sắp xếp và phân trang nhất quán.
+- Tránh hiển thị quá nhiều KPI trên một màn hình; mỗi KPI cần có định nghĩa rõ và không trùng nghĩa với KPI khác.
+
+## 8. Kiến trúc và chất lượng mã nguồn
+
+- Tuân thủ framework, ngôn ngữ, cấu trúc thư mục và quy ước hiện hữu của repository. Không tự chuyển framework hoặc viết lại toàn bộ dự án nếu chưa có yêu cầu.
+- **Hiện trạng hệ thống (Current Stack):** Ứng dụng hiện đang vận hành ổn định trên nền tảng Single Page Application với HTML5, Vanilla CSS (CSS Variables / Design Tokens tông màu Agribank), JavaScript ES6+ module hóa, Chart.js / Apache ECharts, Node.js Express server chạy cố định tại cổng **9669** (`http://localhost:9669`). Các tính năng và phân hệ mới phải tương thích trực tiếp và chạy ngay trên nền tảng này, không làm gián đoạn các chức năng đang hoạt động.
+- Nếu dự án có kế hoạch chuẩn hóa sang React + TypeScript, ưu tiên:
+  - TypeScript strict, khai báo type/interface cho dữ liệu nghiệp vụ;
+  - component nhỏ, có trách nhiệm rõ ràng;
+  - tách UI, nghiệp vụ tính toán, truy cập dữ liệu và định dạng;
+  - tái sử dụng hooks, components, stores và utility;
+  - tránh `any`; nếu buộc phải dùng, giải thích lý do và giới hạn phạm vi;
+  - dùng key ổn định cho danh sách; không dùng index làm key nếu danh sách có thể thay đổi.
+- Không đặt công thức nghiệp vụ phức tạp trực tiếp trong JSX hoặc rải rác ở nhiều component. Tập trung vào hàm/service có thể kiểm thử.
+- Tách rõ lớp dữ liệu, chuyển đổi dữ liệu, mô hình nghiệp vụ và trình bày.
+- Không tạo store toàn cục cho trạng thái chỉ dùng cục bộ; không sao chép cùng một nguồn dữ liệu vào nhiều store gây lệch trạng thái.
+- Tránh component khổng lồ, logic lặp, dependency vòng, tên biến mơ hồ và side effects không được kiểm soát.
+- Không nuốt lỗi bằng `catch` rỗng. Hiển thị thông báo thân thiện cho người dùng và ghi log kỹ thuật phù hợp, không ghi dữ liệu nhạy cảm.
+- Không đưa khóa API, mật khẩu, token, thông tin xác thực hoặc dữ liệu cá nhân thật vào mã nguồn, log, commit hay file cấu hình công khai.
+- Không xóa hoặc đổi tên file/API/route/export đang được sử dụng nếu chưa rà soát tác động.
+- Tránh thay đổi định dạng toàn bộ repository khi chỉ cần sửa một phần nhỏ.
+
+## 9. Quản lý dữ liệu, kết nối và bảo mật
+
+- Không giả định hệ thống đã kết nối Google Sheets, Google Cloud, Power BI, API hoặc cơ sở dữ liệu chỉ vì tài liệu có đề cập. Xác minh cấu hình và trạng thái kết nối thực tế.
+- Đặt thông tin môi trường trong biến môi trường; cung cấp `.env.example` chỉ chứa tên biến và giá trị minh họa không nhạy cảm.
+- Không gửi dữ liệu học viên, số điện thoại, mã cán bộ, điểm khảo sát hoặc thông tin nội bộ đến dịch vụ bên ngoài nếu chưa có phê duyệt và căn cứ nghiệp vụ.
+- Chỉ thu thập và hiển thị các trường cần thiết cho chức năng. Che hoặc hạn chế dữ liệu cá nhân ở nơi không cần thiết.
+- Kiểm tra và chuẩn hóa dữ liệu đầu vào; không dựa hoàn toàn vào kiểm tra phía giao diện.
+- Nếu có phân quyền, kiểm tra quyền ở cả giao diện và lớp dịch vụ/backend; ẩn nút trên UI không được coi là kiểm soát bảo mật đầy đủ.
+- Không xây dựng chức năng xóa hàng loạt, ghi đè dữ liệu nguồn hoặc gửi thông báo hàng loạt khi chưa có xác nhận rõ ràng.
+- Các thao tác phá hủy hoặc không thể hoàn tác phải có xác nhận, nêu rõ phạm vi ảnh hưởng và có phương án khôi phục phù hợp.
+
+## 10. Xuất file và định dạng
+
+- Tên file xuất cần rõ ràng, có thể chứa mã lớp/chương trình và ngày xuất theo quy ước thống nhất; loại bỏ ký tự không hợp lệ.
+- Excel/CSV phải giữ đúng dữ liệu, tiêu đề cột, định dạng số/ngày tháng và bộ lọc đang áp dụng.
+- CSV cần xử lý đúng dấu tiếng Việt và escaping dấu phẩy, dấu ngoặc kép, xuống dòng.
+- PDF cần kiểm tra font tiếng Việt, ngắt trang, lề, tiêu đề, bảng rộng và tránh cắt nội dung.
+- Không tuyên bố xuất PDF/Excel hoàn chỉnh nếu chưa mở hoặc kiểm tra file đầu ra.
+- Dữ liệu xuất phải tuân thủ cùng quy tắc bảo mật và phân quyền như màn hình.
+
+## 11. Kiểm thử và tiêu chí hoàn thành
+
+- Sau mỗi thay đổi, chạy các lệnh kiểm tra phù hợp với dự án: lint, typecheck, unit tests, build và/hoặc kiểm thử trình duyệt nếu có.
+- Nếu không chạy được một bước, nêu rõ bước nào chưa chạy và nguyên nhân; không báo “đã kiểm thử thành công” khi chưa có bằng chứng.
+- Kiểm thử tối thiểu:
+  - dữ liệu bình thường;
+  - dữ liệu rỗng;
+  - giá trị thiếu/null;
+  - mẫu số bằng 0;
+  - giá trị không hợp lệ;
+  - bộ lọc không có kết quả;
+  - nhiều hình thức đào tạo;
+  - lớp Hybrid tách trực tiếp/trực tuyến;
+  - dữ liệu trùng hoặc khóa join thiếu duy nhất;
+  - xuất file có dấu tiếng Việt;
+  - màn hình ở kích thước khác nhau.
+- Với công thức nghiệp vụ, viết unit test cho kết quả đã biết trước; không chỉ kiểm tra giao diện.
+- Tiêu chí hoàn thành một tính năng:
+  1. Đúng yêu cầu và nghiệp vụ;
+  2. Không tạo hoặc làm sai dữ liệu;
+  3. Xử lý trạng thái rỗng/lỗi;
+  4. Không phá vỡ chức năng hiện hữu;
+  5. Có kiểm tra phù hợp;
+  6. Có ghi chú thay đổi khi cần;
+  7. Nêu rõ hạn chế hoặc điểm cần người dùng xác nhận.
+
+## 12. Quy tắc làm việc của agent
+
+- Trước khi chỉnh sửa, hãy tóm tắt ngắn gọn điều sẽ làm nếu phạm vi lớn hoặc có rủi ro; với yêu cầu nhỏ, có thể thực hiện trực tiếp.
+- Ưu tiên hoàn thành một luồng nghiệp vụ hoạt động xuyên suốt thay vì tạo nhiều màn hình chỉ có giao diện.
+- Không thay đổi phạm vi, thuật ngữ, công thức, quyền truy cập hoặc cấu trúc báo cáo đã được xác nhận nếu không nêu lý do.
+- Khi đưa ra quyết định kỹ thuật, ưu tiên phương án đơn giản, dễ bảo trì, dễ kiểm thử và phù hợp với codebase hiện tại.
+- Không thêm chức năng ngoài yêu cầu chỉ vì “có vẻ hữu ích”; có thể đề xuất riêng sau khi hoàn thành phần chính.
+- Nếu không đủ thông tin để kết luận, ghi rõ “Cần xác nhận” và liệt kê chính xác thông tin còn thiếu.
+- Sau khi hoàn thành, báo cáo:
+  - file đã tạo/sửa;
+  - hành vi đã triển khai;
+  - lệnh kiểm thử đã chạy và kết quả;
+  - dữ liệu hoặc giả định còn cần xác nhận;
+  - các bước tiếp theo nếu có.
+- Không chỉ trả lời bằng kế hoạch khi người dùng yêu cầu thực hiện thay đổi trực tiếp và môi trường cho phép sửa file.
+
+## 13. Quy tắc tài liệu dự án
+
+- Giữ `PROJECT_CONTEXT.md` cho bối cảnh nghiệp vụ, người dùng, thuật ngữ và phạm vi tổng thể.
+- Giữ `spec.md` cho kiến trúc, mô hình dữ liệu, công thức, yêu cầu chức năng, UI/UX và tiêu chí nghiệm thu chi tiết.
+- Giữ `antigravityrules` (hoặc `.antigravityrules`) cho các quy tắc hành vi của agent, chất lượng mã, tính trung thực dữ liệu, bảo mật và kiểm thử.
+- Khi triển khai làm thay đổi quyết định kiến trúc, công thức hoặc hành vi nghiệp vụ, cập nhật tài liệu liên quan; không để tài liệu mâu thuẫn với mã nguồn.
+- Không sao chép toàn bộ `spec.md` vào `antigravityrules`; rules phải là chỉ dẫn vận hành ngắn gọn, ổn định và áp dụng xuyên suốt.
+
+## 14. Các điểm nghiệp vụ phải xác minh trước khi kết luận
+
+- Khóa chính và khóa liên kết thực tế giữa mã lớp, mã chương trình, hình thức đào tạo, học viên, giảng viên và phiếu khảo sát.
+- Định nghĩa chính xác số học viên kế hoạch, thực tế, tham gia đánh giá và số phản hồi hợp lệ.
+- Quy tắc gộp kết quả khi tra cứu theo mã chương trình có nhiều lớp.
+- Cách tách kết quả Trực tiếp/Trực tuyến trong lớp Hybrid.
+- Định nghĩa “đánh giá tích cực”, quy tắc xếp hạng và ngưỡng số phản hồi tối thiểu.
+- Nguồn dữ liệu chính thức, tần suất cập nhật, quyền truy cập và trách nhiệm xác nhận dữ liệu.
+- Các trường chưa có trong nguồn dữ liệu không được giả lập; phải đánh dấu cần bổ sung hoặc xác nhận.

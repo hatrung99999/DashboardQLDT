@@ -7,7 +7,8 @@
 window.openClassModalById = function(id) {
   if (typeof id === 'undefined' || id === null) return;
   const numId = Number(id);
-  const found = (typeof allClasses !== 'undefined' && Array.isArray(allClasses)) ? allClasses.find(x => x.id === numId) : null;
+  const list = window.allClasses || (typeof allClasses !== 'undefined' && Array.isArray(allClasses) ? allClasses : null);
+  const found = list ? list.find(x => x.id === numId) : null;
   if (found) {
     window.openModal(found);
   }
@@ -17,6 +18,7 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     window.closeModal();
     if (typeof window.closeGvModal === 'function') window.closeGvModal();
+    if (typeof window.closeNddtModal === 'function') window.closeNddtModal();
   }
 });
 
@@ -145,6 +147,164 @@ window.closeGvModalOnOverlay = function(e) {
   }
 };
 
+// NDDT Detail Modal Handlers
+window.openNddtModalById = function(id) {
+  if (typeof id === 'undefined' || id === null) return;
+  const numId = Number(id);
+  const list = window.allNddtItems || (typeof allNddtItems !== 'undefined' && Array.isArray(allNddtItems) ? allNddtItems : null);
+  const found = list ? list.find(x => x.id === numId) : null;
+  if (found) {
+    window.openNddtModal(found);
+  }
+};
+
+window.openNddtModal = function(r) {
+  if (!r) return;
+  const modal = document.getElementById('nddtDetailModal');
+  if (!modal) return;
+
+  const elemCode = document.getElementById('modalNddtClassCode');
+  const elemName = document.getElementById('modalNddtClassName');
+  const elemInfo = document.getElementById('modalNddtInfoGrid');
+  const elemCrit = document.getElementById('modalNddtCriteriaContent');
+
+  if (elemCode) elemCode.textContent = r.ma_lop || 'Chi tiết lớp';
+  if (elemName) elemName.textContent = r.ten_ct_full || r.chuong_trinh || 'Nội dung đào tạo';
+
+  const timeStr = (r.ngay_bd_raw || '') + (r.ngay_kt_raw ? ' — ' + r.ngay_kt_raw : '');
+
+  if (elemInfo) {
+    elemInfo.innerHTML = `
+      <div class="modal-item">
+        <label><i class="fa-solid fa-barcode"></i> Mã Lớp Học</label>
+        <span style="color: var(--brand-crimson); font-weight: 800;">${r.ma_lop || 'Chưa có mã'}</span>
+      </div>
+      <div class="modal-item">
+        <label><i class="fa-solid fa-graduation-cap"></i> Chương Trình Đào Tạo</label>
+        <span style="font-weight: 700; color: #1F2937;">${r.chuong_trinh || 'Chưa có tên'}</span>
+      </div>
+      <div class="modal-item">
+        <label><i class="fa-solid fa-shapes"></i> Hình Thức Học</label>
+        <span>${r.hinh_thuc_hoc || 'Trực tiếp'}</span>
+      </div>
+      <div class="modal-item">
+        <label><i class="fa-solid fa-user-tie"></i> Cán Bộ Quản Lý</label>
+        <span>${r.cbql || 'Chưa cập nhật'}</span>
+      </div>
+      <div class="modal-item">
+        <label><i class="fa-regular fa-calendar-days"></i> Thời Gian Diễn Ra</label>
+        <span>${timeStr || 'Chưa cập nhật'}</span>
+      </div>
+      <div class="modal-item">
+        <label><i class="fa-solid fa-users"></i> Số Học Viên Đánh Giá</label>
+        <span style="font-weight: 800; color: #0EA5E9;">${(r.tong_phieu || 0).toLocaleString()} phiếu hợp lệ</span>
+      </div>
+      <div class="modal-item">
+        <label><i class="fa-solid fa-star"></i> Điểm TB Chung (Thang 4.0)</label>
+        <span style="font-weight: 800; color: var(--brand-primary); font-size: 1.05rem;">${r.diem_tb.toFixed(2)} / 4.0</span>
+      </div>
+      <div class="modal-item">
+        <label><i class="fa-solid fa-thumbs-up"></i> Tỷ Lệ Tích Cực (Tốt + Khá)</label>
+        <span style="font-weight: 800; color: #059669; font-size: 1.05rem;">${r.ty_le_tich_cuc.toFixed(1)}%</span>
+      </div>
+    `;
+  }
+
+  if (elemCrit) {
+    const renderCriteriaCard = (title, icon, score, posRate, n4, n3, n2, n1, total) => {
+      const p4 = total > 0 ? ((n4 / total) * 100).toFixed(1) : '0.0';
+      const p3 = total > 0 ? ((n3 / total) * 100).toFixed(1) : '0.0';
+      const p2 = total > 0 ? ((n2 / total) * 100).toFixed(1) : '0.0';
+      const p1 = total > 0 ? ((n1 / total) * 100).toFixed(1) : '0.0';
+
+      return `
+        <div class="nddt-modal-crit-card">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
+            <div>
+              <h4 style="margin: 0; font-size: 0.95rem; font-weight: 800; color: #1F2937; display: flex; align-items: center; gap: 0.4rem;">
+                <i class="fa-solid ${icon}" style="color: var(--brand-primary);"></i> ${title}
+              </h4>
+              <span style="font-size: 0.78rem; color: var(--text-muted);">Tổng số phản hồi: <strong>${total}</strong> phiếu</span>
+            </div>
+            <div style="display: flex; gap: 0.75rem; align-items: center;">
+              <span style="font-size: 0.85rem; font-weight: 700; color: #0F5132; background: #ECFDF5; padding: 0.25rem 0.6rem; border-radius: var(--radius-sm);">
+                Tích cực: ${posRate.toFixed(1)}%
+              </span>
+              <span style="font-size: 1.1rem; font-weight: 800; color: var(--brand-primary); background: #FFF1F2; padding: 0.25rem 0.65rem; border-radius: var(--radius-sm); border: 1px solid #FECDD3;">
+                ${score.toFixed(2)} <span style="font-size: 0.75rem; font-weight: 600; color: var(--text-muted);">/ 4.0</span>
+              </span>
+            </div>
+          </div>
+
+          <div class="nddt-dist-bar-4" style="height: 14px; border-radius: 6px; overflow: hidden; display: flex; margin-bottom: 0.65rem; background: #F1F5F9;">
+            <div style="width: ${p4}%; background: #0F5132;" title="Tốt: ${p4}% (${n4} phiếu)"></div>
+            <div style="width: ${p3}%; background: #10B981;" title="Khá: ${p3}% (${n3} phiếu)"></div>
+            <div style="width: ${p2}%; background: #D97706;" title="Bình thường: ${p2}% (${n2} phiếu)"></div>
+            <div style="width: ${p1}%; background: #EF4444;" title="Hạn chế: ${p1}% (${n1} phiếu)"></div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; text-align: center; font-size: 0.8rem;">
+            <div style="background: #F8FAFC; padding: 0.35rem; border-radius: 4px; border-left: 3px solid #0F5132;">
+              <span style="color: var(--text-muted); font-size: 0.72rem; display: block;">Tốt (4đ)</span>
+              <strong style="color: #0F5132;">${n4}</strong> <span style="font-size: 0.7rem; color: var(--text-muted);">(${p4}%)</span>
+            </div>
+            <div style="background: #F8FAFC; padding: 0.35rem; border-radius: 4px; border-left: 3px solid #10B981;">
+              <span style="color: var(--text-muted); font-size: 0.72rem; display: block;">Khá (3đ)</span>
+              <strong style="color: #10B981;">${n3}</strong> <span style="font-size: 0.7rem; color: var(--text-muted);">(${p3}%)</span>
+            </div>
+            <div style="background: #F8FAFC; padding: 0.35rem; border-radius: 4px; border-left: 3px solid #D97706;">
+              <span style="color: var(--text-muted); font-size: 0.72rem; display: block;">Bình thường (2đ)</span>
+              <strong style="color: #D97706;">${n2}</strong> <span style="font-size: 0.7rem; color: var(--text-muted);">(${p2}%)</span>
+            </div>
+            <div style="background: #F8FAFC; padding: 0.35rem; border-radius: 4px; border-left: 3px solid #EF4444;">
+              <span style="color: var(--text-muted); font-size: 0.72rem; display: block;">Hạn chế (1đ)</span>
+              <strong style="color: #EF4444;">${n1}</strong> <span style="font-size: 0.7rem; color: var(--text-muted);">(${p1}%)</span>
+            </div>
+          </div>
+        </div>
+      `;
+    };
+
+    const tplCfg = (typeof NDDT_CRITERIA_CONFIG !== 'undefined' && NDDT_CRITERIA_CONFIG[nddtActiveTemplate])
+      ? NDDT_CRITERIA_CONFIG[nddtActiveTemplate]
+      : { modal1: '1. Tiêu chí 1', modal2: '2. Tiêu chí 2', modal3: '3. Tiêu chí 3' };
+
+    elemCrit.innerHTML = `
+      ${renderCriteriaCard(tplCfg.modal1, 'fa-bullseye', r.c1_score, r.c1_pos, r.c1_4, r.c1_3, r.c1_2, r.c1_1, r.c1_n)}
+      ${renderCriteriaCard(tplCfg.modal2, 'fa-briefcase', r.c2_score, r.c2_pos, r.c2_4, r.c2_3, r.c2_2, r.c2_1, r.c2_n)}
+      ${renderCriteriaCard(tplCfg.modal3, 'fa-laptop-code', r.c3_score, r.c3_pos, r.c3_4, r.c3_3, r.c3_2, r.c3_1, r.c3_n)}
+    `;
+  }
+
+  modal.classList.add('active');
+  modal.style.setProperty('display', 'flex', 'important');
+  modal.style.visibility = 'visible';
+  modal.style.opacity = '1';
+  modal.style.pointerEvents = 'auto';
+};
+
+window.closeNddtModal = function(e) {
+  if (e) {
+    if (typeof e.preventDefault === 'function') e.preventDefault();
+    if (typeof e.stopPropagation === 'function') e.stopPropagation();
+  }
+  const modal = document.getElementById('nddtDetailModal');
+  if (modal) {
+    modal.classList.remove('active');
+    modal.style.setProperty('display', 'none', 'important');
+    modal.style.visibility = 'hidden';
+    modal.style.opacity = '0';
+    modal.style.pointerEvents = 'none';
+  }
+};
+
+window.closeNddtModalOnOverlay = function(e) {
+  if (e && e.target && e.target.id === 'nddtDetailModal') {
+    window.closeNddtModal(e);
+  }
+};
+
+
 document.addEventListener('DOMContentLoaded', () => {
   // Helper to get Today's Date in Hanoi GMT+7 timezone (YYYY-MM-DD)
   function getTodayGMT7Str() {
@@ -228,12 +388,13 @@ document.addEventListener('DOMContentLoaded', () => {
   function getDefaultClassUrl() {
     try {
       const stored = localStorage.getItem(STORAGE_KEY_URL);
-      if (stored && stored.includes('script.google.com')) {
+      if (stored && (stored.includes('1POvv') || stored.includes('script.google.com'))) {
         return stored;
       }
-      return safeDecode(_EP_CLASS);
+      // Link cũ lớp học: Apps Script proxy hoặc CSV export trực tiếp
+      return safeDecode(_EP_CLASS) || safeDecode(_EP_CLASS_DIRECT);
     } catch (e) {
-      return safeDecode(_EP_CLASS);
+      return safeDecode(_EP_CLASS) || safeDecode(_EP_CLASS_DIRECT);
     }
   }
 
@@ -248,6 +409,89 @@ document.addEventListener('DOMContentLoaded', () => {
   const STORAGE_KEY_URL = 'dashboard_google_sheet_url';
   const STORAGE_KEY_DATA = 'dashboard_synced_data';
   const STORAGE_KEY_GV_DATA = 'dashboard_synced_gv_data';
+
+    // State Management for Content Evaluation (Screen 3: Nội dung đào tạo)
+  let nddtActiveTemplate = 'new'; // 'new' (Mẫu mới - 135 lớp) | 'old' (Mẫu cũ - 155 lớp)
+  let nddtNewItems = [];
+  let nddtOldItems = [];
+  let allNddtItems = [];
+  let filteredNddtItems = [];
+
+  const NDDT_CRITERIA_CONFIG = {
+    new: {
+      name: 'Mẫu mới (Hiện hành)',
+      short1: '1. Phù hợp vị trí:',
+      short2: '2. Tính thực tiễn:',
+      short3: '3. Khả năng áp dụng:',
+      chartLabels: ['1. Phù hợp vị trí CV', '2. Tính thực tiễn', '3. Áp dụng kiến thức'],
+      th1: 'TC1: PHÙ HỢP',
+      th2: 'TC2: THỰC TIỄN',
+      th3: 'TC3: ÁP DỤNG',
+      modal1: '1. Phù hợp vị trí công việc & mục tiêu học tập',
+      modal2: '2. Tính thực tiễn sát với yêu cầu công việc',
+      modal3: '3. Khả năng áp dụng kiến thức vào thực tế'
+    },
+    old: {
+      name: 'Mẫu cũ',
+      short1: '1. Đáp ứng mong muốn:',
+      short2: '2. Liên quan công việc:',
+      short3: '3. Ứng dụng thực tế:',
+      chartLabels: ['1. Đáp ứng mong muốn', '2. Liên quan công việc', '3. Ứng dụng thực tế'],
+      th1: 'TC1: MONG MUỐN',
+      th2: 'TC2: CÔNG VIỆC',
+      th3: 'TC3: ỨNG DỤNG',
+      modal1: '1. Nội dung đáp ứng mong muốn của học viên',
+      modal2: '2. Nội dung liên quan trực tiếp đến công việc',
+      modal3: '3. Khả năng ứng dụng kiến thức vào thực tế'
+    }
+  };
+  let nddtCurrentSort = { column: 'ngay_bd', dir: 'desc' };
+  let nddtState = {
+    preset: 'all',
+    program: '',
+    format: '',
+    cbql: '',
+    ratingLevel: '',
+    searchQuery: '',
+    comparisonView: 'program'
+  };
+
+  let nddtCharts = {
+    stackedBar: null,
+    comparison: null
+  };
+
+  // Securely obfuscated endpoints:
+  // - _EP_CLASS: Link cũ Tình hình lớp học (1POvv-bVZMvKyXii-3Rxb9WAY67s93xAwxDwC_peA01o)
+  // - _EP_CLASS_DIRECT: Link export CSV trực tiếp sheet cũ
+  // - _EP_GV: Sheet Giảng viên
+  // - _EP_NDDT: Link Web App Google Apps Script mới deploy (Proxy ẩn link Google Sheet gốc)
+  const _EP_CLASS_DIRECT = 'aHR0cHM6Ly9kb2NzLmdvb2dsZS5jb20vc3ByZWFkc2hlZXRzL2QvMVBPdnYtYlZaTXZLeVhpaS0zUnhiOVdBWTY3czkzeEF3eER3Q19wZUEwMW8vZXhwb3J0P2Zvcm1hdD1jc3YmZ2lkPTA=';
+  const _EP_NDDT = 'aHR0cHM6Ly9zY3JpcHQuZ29vZ2xlLmNvbS9tYWNyb3Mvcy9BS2Z5Y2J5YzRxYnBUTnVMUjB4RG43YnJTeXkwOVpFWXpkbmI2d1pLNFdpVHhXdVk4ci0tMEUzN05aU1l1MmpDUVg3TEhld19SQS9leGVj';
+  const _EP_NDDT_OLD = 'aHR0cHM6Ly9kb2NzLmdvb2dsZS5jb20vc3ByZWFkc2hlZXRzL2QvMTNKVS03bkxHVHB0MWNlb1RKNHJDeWs3V01lVWFnUV8yY1h3VURfaVA1NUUvZXhwb3J0P2Zvcm1hdD1jc3YmZ2lkPTA=';
+  const STORAGE_KEY_NDDT_URL = 'dashboard_google_sheet_nddt_url';
+  const STORAGE_KEY_NDDT_DATA = 'dashboard_synced_nddt_data';
+  const STORAGE_KEY_NDDT_OLD_DATA = 'dashboard_synced_nddt_old_data';
+
+  function getDefaultNddtOldUrl() {
+    try {
+      return safeDecode(_EP_NDDT_OLD);
+    } catch (e) {
+      return safeDecode(_EP_NDDT_OLD);
+    }
+  }
+
+  function getDefaultNddtUrl() {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY_NDDT_URL);
+      if (stored && (stored.includes('macros/s/') || stored.includes('script.google.com'))) {
+        return stored;
+      }
+      return safeDecode(_EP_NDDT);
+    } catch (e) {
+      return safeDecode(_EP_NDDT);
+    }
+  }
 
   let isSyncing = false;
 
@@ -275,6 +519,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (loadedClasses) {
       allClasses = loadedClasses.filter(item => item.is_class);
+      window.allClasses = allClasses;
     }
 
     // Load Lecturer Data
@@ -296,13 +541,48 @@ document.addEventListener('DOMContentLoaded', () => {
       allGvItems = loadedGvItems;
     }
 
+    // Load NDDT Data (Content Evaluation: Mẫu mới & Mẫu cũ)
+    let loadedNewItems = null;
+    try {
+      const savedNddtStr = localStorage.getItem(STORAGE_KEY_NDDT_DATA);
+      if (savedNddtStr) {
+        const parsed = JSON.parse(savedNddtStr);
+        if (Array.isArray(parsed) && parsed.length > 0) loadedNewItems = parsed;
+      }
+    } catch (e) {}
+    if (!loadedNewItems && typeof RAW_NDDT_DATA !== 'undefined' && Array.isArray(RAW_NDDT_DATA)) {
+      loadedNewItems = RAW_NDDT_DATA;
+    }
+    nddtNewItems = loadedNewItems || [];
+
+    let loadedOldItems = null;
+    try {
+      const savedOldStr = localStorage.getItem(STORAGE_KEY_NDDT_OLD_DATA);
+      if (savedOldStr) {
+        const parsedOld = JSON.parse(savedOldStr);
+        if (Array.isArray(parsedOld) && parsedOld.length > 0) loadedOldItems = parsedOld;
+      }
+    } catch (e) {}
+    if (!loadedOldItems && typeof RAW_NDDT_OLD_DATA !== 'undefined' && Array.isArray(RAW_NDDT_OLD_DATA)) {
+      loadedOldItems = RAW_NDDT_OLD_DATA;
+    }
+    nddtOldItems = loadedOldItems || [];
+
+    allNddtItems = (nddtActiveTemplate === 'old' ? nddtOldItems : nddtNewItems);
+    window.allNddtItems = allNddtItems;
+
+    updateBookmarkBadges();
+
     setupDashboard();
+    setupNddtModule();
     initTabNavigation();
 
     // Background sync from Google Sheets if online
     try {
       syncGoogleSheetData(getDefaultClassUrl(), { silent: true });
       syncGvGoogleSheetData(getDefaultGvUrl(), { silent: true });
+      syncNddtGoogleSheetData(getDefaultNddtUrl(), { silent: true });
+      syncNddtOldGoogleSheetData(getDefaultNddtOldUrl(), { silent: true });
     } catch (e) {
       console.warn("Background sheet sync skipped:", e);
     }
@@ -325,6 +605,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (targetId === 'screenClassStatus') {
           activeView = 'overview';
           applyFilters();
+        } else if (targetId === 'screenContentEval') {
+          activeView = 'content';
+          if (typeof applyNddtFilters === 'function') {
+            applyNddtFilters();
+          }
         }
       });
     });
@@ -1548,6 +1833,8 @@ document.addEventListener('DOMContentLoaded', () => {
       btnSyncNow.addEventListener('click', () => {
         syncGoogleSheetData(getDefaultClassUrl(), { silent: false });
         syncGvGoogleSheetData(getDefaultGvUrl(), { silent: true });
+        syncNddtGoogleSheetData(getDefaultNddtUrl(), { silent: true });
+        syncNddtOldGoogleSheetData(getDefaultNddtOldUrl(), { silent: true });
       });
     }
   }
@@ -1603,6 +1890,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (parsedData && parsedData.length > 0) {
         allClasses = parsedData.filter(x => x.is_class);
+        window.allClasses = allClasses;
         try {
           localStorage.setItem(STORAGE_KEY_DATA, JSON.stringify(parsedData));
         } catch (stErr) {
@@ -1613,10 +1901,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const timeStr = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
         if (statusBadge) statusBadge.className = 'sync-status-badge';
-        if (statusText) statusText.textContent = `Realtime: ${timeStr} (${allClasses.length} lớp)`;
+        if (statusText) statusText.textContent = `Đồng bộ: ${timeStr} (${allClasses.length} lớp)`;
 
         if (!isSilent) {
-          showToast(`Đã đồng bộ ${allClasses.length} lớp học thời gian thực từ Google Sheet!`, 'success');
+          showToast(`Đã đồng bộ ${allClasses.length} lớp học mới nhất từ Google Sheet!`, 'success');
         }
       }
     } catch (e) {
@@ -1854,6 +2142,1086 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     return result;
   }
+
+
+
+    // ==========================================================================
+  // PHÂN HỆ 3: NỘI DUNG ĐÀO TẠO (CONTENT EVALUATION) LOGIC
+  // ==========================================================================
+
+  function setupNddtModule() {
+    populateNddtFilterDropdowns();
+    attachNddtEventListeners();
+    applyNddtFilters();
+  }
+
+  function populateNddtFilterDropdowns() {
+    const progSelect = document.getElementById('filterNddtProgram');
+    const fmtSelect = document.getElementById('filterNddtFormat');
+    const cbqlSelect = document.getElementById('filterNddtCbql');
+
+    if (!progSelect || !fmtSelect || !cbqlSelect) return;
+
+    const programs = [...new Set(allNddtItems.map(c => c.chuong_trinh).filter(Boolean))].sort();
+    const formats = [...new Set(allNddtItems.map(c => c.hinh_thuc_hoc).filter(Boolean))].sort();
+    const cbqls = [...new Set(allNddtItems.map(c => c.cbql).filter(Boolean))].sort();
+
+    progSelect.innerHTML = '<option value="">-- Tất cả Chương trình (' + programs.length + ') --</option>' +
+      programs.map(p => '<option value="' + p + '">' + p + '</option>').join('');
+
+    fmtSelect.innerHTML = '<option value="">-- Tất cả Hình thức (' + formats.length + ') --</option>' +
+      formats.map(f => '<option value="' + f + '">' + f + '</option>').join('');
+
+    cbqlSelect.innerHTML = '<option value="">-- Tất cả Cán bộ QL (' + cbqls.length + ') --</option>' +
+      cbqls.map(q => '<option value="' + q + '">' + q + '</option>').join('');
+  }
+
+  function updateBookmarkBadges() {
+    const bNew = document.getElementById('bmCountNew');
+    const bOld = document.getElementById('bmCountOld');
+    const countNew = new Set(nddtNewItems.map(c => (c.ma_lop || '').trim().toLowerCase()).filter(Boolean)).size;
+    const countOld = new Set(nddtOldItems.map(c => (c.ma_lop || '').trim().toLowerCase()).filter(Boolean)).size;
+    if (bNew) bNew.textContent = countNew + ' lớp';
+    if (bOld) bOld.textContent = countOld + ' lớp';
+  }
+
+  function switchNddtTemplate(tpl) {
+    if (tpl !== 'new' && tpl !== 'old') return;
+    nddtActiveTemplate = tpl;
+
+    // Update active button classes
+    const btnNew = document.getElementById('bmNddtNew');
+    const btnOld = document.getElementById('bmNddtOld');
+    if (btnNew) btnNew.classList.toggle('active', tpl === 'new');
+    if (btnOld) btnOld.classList.toggle('active', tpl === 'old');
+
+    // Switch data
+    allNddtItems = (tpl === 'old' ? nddtOldItems : nddtNewItems);
+    window.allNddtItems = allNddtItems;
+
+    // Update criteria header labels
+    const cfg = NDDT_CRITERIA_CONFIG[tpl] || NDDT_CRITERIA_CONFIG.new;
+    const l1 = document.getElementById('kpiCrit1Label');
+    const l2 = document.getElementById('kpiCrit2Label');
+    const l3 = document.getElementById('kpiCrit3Label');
+    if (l1) l1.textContent = cfg.short1;
+    if (l2) l2.textContent = cfg.short2;
+    if (l3) l3.textContent = cfg.short3;
+
+    const th1 = document.getElementById('thNddtCrit1');
+    const th2 = document.getElementById('thNddtCrit2');
+    const th3 = document.getElementById('thNddtCrit3');
+    if (th1) th1.innerHTML = cfg.th1 + ' <i class="fa-solid fa-sort"></i>';
+    if (th2) th2.innerHTML = cfg.th2 + ' <i class="fa-solid fa-sort"></i>';
+    if (th3) th3.innerHTML = cfg.th3 + ' <i class="fa-solid fa-sort"></i>';
+
+    // Reset dropdown filters
+    nddtState.program = '';
+    nddtState.format = '';
+    nddtState.cbql = '';
+    nddtState.ratingLevel = '';
+    nddtState.searchQuery = '';
+    const sInput = document.getElementById('searchNddtInput');
+    if (sInput) sInput.value = '';
+
+    populateNddtFilterDropdowns();
+    applyNddtFilters();
+  }
+
+  function attachNddtEventListeners() {
+    // Bookmark buttons (Mẫu mới / Mẫu cũ)
+    const btnBmNew = document.getElementById('bmNddtNew');
+    const btnBmOld = document.getElementById('bmNddtOld');
+    if (btnBmNew) btnBmNew.addEventListener('click', () => switchNddtTemplate('new'));
+    if (btnBmOld) btnBmOld.addEventListener('click', () => switchNddtTemplate('old'));
+
+    // Preset pills
+    document.querySelectorAll('#nddtPresetPills .pill').forEach(pill => {
+      pill.addEventListener('click', () => {
+        document.querySelectorAll('#nddtPresetPills .pill').forEach(p => p.classList.remove('active'));
+        pill.classList.add('active');
+        nddtState.preset = pill.dataset.preset;
+        applyNddtFilters();
+      });
+    });
+
+    // Dropdowns
+    const progSelect = document.getElementById('filterNddtProgram');
+    if (progSelect) {
+      progSelect.addEventListener('change', (e) => {
+        nddtState.program = e.target.value;
+        applyNddtFilters();
+      });
+    }
+
+    const fmtSelect = document.getElementById('filterNddtFormat');
+    if (fmtSelect) {
+      fmtSelect.addEventListener('change', (e) => {
+        nddtState.format = e.target.value;
+        applyNddtFilters();
+      });
+    }
+
+    const cbqlSelect = document.getElementById('filterNddtCbql');
+    if (cbqlSelect) {
+      cbqlSelect.addEventListener('change', (e) => {
+        nddtState.cbql = e.target.value;
+        applyNddtFilters();
+      });
+    }
+
+    const ratingSelect = document.getElementById('filterNddtRatingLevel');
+    if (ratingSelect) {
+      ratingSelect.addEventListener('change', (e) => {
+        nddtState.ratingLevel = e.target.value;
+        applyNddtFilters();
+      });
+    }
+
+    // Search
+    const searchInp = document.getElementById('searchNddtInput');
+    if (searchInp) {
+      searchInp.addEventListener('input', (e) => {
+        nddtState.searchQuery = e.target.value.toLowerCase().trim();
+        applyNddtFilters();
+      });
+    }
+
+    // Reset button
+    const btnReset = document.getElementById('btnResetNddtFilters');
+    if (btnReset) {
+      btnReset.addEventListener('click', () => {
+        nddtState.preset = 'all';
+        nddtState.program = '';
+        nddtState.format = '';
+        nddtState.cbql = '';
+        nddtState.ratingLevel = '';
+        nddtState.searchQuery = '';
+
+        document.querySelectorAll('#nddtPresetPills .pill').forEach(p => {
+          if (p.dataset.preset === 'all') p.classList.add('active');
+          else p.classList.remove('active');
+        });
+
+        if (progSelect) progSelect.value = '';
+        if (fmtSelect) fmtSelect.value = '';
+        if (cbqlSelect) cbqlSelect.value = '';
+        if (ratingSelect) ratingSelect.value = '';
+        if (searchInp) searchInp.value = '';
+
+        applyNddtFilters();
+        showToast('Đã đặt lại toàn bộ bộ lọc Nội dung đào tạo', 'info');
+      });
+    }
+
+    // Toggle comparison chart view
+    const btnProg = document.getElementById('btnNddtViewProgram');
+    const btnClass = document.getElementById('btnNddtViewClass');
+    if (btnProg && btnClass) {
+      btnProg.addEventListener('click', () => {
+        btnProg.classList.add('active');
+        btnClass.classList.remove('active');
+        nddtState.comparisonView = 'program';
+        renderNddtComparisonChart();
+      });
+      btnClass.addEventListener('click', () => {
+        btnClass.classList.add('active');
+        btnProg.classList.remove('active');
+        nddtState.comparisonView = 'class';
+        renderNddtComparisonChart();
+      });
+    }
+
+    // Table sorting
+    document.querySelectorAll('#nddtClassesTable th[data-nddt-sort]').forEach(th => {
+      th.addEventListener('click', () => {
+        const col = th.dataset.nddtSort;
+        if (nddtCurrentSort.column === col) {
+          nddtCurrentSort.dir = nddtCurrentSort.dir === 'asc' ? 'desc' : 'asc';
+        } else {
+          nddtCurrentSort.column = col;
+          nddtCurrentSort.dir = 'desc';
+        }
+        renderNddtTable();
+      });
+    });
+
+    // Export buttons
+    const btnExportExcel = document.getElementById('btnExportNddtExcel');
+    if (btnExportExcel) {
+      btnExportExcel.addEventListener('click', () => exportNddtToCsv(true));
+    }
+    const btnExportCsv = document.getElementById('btnExportNddtCsv');
+    if (btnExportCsv) {
+      btnExportCsv.addEventListener('click', () => exportNddtToCsv(false));
+    }
+  }
+
+  function applyNddtFilters() {
+    filteredNddtItems = allNddtItems.filter(item => {
+      // 1. Preset Time Filter
+      if (nddtState.preset !== 'all') {
+        const dateStr = item.ngay_bd || '';
+        if (nddtState.preset === '2026') {
+          if (!dateStr.startsWith('2026') && !(item.ngay_bd_raw && item.ngay_bd_raw.includes('2026'))) return false;
+        } else if (nddtState.preset === 'q1') {
+          const m = parseInt(dateStr.slice(5, 7), 10);
+          if (!(m >= 1 && m <= 3)) return false;
+        } else if (nddtState.preset === 'q2') {
+          const m = parseInt(dateStr.slice(5, 7), 10);
+          if (!(m >= 4 && m <= 6)) return false;
+        } else if (nddtState.preset === 'q3') {
+          const m = parseInt(dateStr.slice(5, 7), 10);
+          if (!(m >= 7 && m <= 9)) return false;
+        } else if (nddtState.preset === 'q4') {
+          const m = parseInt(dateStr.slice(5, 7), 10);
+          if (!(m >= 10 && m <= 12)) return false;
+        }
+      }
+
+      // 2. Program Filter
+      if (nddtState.program && item.chuong_trinh !== nddtState.program) return false;
+
+      // 3. Format Filter
+      if (nddtState.format && item.hinh_thuc_hoc !== nddtState.format) return false;
+
+      // 4. CBQL Filter
+      if (nddtState.cbql && item.cbql !== nddtState.cbql) return false;
+
+      // 5. Rating Level Filter
+      if (nddtState.ratingLevel) {
+        if (nddtState.ratingLevel === 'high' && item.diem_tb < 3.8) return false;
+        if (nddtState.ratingLevel === 'medium' && (item.diem_tb < 3.5 || item.diem_tb >= 3.8)) return false;
+        if (nddtState.ratingLevel === 'low' && item.diem_tb >= 3.5) return false;
+      }
+
+      // 6. Search Query
+      if (nddtState.searchQuery) {
+        const q = nddtState.searchQuery;
+        const text = ((item.ma_lop || '') + ' ' + (item.chuong_trinh || '') + ' ' + (item.ten_ct_full || '') + ' ' + (item.cbql || '')).toLowerCase();
+        if (!text.includes(q)) return false;
+      }
+
+      return true;
+    });
+
+    updateNddtKPIs();
+    renderNddtCharts();
+    renderNddtTable();
+  }
+
+  function updateNddtKPIs() {
+    const classCountElem = document.getElementById('kpiNddtClassCount');
+    const programCountElem = document.getElementById('kpiNddtProgramCount');
+    const totalVotesElem = document.getElementById('kpiNddtTotalVotes');
+    const avgScoreElem = document.getElementById('kpiNddtAvgScore');
+    const ratingBadgeElem = document.getElementById('kpiNddtScoreRatingBadge');
+    const posRateElem = document.getElementById('kpiNddtPosRate');
+    const crit1Elem = document.getElementById('kpiCrit1Score');
+    const crit2Elem = document.getElementById('kpiCrit2Score');
+    const crit3Elem = document.getElementById('kpiCrit3Score');
+
+    const uniqueClasses = new Set(filteredNddtItems.map(r => r.ma_lop).filter(Boolean));
+    const uniquePrograms = new Set(filteredNddtItems.map(r => r.chuong_trinh).filter(Boolean));
+
+    const totalVotes = filteredNddtItems.reduce((sum, r) => sum + (r.tong_phieu || 0), 0);
+
+    // Sum criteria votes
+    let c1 = { pts: 0, n: 0, pos: 0 };
+    let c2 = { pts: 0, n: 0, pos: 0 };
+    let c3 = { pts: 0, n: 0, pos: 0 };
+
+    filteredNddtItems.forEach(r => {
+      c1.pts += (4 * r.c1_4 + 3 * r.c1_3 + 2 * r.c1_2 + 1 * r.c1_1);
+      c1.n += r.c1_n;
+      c1.pos += (r.c1_4 + r.c1_3);
+
+      c2.pts += (4 * r.c2_4 + 3 * r.c2_3 + 2 * r.c2_2 + 1 * r.c2_1);
+      c2.n += r.c2_n;
+      c2.pos += (r.c2_4 + r.c2_3);
+
+      c3.pts += (4 * r.c3_4 + 3 * r.c3_3 + 2 * r.c3_2 + 1 * r.c3_1);
+      c3.n += r.c3_n;
+      c3.pos += (r.c3_4 + r.c3_3);
+    });
+
+    const s1 = c1.n > 0 ? c1.pts / c1.n : 0;
+    const s2 = c2.n > 0 ? c2.pts / c2.n : 0;
+    const s3 = c3.n > 0 ? c3.pts / c3.n : 0;
+
+    const validCriteria = [s1, s2, s3].filter(s => s > 0);
+    const overallAvg = validCriteria.length > 0 ? (validCriteria.reduce((a, b) => a + b, 0) / validCriteria.length) : 0;
+
+    const totalCritVotes = c1.n + c2.n + c3.n;
+    const totalPosVotes = c1.pos + c2.pos + c3.pos;
+    const posRate = totalCritVotes > 0 ? (totalPosVotes / totalCritVotes * 100) : 0;
+
+    if (classCountElem) classCountElem.textContent = uniqueClasses.size.toLocaleString();
+    if (programCountElem) programCountElem.textContent = uniquePrograms.size.toLocaleString();
+    if (totalVotesElem) totalVotesElem.textContent = totalVotes.toLocaleString();
+    if (avgScoreElem) avgScoreElem.textContent = overallAvg > 0 ? overallAvg.toFixed(2) : '-';
+    if (posRateElem) posRateElem.textContent = posRate > 0 ? posRate.toFixed(1) : '-';
+
+    if (ratingBadgeElem) {
+      if (overallAvg >= 3.8) {
+        ratingBadgeElem.textContent = 'Đánh giá chung: Rất tốt / Xuất sắc';
+        ratingBadgeElem.style.color = '#0F5132';
+      } else if (overallAvg >= 3.5) {
+        ratingBadgeElem.textContent = 'Đánh giá chung: Tốt / Đạt chuẩn';
+        ratingBadgeElem.style.color = '#10B981';
+      } else if (overallAvg > 0) {
+        ratingBadgeElem.textContent = 'Đánh giá chung: Cần rà soát';
+        ratingBadgeElem.style.color = '#D97706';
+      } else {
+        ratingBadgeElem.textContent = 'Chưa có dữ liệu đánh giá';
+        ratingBadgeElem.style.color = 'var(--text-muted)';
+      }
+    }
+
+    if (crit1Elem) crit1Elem.textContent = s1 > 0 ? s1.toFixed(2) : '-';
+    if (crit2Elem) crit2Elem.textContent = s2 > 0 ? s2.toFixed(2) : '-';
+    if (crit3Elem) crit3Elem.textContent = s3 > 0 ? s3.toFixed(2) : '-';
+  }
+
+  function renderNddtCharts() {
+    renderNddtStackedBarChart();
+    renderNddtComparisonChart();
+  }
+
+  function renderNddtStackedBarChart() {
+    const canvas = document.getElementById('nddtStackedBarChart');
+    if (!canvas) return;
+
+    if (nddtCharts.stackedBar) {
+      nddtCharts.stackedBar.destroy();
+      nddtCharts.stackedBar = null;
+    }
+
+    // Sum votes for the 3 criteria
+    let c1 = { 4: 0, 3: 0, 2: 0, 1: 0, n: 0 };
+    let c2 = { 4: 0, 3: 0, 2: 0, 1: 0, n: 0 };
+    let c3 = { 4: 0, 3: 0, 2: 0, 1: 0, n: 0 };
+
+    filteredNddtItems.forEach(r => {
+      c1[4] += r.c1_4; c1[3] += r.c1_3; c1[2] += r.c1_2; c1[1] += r.c1_1; c1.n += r.c1_n;
+      c2[4] += r.c2_4; c2[3] += r.c2_3; c2[2] += r.c2_2; c2[1] += r.c2_1; c2.n += r.c2_n;
+      c3[4] += r.c3_4; c3[3] += r.c3_3; c3[2] += r.c3_2; c3[1] += r.c3_1; c3.n += r.c3_n;
+    });
+
+    const calcP = (crit, lvl) => crit.n > 0 ? (crit[lvl] / crit.n * 100) : 0;
+
+    const dataTot = [calcP(c1, 4), calcP(c2, 4), calcP(c3, 4)];
+    const dataKha = [calcP(c1, 3), calcP(c2, 3), calcP(c3, 3)];
+    const dataBt = [calcP(c1, 2), calcP(c2, 2), calcP(c3, 2)];
+    const dataHc = [calcP(c1, 1), calcP(c2, 1), calcP(c3, 1)];
+
+    const rawVotes = [c1, c2, c3];
+
+    // Dynamic criteria labels according to active template
+    const tplCfg = (typeof NDDT_CRITERIA_CONFIG !== 'undefined' && NDDT_CRITERIA_CONFIG[nddtActiveTemplate])
+      ? NDDT_CRITERIA_CONFIG[nddtActiveTemplate]
+      : { chartLabels: ['1. Tiêu chí 1', '2. Tiêu chí 2', '3. Tiêu chí 3'] };
+
+    const ctx = canvas.getContext('2d');
+    nddtCharts.stackedBar = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: tplCfg.chartLabels,
+        datasets: [
+          {
+            label: 'Tốt (4 điểm)',
+            data: dataTot,
+            backgroundColor: '#1E5E47', // Deep Emerald Green (êm dịu, sang trọng)
+            hoverBackgroundColor: '#164E3A',
+            borderRadius: 4,
+            maxBarThickness: 28
+          },
+          {
+            label: 'Khá (3 điểm)',
+            data: dataKha,
+            backgroundColor: '#48A97C', // Mint Jade Green (tươi sáng nhưng không chói lóa)
+            hoverBackgroundColor: '#3A966B',
+            borderRadius: 4,
+            maxBarThickness: 28
+          },
+          {
+            label: 'Bình thường (2 điểm)',
+            data: dataBt,
+            backgroundColor: '#D68B35', // Warm Amber Ochre (ấm áp, không gắt)
+            hoverBackgroundColor: '#C27A26',
+            borderRadius: 4,
+            maxBarThickness: 28
+          },
+          {
+            label: 'Hạn chế (1 điểm)',
+            data: dataHc,
+            backgroundColor: '#C84646', // Soft Coral Brick Red (đỏ gạch dịu nhẹ, không lóa)
+            hoverBackgroundColor: '#B33838',
+            borderRadius: 4,
+            maxBarThickness: 28
+          }
+        ]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          x: {
+            stacked: true,
+            max: 100,
+            ticks: {
+              callback: v => v + '%',
+              font: { family: 'Plus Jakarta Sans', weight: '600', size: 10 }
+            },
+            grid: { color: '#E2E8F0' }
+          },
+          y: {
+            stacked: true,
+            ticks: {
+              font: { family: 'Plus Jakarta Sans', weight: '700', size: 11 },
+              color: '#374151'
+            },
+            grid: { display: false }
+          }
+        },
+        plugins: {
+          legend: {
+            position: 'top',
+            labels: {
+              boxWidth: 12,
+              font: { family: 'Plus Jakarta Sans', weight: '700', size: 10.5 },
+              color: '#374151'
+            }
+          },
+          tooltip: {
+            backgroundColor: '#1E293B',
+            titleFont: { family: 'Plus Jakarta Sans', weight: '700' },
+            bodyFont: { family: 'Plus Jakarta Sans' },
+            padding: 10,
+            cornerRadius: 6,
+            callbacks: {
+              label: function(context) {
+                const datasetLabel = context.dataset.label || '';
+                const pct = context.parsed.x.toFixed(1) + '%';
+                const critIdx = context.dataIndex;
+                const crit = rawVotes[critIdx];
+                let count = 0;
+                if (context.datasetIndex === 0) count = crit[4];
+                else if (context.datasetIndex === 1) count = crit[3];
+                else if (context.datasetIndex === 2) count = crit[2];
+                else if (context.datasetIndex === 3) count = crit[1];
+                return datasetLabel + ': ' + pct + ' (' + count + ' phiếu)';
+              }
+            }
+          }
+        }
+      }
+    });
+  }
+
+  function renderNddtComparisonChart() {
+    const canvas = document.getElementById('nddtComparisonChart');
+    if (!canvas) return;
+
+    if (nddtCharts.comparison) {
+      nddtCharts.comparison.destroy();
+      nddtCharts.comparison = null;
+    }
+
+    // Group filteredNddtItems by program
+    const pMap = {};
+    filteredNddtItems.forEach(r => {
+      const p = r.chuong_trinh || 'Khác';
+      if (!pMap[p]) {
+        pMap[p] = {
+          name: p,
+          c1_pts: 0, c1_n: 0,
+          c2_pts: 0, c2_n: 0,
+          c3_pts: 0, c3_n: 0,
+          classes: 0,
+          votes: 0
+        };
+      }
+      pMap[p].c1_pts += (r.c1_score * (r.c1_n || 1));
+      pMap[p].c1_n += (r.c1_n || 1);
+      pMap[p].c2_pts += (r.c2_score * (r.c2_n || 1));
+      pMap[p].c2_n += (r.c2_n || 1);
+      pMap[p].c3_pts += (r.c3_score * (r.c3_n || 1));
+      pMap[p].c3_n += (r.c3_n || 1);
+      pMap[p].classes++;
+      pMap[p].votes += (r.tong_phieu || 0);
+    });
+
+    const progList = Object.keys(pMap).map(p => {
+      const item = pMap[p];
+      const s1 = item.c1_n > 0 ? item.c1_pts / item.c1_n : 0;
+      const s2 = item.c2_n > 0 ? item.c2_pts / item.c2_n : 0;
+      const s3 = item.c3_n > 0 ? item.c3_pts / item.c3_n : 0;
+      const avg = (s1 + s2 + s3) / 3;
+      return {
+        name: p,
+        s1: Number(s1.toFixed(2)),
+        s2: Number(s2.toFixed(2)),
+        s3: Number(s3.toFixed(2)),
+        avg: Number(avg.toFixed(2)),
+        classes: item.classes,
+        votes: item.votes
+      };
+    }).sort((a, b) => b.avg - a.avg);
+
+    // Update count hint
+    const progHint = document.getElementById('nddtProgCountHint');
+    if (progHint) progHint.textContent = progList.length;
+
+    // Calculate dynamic width for smooth horizontal scrolling
+    const scrollInner = document.getElementById('nddtComparisonScrollInner');
+    const scrollOuter = document.getElementById('nddtComparisonScrollOuter');
+    if (scrollInner) {
+      const outerWidth = scrollOuter ? scrollOuter.clientWidth : 650;
+      const calcWidth = Math.max(outerWidth, progList.length * 54);
+      scrollInner.style.width = calcWidth + 'px';
+    }
+
+    const labels = progList.map(p => p.name);
+    const data1 = progList.map(p => p.s1);
+    const data2 = progList.map(p => p.s2);
+    const data3 = progList.map(p => p.s3);
+
+    // Criteria labels based on active template (Mẫu mới vs Mẫu cũ)
+    const tplCfg = (typeof NDDT_CRITERIA_CONFIG !== 'undefined' && NDDT_CRITERIA_CONFIG[nddtActiveTemplate])
+      ? NDDT_CRITERIA_CONFIG[nddtActiveTemplate]
+      : { chartLabels: ['TC1', 'TC2', 'TC3'] };
+
+    // Expanded Y-Axis Scale starting at 3.0 (or lower if score drops) so lines have vertical breathing room
+    const allScores = [...data1, ...data2, ...data3].filter(s => s > 0);
+    const minVal = allScores.length > 0 ? Math.min(...allScores) : 3.0;
+    const yMin = minVal < 3.0 ? Math.max(2.0, Math.floor((minVal - 0.1) * 10) / 10) : 3.0;
+
+    const ctx = canvas.getContext('2d');
+    nddtCharts.comparison = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            label: tplCfg.chartLabels[0],
+            data: data1,
+            borderColor: '#A12846', // Agribank Crimson Bordeaux (sắc sảo, sang trọng, không chói)
+            backgroundColor: '#A12846',
+            pointBackgroundColor: '#A12846',
+            pointBorderColor: '#ffffff',
+            pointBorderWidth: 2,
+            pointRadius: 4.5,
+            pointHoverRadius: 6.5,
+            pointStyle: 'circle',
+            tension: 0.25,
+            borderWidth: 2.5
+          },
+          {
+            label: tplCfg.chartLabels[1],
+            data: data2,
+            borderColor: '#24825F', // Forest Jade (tươi sáng hơn đỏ nhưng không lóa, dịu mắt)
+            backgroundColor: '#24825F',
+            pointBackgroundColor: '#24825F',
+            pointBorderColor: '#ffffff',
+            pointBorderWidth: 2,
+            pointRadius: 5,
+            pointHoverRadius: 7,
+            pointStyle: 'rectRot', // Diamond
+            tension: 0.25,
+            borderWidth: 2.5
+          },
+          {
+            label: tplCfg.chartLabels[2],
+            data: data3,
+            borderColor: '#2E6DA4', // Ocean Slate Blue (lam đại dương trầm, thanh lịch, êm dịu)
+            backgroundColor: '#2E6DA4',
+            pointBackgroundColor: '#2E6DA4',
+            pointBorderColor: '#ffffff',
+            pointBorderWidth: 2,
+            pointRadius: 5,
+            pointHoverRadius: 7,
+            pointStyle: 'triangle',
+            tension: 0.25,
+            borderWidth: 2.5
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: {
+          mode: 'index',
+          intersect: false
+        },
+        scales: {
+          y: {
+            min: yMin,
+            max: 4.0,
+            ticks: {
+              stepSize: 0.2,
+              font: { family: 'Plus Jakarta Sans', weight: '600', size: 10.5 }
+            },
+            grid: { color: '#E2E8F0' }
+          },
+          x: {
+            ticks: {
+              autoSkip: false,
+              maxRotation: 45,
+              minRotation: 45,
+              font: { family: 'Plus Jakarta Sans', weight: '700', size: 10 },
+              color: '#374151'
+            },
+            grid: { color: '#F1F5F9' }
+          }
+        },
+        plugins: {
+          legend: {
+            position: 'top',
+            labels: {
+              boxWidth: 12,
+              usePointStyle: true,
+              font: { family: 'Plus Jakarta Sans', weight: '700', size: 11 },
+              color: '#374151',
+              padding: 12
+            }
+          },
+          tooltip: {
+            backgroundColor: '#1E293B',
+            titleFont: { family: 'Plus Jakarta Sans', weight: '700' },
+            bodyFont: { family: 'Plus Jakarta Sans' },
+            padding: 10,
+            cornerRadius: 6,
+            callbacks: {
+              title: function(items) {
+                if (!items || items.length === 0) return '';
+                const idx = items[0].dataIndex;
+                const prog = progList[idx];
+                return 'Chương trình: ' + prog.name + ' (' + prog.classes + ' lớp - ' + prog.votes + ' phiếu)';
+              },
+              label: function(context) {
+                const label = context.dataset.label || '';
+                const val = context.parsed.y;
+                return label + ': ' + val.toFixed(2) + ' / 4.0';
+              }
+            }
+          }
+        }
+      }
+    });
+
+    // Enable drag-to-scroll on horizontal container
+    if (scrollOuter && !scrollOuter._hasDragScroll) {
+      scrollOuter._hasDragScroll = true;
+      let isDown = false;
+      let startX = 0;
+      let scrollLeft = 0;
+
+      scrollOuter.addEventListener('mousedown', (e) => {
+        isDown = true;
+        startX = e.pageX - scrollOuter.offsetLeft;
+        scrollLeft = scrollOuter.scrollLeft;
+      });
+      scrollOuter.addEventListener('mouseleave', () => { isDown = false; });
+      scrollOuter.addEventListener('mouseup', () => { isDown = false; });
+      scrollOuter.addEventListener('mousemove', (e) => {
+        if (!isDown) return;
+        e.preventDefault();
+        const x = e.pageX - scrollOuter.offsetLeft;
+        const walk = (x - startX) * 1.5;
+        scrollOuter.scrollLeft = scrollLeft - walk;
+      });
+    }
+  }
+
+  function renderNddtTable() {
+    const tbody = document.getElementById('nddtTableBody');
+    const filteredCountElem = document.getElementById('nddtTableFilteredCount');
+    const totalCountElem = document.getElementById('nddtTableTotalCount');
+    const statusCountElem = document.getElementById('nddtTableStatusCount');
+
+    const distinctFiltered = new Set(filteredNddtItems.map(c => (c.ma_lop || '').trim().toLowerCase()).filter(Boolean)).size;
+    const distinctTotal = new Set(allNddtItems.map(c => (c.ma_lop || '').trim().toLowerCase()).filter(Boolean)).size;
+
+    if (totalCountElem) totalCountElem.textContent = distinctTotal.toLocaleString();
+    if (filteredCountElem) filteredCountElem.textContent = distinctFiltered.toLocaleString();
+    if (statusCountElem) statusCountElem.textContent = distinctFiltered.toLocaleString();
+
+    if (!tbody) return;
+
+    if (filteredNddtItems.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="11" style="text-align: center; padding: 2.5rem; color: var(--text-muted);"><i class="fa-solid fa-inbox" style="font-size: 2rem; margin-bottom: 0.5rem; display: block;"></i> Không có lớp học nào thỏa mãn điều kiện lọc. Hãy chọn lại bộ lọc.</td></tr>';
+      return;
+    }
+
+    // Sort items
+    const sorted = [...filteredNddtItems].sort((a, b) => {
+      let va = a[nddtCurrentSort.column];
+      let vb = b[nddtCurrentSort.column];
+
+      if (typeof va === 'string') va = va.toLowerCase();
+      if (typeof vb === 'string') vb = vb.toLowerCase();
+
+      if (va < vb) return nddtCurrentSort.dir === 'asc' ? -1 : 1;
+      if (va > vb) return nddtCurrentSort.dir === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    const html = sorted.map((r, idx) => {
+      // Mini score bars
+      const renderMiniBar = (score) => {
+        const pct = Math.min(100, Math.max(0, (score / 4.0) * 100)).toFixed(0);
+        let color = '#10B981';
+        if (score < 3.5) color = '#D97706';
+        if (score < 3.0) color = '#EF4444';
+        return '<div class="mini-score-bar-wrapper"><span class="mini-score-val">' + score.toFixed(2) + '</span><div class="mini-score-track"><div class="mini-score-fill" style="width: ' + pct + '%; background: ' + color + ';"></div></div></div>';
+      };
+
+      let badgeHtml = '<span class="badge" style="background: #F3F4F6; color: #374151; font-size: 0.7rem; padding: 0.18rem 0.4rem;">' + (r.hinh_thuc_hoc || 'Trực tiếp') + '</span>';
+      const fmtLower = (r.hinh_thuc_hoc || '').toLowerCase();
+      if (fmtLower.includes('tuyến') || fmtLower.includes('polycom')) {
+        badgeHtml = '<span class="badge badge-format-online" style="font-size: 0.68rem; padding: 0.18rem 0.35rem;"><i class="fa-solid fa-desktop"></i> TRỰC TUYẾN</span>';
+      } else if (fmtLower.includes('kết hợp')) {
+        badgeHtml = '<span class="badge badge-format-hybrid" style="font-size: 0.68rem; padding: 0.18rem 0.35rem;"><i class="fa-solid fa-shapes"></i> KẾT HỢP</span>';
+      } else {
+        badgeHtml = '<span class="badge badge-format-direct" style="font-size: 0.68rem; padding: 0.18rem 0.35rem;"><i class="fa-solid fa-user-group"></i> TRỰC TIẾP</span>';
+      }
+
+      return '<tr>' +
+        '<td style="text-align: center; color: var(--text-muted); font-size: 0.76rem;">' + (idx + 1) + '</td>' +
+        '<td>' +
+          '<div style="font-weight: 800; color: var(--brand-primary); font-size: 0.82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="' + r.ma_lop + '">' + r.ma_lop + '</div>' +
+          '<div style="font-size: 0.74rem; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.25;" title="' + (r.ten_ct_full || r.chuong_trinh) + '">' +
+            (r.ten_ct_full || r.chuong_trinh) +
+          '</div>' +
+        '</td>' +
+        '<td style="text-align: center;">' + badgeHtml + '</td>' +
+        '<td style="font-size: 0.76rem; line-height: 1.3; overflow: hidden;">' +
+          '<div style="white-space: nowrap;">' + (r.ngay_bd_raw || '') + (r.ngay_kt_raw ? ' — ' + r.ngay_kt_raw : '') + '</div>' +
+          '<div style="font-size: 0.71rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="' + (r.cbql || '') + '"><i class="fa-solid fa-user-tie"></i> ' + (r.cbql || 'Chưa cập nhật') + '</div>' +
+        '</td>' +
+        '<td style="text-align: center; font-weight: 800; color: #0284C7; font-size: 0.84rem;">' + r.tong_phieu + '</td>' +
+        '<td>' + renderMiniBar(r.c1_score) + '</td>' +
+        '<td>' + renderMiniBar(r.c2_score) + '</td>' +
+        '<td>' + renderMiniBar(r.c3_score) + '</td>' +
+        '<td style="text-align: center; font-size: 0.88rem; font-weight: 800; color: var(--brand-primary);">' + r.diem_tb.toFixed(2) + '</td>' +
+        '<td style="text-align: center;">' +
+          '<span class="badge" style="background: #ECFDF5; color: #0F5132; font-weight: 700; font-size: 0.74rem; padding: 0.15rem 0.35rem;">' + r.ty_le_tich_cuc.toFixed(1) + '%</span>' +
+        '</td>' +
+        '<td style="text-align: center;">' +
+          '<button class="btn-detail-nddt" type="button" onclick="window.openNddtModalById(' + r.id + ')" title="Xem phân rã 4 mức đánh giá">' +
+            '<i class="fa-solid fa-chart-pie"></i> Chi tiết' +
+          '</button>' +
+        '</td>' +
+      '</tr>';
+    }).join('');
+
+    tbody.innerHTML = html;
+  }
+
+  function exportNddtToCsv(isExcelFormat) {
+    if (!filteredNddtItems || filteredNddtItems.length === 0) {
+      showToast('Không có dữ liệu để xuất!', 'warning');
+      return;
+    }
+
+    const headers = [
+      'STT',
+      'Mã Lớp',
+      'Chương Trình',
+      'Tên Đầy Đủ',
+      'Hình Thức',
+      'Ngày Bắt Đầu',
+      'Ngày Kết Thúc',
+      'CBQL',
+      'Số Phiếu',
+      'TC1 Phù Hợp (Điểm TB)',
+      'TC2 Thực Tiễn (Điểm TB)',
+      'TC3 Áp Dụng (Điểm TB)',
+      'Điểm TB Chung (Thang 4.0)',
+      'Tỷ Lệ Tích Cực (%)'
+    ];
+
+    const escapeCsv = (val) => {
+      if (val === null || val === undefined) return '""';
+      const str = String(val).replace(/"/g, '""');
+      return '"' + str + '"';
+    };
+
+    const rows = [headers.map(escapeCsv).join(',')];
+
+    filteredNddtItems.forEach((r, idx) => {
+      rows.push([
+        escapeCsv(idx + 1),
+        escapeCsv(r.ma_lop),
+        escapeCsv(r.chuong_trinh),
+        escapeCsv(r.ten_ct_full || ''),
+        escapeCsv(r.hinh_thuc_hoc),
+        escapeCsv(r.ngay_bd_raw),
+        escapeCsv(r.ngay_kt_raw),
+        escapeCsv(r.cbql),
+        escapeCsv(r.tong_phieu),
+        escapeCsv(r.c1_score.toFixed(2)),
+        escapeCsv(r.c2_score.toFixed(2)),
+        escapeCsv(r.c3_score.toFixed(2)),
+        escapeCsv(r.diem_tb.toFixed(2)),
+        escapeCsv(r.ty_le_tich_cuc.toFixed(1) + '%')
+      ].join(','));
+    });
+
+    const csvContent = '\uFEFF' + rows.join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'Bao_cao_danh_gia_Noi_dung_dao_tao_' + dateStr + (isExcelFormat ? '.csv' : '.csv'));
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    showToast('Đã xuất thành công ' + filteredNddtItems.length + ' bản ghi đánh giá Nội dung đào tạo!', 'success');
+  }
+
+  async function syncNddtOldGoogleSheetData(sheetUrl, options = {}) {
+    const isSilent = Boolean(options.silent);
+    try {
+      const targetUrl = sheetUrl || getDefaultNddtOldUrl();
+      if (!targetUrl) return;
+
+      const csvUrl = getGoogleSheetCsvExportUrl(targetUrl);
+      const fetchUrl = csvUrl + (csvUrl.includes('?') ? '&' : '?') + '_t=' + Date.now();
+
+      const res = await fetch(fetchUrl, { cache: 'no-store' });
+      if (!res.ok) throw new Error('HTTP error ' + res.status);
+      const csvText = await res.text();
+      const parsed = parseCsvToNddtItems(csvText);
+
+      if (parsed && parsed.length > 0) {
+        nddtOldItems = parsed;
+        try {
+          localStorage.setItem(STORAGE_KEY_NDDT_OLD_DATA, JSON.stringify(parsed));
+        } catch (stErr) {}
+
+        if (nddtActiveTemplate === 'old') {
+          allNddtItems = nddtOldItems;
+          window.allNddtItems = allNddtItems;
+          populateNddtFilterDropdowns();
+          if (activeView === 'content') applyNddtFilters();
+        }
+
+        updateBookmarkBadges();
+
+        if (!isSilent) {
+          showToast('Đã đồng bộ ' + nddtOldItems.length + ' lớp đánh giá Mẫu cũ từ Google Sheet!', 'success');
+        }
+      }
+    } catch (e) {
+      console.warn('NDDT Old sheet sync error:', e);
+    }
+  }
+
+  async function syncNddtGoogleSheetData(sheetUrl, options = {}) {
+    const isSilent = Boolean(options.silent);
+    try {
+      const targetUrl = sheetUrl || getDefaultNddtUrl();
+      if (!targetUrl) return;
+
+      let csvUrl = getGoogleSheetCsvExportUrl(targetUrl);
+      if (csvUrl.includes('script.google.com') || csvUrl.includes('macros/s/')) {
+        if (!csvUrl.includes('gid=') && !csvUrl.includes('sheet=')) {
+          csvUrl += (csvUrl.includes('?') ? '&' : '?') + 'gid=0';
+        }
+      }
+      const fetchUrl = csvUrl + (csvUrl.includes('?') ? '&' : '?') + '_t=' + Date.now();
+
+      const res = await fetch(fetchUrl, { cache: 'no-store', redirect: 'follow' });
+      if (!res.ok) throw new Error('HTTP error ' + res.status);
+      const csvText = await res.text();
+      const parsed = parseCsvToNddtItems(csvText);
+
+      if (parsed && parsed.length > 0) {
+        nddtNewItems = parsed;
+        if (nddtActiveTemplate === 'new') {
+          allNddtItems = nddtNewItems;
+          window.allNddtItems = allNddtItems;
+        }
+        try {
+          localStorage.setItem(STORAGE_KEY_NDDT_DATA, JSON.stringify(parsed));
+        } catch (stErr) {
+          console.warn('Could not save NDDT to localStorage:', stErr);
+        }
+        populateNddtFilterDropdowns();
+        if (activeView === 'content') applyNddtFilters();
+
+        if (!isSilent) {
+          showToast('Đã đồng bộ ' + allNddtItems.length + ' lớp đánh giá nội dung từ Google Sheet / Apps Script!', 'success');
+        }
+      }
+    } catch (e) {
+      console.warn('NDDT sheet sync error:', e);
+    }
+  }
+
+  function parseCsvToNddtItems(csvText) {
+    if (!csvText) return [];
+    const lines = csvText.split(/\r?\n/).filter(l => l.trim().length > 0);
+    if (lines.length <= 1) return [];
+
+    // Build rawClasses mapping if available
+    const rawMap = new Map();
+    if (typeof allClasses !== 'undefined' && Array.isArray(allClasses)) {
+      allClasses.forEach(c => {
+        if (c.ma_lop) rawMap.set(c.ma_lop.trim().toLowerCase(), c);
+      });
+    }
+
+    const parseLine = (text) => {
+      const p = [];
+      let cur = '';
+      let inQuotes = false;
+      for (let i = 0; i < text.length; i++) {
+        const c = text[i];
+        if (c === '"') {
+          if (inQuotes && text[i+1] === '"') { cur += '"'; i++; }
+          else { inQuotes = !inQuotes; }
+        } else if (c === ',' && !inQuotes) {
+          p.push(cur.trim());
+          cur = '';
+        } else {
+          cur += c;
+        }
+      }
+      p.push(cur.trim());
+      return p;
+    };
+
+    const parseFlexibleDate = (dStr) => {
+      if (!dStr) return '';
+      dStr = dStr.trim();
+      const parts = dStr.split('/');
+      if (parts.length === 3) {
+        const day = parts[0].padStart(2, '0');
+        const month = parts[1].padStart(2, '0');
+        const year = parts[2];
+        return year + '-' + month + '-' + day;
+      }
+      const clean = dStr.replace(/\s*\([^)]*\)$/, '');
+      const d = new Date(clean);
+      if (!isNaN(d.getTime())) {
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return year + '-' + month + '-' + day;
+      }
+      return dStr;
+    };
+
+    const headerCols = parseLine(lines[0]);
+    const headers = headerCols.map(h => h.trim().toLowerCase());
+
+    // Dynamic header indexes
+    let idxProg = headers.findIndex(h => h.includes('chương trình'));
+    let idxMaLop = headers.findIndex(h => h.includes('mã lớp'));
+    let idxFmt = headers.findIndex(h => h.includes('hình thức'));
+    let idxNgayBd = headers.findIndex(h => h.includes('bắt đầu'));
+    let idxNgayKt = headers.findIndex(h => h.includes('kết thúc'));
+    let idxCbql = headers.findIndex(h => h.includes('cbql') || h.includes('cán bộ'));
+
+    if (idxProg < 0) idxProg = 0;
+    if (idxMaLop < 0) idxMaLop = 1;
+    if (idxFmt < 0) idxFmt = 2;
+    if (idxNgayBd < 0) idxNgayBd = 3;
+    if (idxNgayKt < 0) idxNgayKt = 4;
+
+    const c4Indices = [];
+    headers.forEach((h, idx) => {
+      if (h.startsWith('4 -') || h.startsWith('4-')) {
+        c4Indices.push(idx);
+      }
+    });
+
+    const c1_start = c4Indices.length > 0 ? c4Indices[0] : 5;
+    const c2_start = c4Indices.length > 1 ? c4Indices[1] : 9;
+    const c3_start = c4Indices.length > 2 ? c4Indices[2] : 13;
+
+    const items = [];
+    for (let i = 1; i < lines.length; i++) {
+      const cols = parseLine(lines[i]);
+      const ct = cols[idxProg] || '';
+      const maLop = cols[idxMaLop] || '';
+      const fmt = cols[idxFmt] || '';
+      const ngayBd = cols[idxNgayBd] || '';
+      const ngayKt = cols[idxNgayKt] || '';
+
+      if (!ct && !maLop) continue;
+
+      const c1_4 = Number(cols[c1_start]) || 0;
+      const c1_3 = Number(cols[c1_start + 1]) || 0;
+      const c1_2 = Number(cols[c1_start + 2]) || 0;
+      const c1_1 = Number(cols[c1_start + 3]) || 0;
+      const c1_n = c1_4 + c1_3 + c1_2 + c1_1;
+      const c1_score = c1_n > 0 ? (4 * c1_4 + 3 * c1_3 + 2 * c1_2 + 1 * c1_1) / c1_n : 0;
+      const c1_pos = c1_n > 0 ? (c1_4 + c1_3) / c1_n * 100 : 0;
+
+      const c2_4 = Number(cols[c2_start]) || 0;
+      const c2_3 = Number(cols[c2_start + 1]) || 0;
+      const c2_2 = Number(cols[c2_start + 2]) || 0;
+      const c2_1 = Number(cols[c2_start + 3]) || 0;
+      const c2_n = c2_4 + c2_3 + c2_2 + c2_1;
+      const c2_score = c2_n > 0 ? (4 * c2_4 + 3 * c2_3 + 2 * c2_2 + 1 * c2_1) / c2_n : 0;
+      const c2_pos = c2_n > 0 ? (c2_4 + c2_3) / c2_n * 100 : 0;
+
+      const c3_4 = Number(cols[c3_start]) || 0;
+      const c3_3 = Number(cols[c3_start + 1]) || 0;
+      const c3_2 = Number(cols[c3_start + 2]) || 0;
+      const c3_1 = Number(cols[c3_start + 3]) || 0;
+      const c3_n = c3_4 + c3_3 + c3_2 + c3_1;
+      const c3_score = c3_n > 0 ? (4 * c3_4 + 3 * c3_3 + 2 * c3_2 + 1 * c3_1) / c3_n : 0;
+      const c3_pos = c3_n > 0 ? (c3_4 + c3_3) / c3_n * 100 : 0;
+
+      const cbql = idxCbql >= 0 ? (cols[idxCbql] || '') : (cols[17] || '');
+      const chk1 = Number(cols[18]) || 0;
+
+      const validScores = [];
+      if (c1_n > 0) validScores.push(c1_score);
+      if (c2_n > 0) validScores.push(c2_score);
+      if (c3_n > 0) validScores.push(c3_score);
+      const avgScore = validScores.length > 0 ? (validScores.reduce((a, b) => a + b, 0) / validScores.length) : 0;
+
+      const totalVotes = Math.max(c1_n, c2_n, c3_n, chk1);
+      const totalPos = (c1_n > 0 || c2_n > 0 || c3_n > 0)
+        ? ((c1_4 + c1_3 + c2_4 + c2_3 + c3_4 + c3_3) / ((c1_n + c2_n + c3_n) || 1) * 100)
+        : 0;
+
+      let tenCtFull = '';
+      if (rawMap.has(maLop.toLowerCase())) {
+        tenCtFull = rawMap.get(maLop.toLowerCase()).ten_ct || '';
+      }
+
+      items.push({
+        id: i,
+        chuong_trinh: ct,
+        ma_lop: maLop,
+        ten_ct_full: tenCtFull,
+        hinh_thuc_hoc: fmt,
+        ngay_bd_raw: ngayBd,
+        ngay_kt_raw: ngayKt,
+        ngay_bd: parseFlexibleDate(ngayBd),
+        ngay_kt: parseFlexibleDate(ngayKt),
+        c1_4, c1_3, c1_2, c1_1, c1_n, c1_score, c1_pos,
+        c2_4, c2_3, c2_2, c2_1, c2_n, c2_score, c2_pos,
+        c3_4, c3_3, c3_2, c3_1, c3_n, c3_score, c3_pos,
+        diem_tb: avgScore,
+        ty_le_tich_cuc: totalPos,
+        tong_phieu: totalVotes,
+        cbql
+      });
+    }
+    return items;
+  }
+
 
   function closeSheetUrlModal() {
     window.closeSheetModal();
