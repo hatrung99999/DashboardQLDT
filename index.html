@@ -19,7 +19,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
   <!-- Dashboard Stylesheet -->
-  <link rel="stylesheet" href="styles.css?v=9669_v15">
+  <link rel="stylesheet" href="styles.css?v=9669_v20">
 </head>
 
 <body>
@@ -75,6 +75,12 @@
       </button>
       <button class="screen-tab" id="tabContentEval" data-screen="screenContentEval">
         <i class="fa-solid fa-book-open"></i> Nội dung đào tạo
+      </button>
+      <button class="screen-tab" id="tabPphtdt" data-screen="screenPphtdt">
+        <i class="fa-solid fa-chalkboard-user"></i> Phương pháp & Hình thức
+      </button>
+      <button class="screen-tab" id="tabCsvc" data-screen="screenCsvc">
+        <i class="fa-solid fa-building-circle-check"></i> Tổ chức & CSVC
       </button>
     </nav>
 
@@ -541,6 +547,508 @@
       </section>
     </main>
 
+
+    <!-- SCREEN 3: ĐÁNH GIÁ VỀ PHƯƠNG PHÁP, HÌNH THỨC ĐÀO TẠO -->
+    <main id="screenPphtdt" class="screen-content">
+      <!-- TIME & CRITERIA SLICER BAR -->
+      <section class="slicer-card">
+        <div class="slicer-header">
+          <div class="slicer-title">
+            <i class="fa-solid fa-filter"></i>
+            <span>BỘ LỌC ĐÁNH GIÁ PHƯƠNG PHÁP, HÌNH THỨC ĐÀO TẠO</span>
+          </div>
+
+          <div class="header-actions" style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+            <button id="btnExportPphtdtExcel" class="btn" style="color: #0F5132; border-color: #0F5132; font-size: 0.82rem; padding: 0.45rem 0.85rem;" title="Xuất dữ liệu Excel">
+              <i class="fa-solid fa-file-excel"></i> <span>Xuất Excel</span>
+            </button>
+            <button id="btnExportPphtdtCsv" class="btn" style="color: var(--brand-primary); border-color: var(--brand-primary); font-size: 0.82rem; padding: 0.45rem 0.85rem;" title="Xuất dữ liệu CSV">
+              <i class="fa-solid fa-file-csv"></i> <span>Xuất CSV</span>
+            </button>
+            <button id="btnResetPphtdtFilters" class="btn" style="font-size: 0.82rem; padding: 0.45rem 0.85rem;" title="Đặt lại toàn bộ bộ lọc">
+              <i class="fa-solid fa-rotate-left"></i> <span>Đặt lại</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Quick Preset Filter Pills -->
+        <div class="preset-pills-wrapper">
+          <div class="preset-pills" id="pphtdtPresetPills">
+            <span class="pill active" data-preset="all">Tất cả</span>
+            <span class="pill" data-preset="2026">Năm 2026</span>
+            <span class="pill" data-preset="q1">Quý 1</span>
+            <span class="pill" data-preset="q2">Quý 2</span>
+            <span class="pill" data-preset="q3">Quý 3</span>
+            <span class="pill" data-preset="q4">Quý 4</span>
+          </div>
+        </div>
+
+        <!-- Secondary Filters (Program, Format, Manager, Rating, Search) -->
+        <div class="secondary-filters" id="pphtdtSecondaryFilters">
+          <select id="filterPphtdtProgram" class="filter-select">
+            <option value="">-- Tất cả Chương trình --</option>
+          </select>
+
+          <select id="filterPphtdtFormat" class="filter-select">
+            <option value="">-- Tất cả Hình thức --</option>
+          </select>
+
+          <select id="filterPphtdtCbql" class="filter-select">
+            <option value="">-- Tất cả Cán bộ QL --</option>
+          </select>
+
+          <select id="filterPphtdtRatingLevel" class="filter-select">
+            <option value="">-- Tất cả Mức điểm --</option>
+            <option value="high">Xuất sắc / Rất tốt (≥ 3.8)</option>
+            <option value="medium">Tốt / Khá (3.5 - 3.79)</option>
+            <option value="low">Cần lưu ý (< 3.5)</option>
+          </select>
+
+          <div class="search-box" style="flex: 1; min-width: 250px;">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <input type="text" id="searchPphtdtInput" placeholder="Tìm theo Mã lớp, Tên CT, Cán bộ QL...">
+          </div>
+        </div>
+      </section>
+
+      <!-- 6 KPI METRICS GRID -->
+      <section class="kpi-grid-6">
+        <!-- KPI 1: Số lớp có đánh giá -->
+        <div class="kpi-card-light">
+          <div class="kpi-card-top">
+            <span class="kpi-label-light">SỐ LỚP CÓ ĐÁNH GIÁ</span>
+            <div class="kpi-icon-circle"><i class="fa-solid fa-chalkboard-user"></i></div>
+          </div>
+          <div class="kpi-val-light" id="kpiPphtdtClassCount">0</div>
+          <div class="kpi-subtext" style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.35rem;">Lớp học có phiếu hợp lệ</div>
+        </div>
+
+        <!-- KPI 2: Số chương trình -->
+        <div class="kpi-card-light">
+          <div class="kpi-card-top">
+            <span class="kpi-label-light">SỐ CHƯƠNG TRÌNH</span>
+            <div class="kpi-icon-circle"><i class="fa-solid fa-layer-group"></i></div>
+          </div>
+          <div class="kpi-val-light" id="kpiPphtdtProgramCount">0</div>
+          <div class="kpi-subtext" style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.35rem;">Chương trình đào tạo</div>
+        </div>
+
+        <!-- KPI 3: Tổng số phiếu phản hồi -->
+        <div class="kpi-card-light">
+          <div class="kpi-card-top">
+            <span class="kpi-label-light">TỔNG PHIẾU PHẢN HỒI</span>
+            <div class="kpi-icon-circle"><i class="fa-solid fa-square-poll-vertical"></i></div>
+          </div>
+          <div class="kpi-val-light" id="kpiPphtdtTotalVotes">0</div>
+          <div class="kpi-subtext" style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.35rem;">Lượt học viên đánh giá</div>
+        </div>
+
+        <!-- KPI 4: Điểm TB Phương pháp & Hình thức -->
+        <div class="kpi-card-light">
+          <div class="kpi-card-top">
+            <span class="kpi-label-light">ĐIỂM TB PHƯƠNG PHÁP & HT</span>
+            <div class="kpi-icon-circle" style="background: #FDF2F8; color: var(--brand-primary);">
+              <i class="fa-solid fa-star"></i>
+            </div>
+          </div>
+          <div style="display: flex; align-items: baseline; gap: 0.4rem;">
+            <div class="kpi-val-light" id="kpiPphtdtAvgScore" style="color: var(--brand-primary);">0.00</div>
+            <span style="font-size: 0.95rem; font-weight: 700; color: var(--text-muted);">/ 4.0</span>
+          </div>
+          <div id="kpiPphtdtScoreRatingBadge" class="kpi-subtext" style="font-size: 0.78rem; font-weight: 700; color: #0F5132; margin-top: 0.35rem;">
+            Đánh giá chung: Rất tốt
+          </div>
+        </div>
+
+        <!-- KPI 5: Tỷ lệ đánh giá tích cực -->
+        <div class="kpi-card-light">
+          <div class="kpi-card-top">
+            <span class="kpi-label-light">TỶ LỆ TÍCH CỰC</span>
+            <div class="kpi-icon-circle" style="background: #ECFDF5; color: #059669;">
+              <i class="fa-solid fa-thumbs-up"></i>
+            </div>
+          </div>
+          <div style="display: flex; align-items: baseline; gap: 0.3rem;">
+            <div class="kpi-val-light" id="kpiPphtdtPosRate" style="color: #0F5132;">0.0</div>
+            <span style="font-size: 1rem; font-weight: 700; color: #0F5132;">%</span>
+          </div>
+          <div class="kpi-subtext" style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.35rem;">Phiếu Tốt (4) & Khá (3)</div>
+        </div>
+
+        <!-- KPI 6: Điểm 2 Tiêu chí cốt lõi -->
+        <div class="kpi-card-light" style="display: flex; flex-direction: column; justify-content: space-between;">
+          <div class="kpi-card-top" style="margin-bottom: 0.25rem;">
+            <span class="kpi-label-light">ĐIỂM 2 TIÊU CHÍ (4.0)</span>
+            <div class="kpi-icon-circle"><i class="fa-solid fa-list-check"></i></div>
+          </div>
+          <div class="criteria-kpi-list">
+            <div class="criteria-kpi-item">
+              <span class="crit-name" id="kpiPphtdtCrit1Label" title="Hoạt động học tập, bài tập, thảo luận">1. Hoạt động học tập:</span>
+              <strong id="kpiPphtdtCrit1Score" class="crit-val">0.00</strong>
+            </div>
+            <div class="criteria-kpi-item">
+              <span class="crit-name" id="kpiPphtdtCrit2Label" title="Tính phù hợp và hiệu quả của hình thức đào tạo">2. Hình thức đào tạo:</span>
+              <strong id="kpiPphtdtCrit2Score" class="crit-val">0.00</strong>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- CHARTS SECTION: Visual 1 (Cơ cấu mức) + Visual 2 (So sánh điểm) -->
+      <section class="charts-grid-row">
+        <!-- Visual 1: 100% Stacked Bar Chart (5 Columns - 41.7%) -->
+        <div class="chart-card chart-col-5">
+          <div class="chart-header">
+            <div>
+              <h3>
+                <i class="fa-solid fa-chart-column" style="color: var(--brand-primary);"></i>
+                CƠ CẤU 4 MỨC ĐÁNH GIÁ THEO TIÊU CHÍ
+              </h3>
+              <p style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.15rem;">
+                Tỷ lệ % phản hồi 4 mức (Tốt, Khá, Bình thường, Hạn chế)
+              </p>
+            </div>
+          </div>
+          <div class="chart-container" style="min-height: 290px; position: relative;">
+            <canvas id="pphtdtStackedBarChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Visual 2: Multi-line Comparison Chart with Horizontal Drag Scroll (7 Columns - 58.3%) -->
+        <div class="chart-card chart-col-7">
+          <div class="chart-header" style="flex-wrap: wrap; gap: 0.5rem; justify-content: space-between; align-items: center;">
+            <div>
+              <h3>
+                <i class="fa-solid fa-chart-line" style="color: #0F5132;"></i>
+                SO SÁNH ĐIỂM ĐÁNH GIÁ PHƯƠNG PHÁP & HÌNH THỨC
+              </h3>
+              <p style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.15rem;">
+                Xu hướng điểm 2 tiêu chí cốt lõi của tất cả các chương trình đào tạo
+              </p>
+            </div>
+            <div class="scroll-chart-hint" style="font-size: 0.75rem; font-weight: 700; color: var(--brand-primary); background: #FFF1F2; padding: 0.2rem 0.6rem; border-radius: 12px; border: 1px solid #FECDD3; display: inline-flex; align-items: center; gap: 0.35rem;">
+              <i class="fa-solid fa-arrows-left-right"></i> Kéo ngang xem tất cả <strong id="pphtdtProgCountHint">0</strong> chương trình
+            </div>
+          </div>
+          <div class="chart-scroll-outer" id="pphtdtComparisonScrollOuter">
+            <div class="chart-scroll-inner" id="pphtdtComparisonScrollInner" style="min-width: 100%; height: 290px; position: relative;">
+              <canvas id="pphtdtComparisonChart"></canvas>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- DATA TABLE SECTION -->
+      <section class="table-card">
+        <div class="table-header">
+          <div class="table-title">
+            <h3>
+              <i class="fa-solid fa-table-list" style="color: var(--brand-primary);"></i>
+              KẾT QUẢ ĐÁNH GIÁ PHƯƠNG PHÁP, HÌNH THỨC CHI TIẾT THEO LỚP
+            </h3>
+          </div>
+          <div class="table-info-badge">
+            Hiển thị <span id="pphtdtTableFilteredCount">0</span> / <span id="pphtdtTableTotalCount">0</span> lớp
+          </div>
+        </div>
+
+        <div class="scroll-hint-mobile">
+          <i class="fa-solid fa-arrows-left-right"></i> Vuốt ngang để xem đầy đủ cột ➔
+        </div>
+
+        <div class="table-wrapper pphtdt-table-wrapper">
+          <table id="pphtdtClassesTable">
+            <thead>
+              <tr>
+                <th style="width: 3.5%; text-align: center;">STT</th>
+                <th data-pphtdt-sort="ma_lop" style="width: 24.5%;">MÃ LỚP / CHƯƠNG TRÌNH <i class="fa-solid fa-sort"></i></th>
+                <th data-pphtdt-sort="hinh_thuc_hoc" style="width: 9%; text-align: center;">HÌNH THỨC <i class="fa-solid fa-sort"></i></th>
+                <th data-pphtdt-sort="ngay_bd" style="width: 13%;">THỜI GIAN & CBQL <i class="fa-solid fa-sort"></i></th>
+                <th data-pphtdt-sort="tong_phieu" style="width: 6%; text-align: center;" title="Tổng số phiếu đánh giá">PHIẾU <i class="fa-solid fa-sort"></i></th>
+                <th data-pphtdt-sort="c1_score" style="width: 10%; text-align: center;" id="thPphtdtCrit1" title="Tiêu chí 1: Hoạt động học tập">TC1: HOẠT ĐỘNG <i class="fa-solid fa-sort"></i></th>
+                <th data-pphtdt-sort="c2_score" style="width: 10%; text-align: center;" id="thPphtdtCrit2" title="Tiêu chí 2: Hình thức đào tạo">TC2: HÌNH THỨC <i class="fa-solid fa-sort"></i></th>
+                <th data-pphtdt-sort="diem_tb" style="width: 8%; text-align: center;" title="Điểm trung bình cộng 2 tiêu chí">ĐIỂM TB <i class="fa-solid fa-sort"></i></th>
+                <th data-pphtdt-sort="ty_le_tich_cuc" style="width: 8%; text-align: center;" title="Tỷ lệ đánh giá tích cực">TÍCH CỰC <i class="fa-solid fa-sort"></i></th>
+                <th style="width: 8%; text-align: center;">CHI TIẾT</th>
+              </tr>
+            </thead>
+            <tbody id="pphtdtTableBody">
+              <!-- Rendered dynamically -->
+            </tbody>
+          </table>
+        </div>
+
+        <div class="table-footer-status" style="display: flex; justify-content: space-between; align-items: center; padding: 0.85rem 1.25rem; background: #F8FAFC; border-top: 1px solid var(--border-color); flex-wrap: wrap; gap: 0.5rem;">
+          <span style="font-size: 0.82rem; color: var(--text-muted); font-weight: 600;">
+            Đang hiển thị <strong id="pphtdtTableStatusCount">0</strong> lớp học có đánh giá phương pháp & hình thức
+          </span>
+          <span style="font-size: 0.8rem; color: var(--brand-primary); font-weight: 700; display: inline-flex; align-items: center; gap: 0.35rem;">
+            <i class="fa-solid fa-arrow-down-long"></i> Bấm "Chi tiết" tại từng dòng để xem phân rã số phiếu và tỷ lệ từng mức
+          </span>
+        </div>
+      </section>
+    </main>
+
+    <!-- SCREEN 4: ĐÁNH GIÁ CÔNG TÁC TỔ CHỨC, CƠ SỞ VẬT CHẤT -->
+    <main id="screenCsvc" class="screen-content">
+      <!-- TIME & CRITERIA SLICER BAR -->
+      <section class="slicer-card">
+        <div class="slicer-header">
+          <div class="slicer-title">
+            <i class="fa-solid fa-filter"></i>
+            <span>BỘ LỌC ĐÁNH GIÁ CÔNG TÁC TỔ CHỨC & CƠ SỞ VẬT CHẤT</span>
+          </div>
+
+          <div class="header-actions" style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+            <button id="btnExportCsvcExcel" class="btn" style="color: #0F5132; border-color: #0F5132; font-size: 0.82rem; padding: 0.45rem 0.85rem;" title="Xuất dữ liệu Excel">
+              <i class="fa-solid fa-file-excel"></i> <span>Xuất Excel</span>
+            </button>
+            <button id="btnExportCsvcCsv" class="btn" style="color: var(--brand-primary); border-color: var(--brand-primary); font-size: 0.82rem; padding: 0.45rem 0.85rem;" title="Xuất dữ liệu CSV">
+              <i class="fa-solid fa-file-csv"></i> <span>Xuất CSV</span>
+            </button>
+            <button id="btnResetCsvcFilters" class="btn" style="font-size: 0.82rem; padding: 0.45rem 0.85rem;" title="Đặt lại toàn bộ bộ lọc">
+              <i class="fa-solid fa-rotate-left"></i> <span>Đặt lại</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Quick Preset Filter Pills -->
+        <div class="preset-pills-wrapper">
+          <div class="preset-pills" id="csvcPresetPills">
+            <span class="pill active" data-preset="all">Tất cả</span>
+            <span class="pill" data-preset="2026">Năm 2026</span>
+            <span class="pill" data-preset="q1">Quý 1</span>
+            <span class="pill" data-preset="q2">Quý 2</span>
+            <span class="pill" data-preset="q3">Quý 3</span>
+            <span class="pill" data-preset="q4">Quý 4</span>
+          </div>
+        </div>
+
+        <!-- Secondary Filters (Program, Location, Format, Manager, Rating, Search) -->
+        <div class="secondary-filters" id="csvcSecondaryFilters">
+          <select id="filterCsvcProgram" class="filter-select">
+            <option value="">-- Tất cả Chương trình --</option>
+          </select>
+
+          <select id="filterCsvcLocation" class="filter-select">
+            <option value="">-- Tất cả Địa điểm --</option>
+          </select>
+
+          <select id="filterCsvcFormat" class="filter-select">
+            <option value="">-- Tất cả Hình thức --</option>
+          </select>
+
+          <select id="filterCsvcCbql" class="filter-select">
+            <option value="">-- Tất cả Cán bộ QL --</option>
+          </select>
+
+          <select id="filterCsvcRatingLevel" class="filter-select">
+            <option value="">-- Tất cả Mức điểm --</option>
+            <option value="high">Xuất sắc / Rất tốt (≥ 3.8)</option>
+            <option value="medium">Tốt / Khá (3.5 - 3.79)</option>
+            <option value="low">Cần lưu ý (< 3.5)</option>
+          </select>
+
+          <div class="search-box" style="flex: 1; min-width: 250px;">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <input type="text" id="searchCsvcInput" placeholder="Tìm theo Mã lớp, Tên CT, Địa điểm, Cán bộ QL...">
+          </div>
+        </div>
+      </section>
+
+      <!-- 6 KPI METRICS GRID -->
+      <section class="kpi-grid-6">
+        <!-- KPI 1: Số lớp có đánh giá -->
+        <div class="kpi-card-light">
+          <div class="kpi-card-top">
+            <span class="kpi-label-light">SỐ LỚP CÓ ĐÁNH GIÁ</span>
+            <div class="kpi-icon-circle"><i class="fa-solid fa-chalkboard-user"></i></div>
+          </div>
+          <div class="kpi-val-light" id="kpiCsvcClassCount">0</div>
+          <div class="kpi-subtext" style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.35rem;">Lớp học có phiếu hợp lệ</div>
+        </div>
+
+        <!-- KPI 2: Địa điểm tổ chức -->
+        <div class="kpi-card-light">
+          <div class="kpi-card-top">
+            <span class="kpi-label-light">ĐỊA ĐIỂM TỔ CHỨC</span>
+            <div class="kpi-icon-circle" style="background: #F0FDF4; color: #16A34A;"><i class="fa-solid fa-location-dot"></i></div>
+          </div>
+          <div class="kpi-val-light" id="kpiCsvcLocationCount">0</div>
+          <div class="kpi-subtext" style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.35rem;">Cơ sở & địa bàn đào tạo</div>
+        </div>
+
+        <!-- KPI 3: Tổng số phiếu phản hồi -->
+        <div class="kpi-card-light">
+          <div class="kpi-card-top">
+            <span class="kpi-label-light">TỔNG PHIẾU PHẢN HỒI</span>
+            <div class="kpi-icon-circle"><i class="fa-solid fa-square-poll-vertical"></i></div>
+          </div>
+          <div class="kpi-val-light" id="kpiCsvcTotalVotes">0</div>
+          <div class="kpi-subtext" style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.35rem;">Lượt học viên đánh giá</div>
+        </div>
+
+        <!-- KPI 4: Điểm TB Tổ chức & CSVC -->
+        <div class="kpi-card-light">
+          <div class="kpi-card-top">
+            <span class="kpi-label-light">ĐIỂM TB TỔ CHỨC & CSVC</span>
+            <div class="kpi-icon-circle" style="background: #FDF2F8; color: var(--brand-primary);">
+              <i class="fa-solid fa-star"></i>
+            </div>
+          </div>
+          <div style="display: flex; align-items: baseline; gap: 0.4rem;">
+            <div class="kpi-val-light" id="kpiCsvcAvgScore" style="color: var(--brand-primary);">0.00</div>
+            <span style="font-size: 0.95rem; font-weight: 700; color: var(--text-muted);">/ 4.0</span>
+          </div>
+          <div id="kpiCsvcScoreRatingBadge" class="kpi-subtext" style="font-size: 0.78rem; font-weight: 700; color: #0F5132; margin-top: 0.35rem;">
+            Đánh giá chung: Xuất sắc
+          </div>
+        </div>
+
+        <!-- KPI 5: Tỷ lệ đánh giá tích cực -->
+        <div class="kpi-card-light">
+          <div class="kpi-card-top">
+            <span class="kpi-label-light">TỶ LỆ TÍCH CỰC</span>
+            <div class="kpi-icon-circle" style="background: #ECFDF5; color: #059669;">
+              <i class="fa-solid fa-thumbs-up"></i>
+            </div>
+          </div>
+          <div style="display: flex; align-items: baseline; gap: 0.3rem;">
+            <div class="kpi-val-light" id="kpiCsvcPosRate" style="color: #0F5132;">0.0</div>
+            <span style="font-size: 1rem; font-weight: 700; color: #0F5132;">%</span>
+          </div>
+          <div class="kpi-subtext" style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.35rem;">Phiếu Tốt (4) & Khá (3)</div>
+        </div>
+
+        <!-- KPI 6: Điểm 3 Tiêu chí cốt lõi -->
+        <div class="kpi-card-light" style="display: flex; flex-direction: column; justify-content: space-between;">
+          <div class="kpi-card-top" style="margin-bottom: 0.25rem;">
+            <span class="kpi-label-light">ĐIỂM 3 TIÊU CHÍ (4.0)</span>
+            <div class="kpi-icon-circle"><i class="fa-solid fa-list-check"></i></div>
+          </div>
+          <div class="criteria-kpi-list">
+            <div class="criteria-kpi-item" style="padding: 2px 0; font-size: 0.77rem;">
+              <span class="crit-name" title="Công tác tổ chức lớp học">1. Tổ chức (CTTC):</span>
+              <strong id="kpiCsvcCrit1Score" class="crit-val" style="color: #0F5132;">0.00</strong>
+            </div>
+            <div class="criteria-kpi-item" style="padding: 2px 0; font-size: 0.77rem;">
+              <span class="crit-name" title="Cơ sở vật chất, phòng học, thiết bị">2. CSVC & Thiết bị:</span>
+              <strong id="kpiCsvcCrit2Score" class="crit-val" style="color: var(--brand-primary);">0.00</strong>
+            </div>
+            <div class="criteria-kpi-item" style="padding: 2px 0; font-size: 0.77rem;">
+              <span class="crit-name" title="Công tác hậu cần (ăn, nghỉ, phục vụ)">3. Hậu cần (HC):</span>
+              <strong id="kpiCsvcCrit3Score" class="crit-val" style="color: #D97706;">0.00</strong>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- CHARTS SECTION: Visual 1 (Cơ cấu 3 tiêu chí) + Visual 2 (So sánh điểm theo Địa điểm/Chương trình) -->
+      <section class="charts-grid-row">
+        <!-- Visual 1: 100% Stacked Bar Chart (5 Columns - 41.7%) - Compact Height -->
+        <div class="chart-card chart-col-5" id="csvcStackedBarCard" style="min-height: 270px;">
+          <div class="chart-header">
+            <div>
+              <h3>
+                <i class="fa-solid fa-chart-column" style="color: var(--brand-primary);"></i>
+                CƠ CẤU 4 MỨC ĐÁNH GIÁ THEO 3 TIÊU CHÍ
+              </h3>
+              <p style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.15rem;">
+                Tỷ lệ % phản hồi 4 mức (Tốt, Khá, Bình thường, Hạn chế)
+              </p>
+            </div>
+          </div>
+          <div class="chart-container" style="height: 195px; min-height: 190px; position: relative;">
+            <canvas id="csvcStackedBarChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Visual 2: Comparative Chart with Toggle Location / Program (7 Columns - 58.3%) -->
+        <div class="chart-card chart-col-7">
+          <div class="chart-header" style="flex-wrap: wrap; gap: 0.5rem; justify-content: space-between; align-items: center;">
+            <div>
+              <h3>
+                <i class="fa-solid fa-chart-bar" style="color: #0F5132;"></i>
+                SO SÁNH ĐIỂM ĐÁNH GIÁ THEO ĐỊA ĐIỂM / CHƯƠNG TRÌNH
+              </h3>
+              <p style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.15rem;">
+                Phân tích chất lượng tổ chức & cơ sở vật chất theo từng địa bàn hoặc chuyên đề
+              </p>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+              <div class="btn-group" style="display: inline-flex; background: #F1F5F9; padding: 2px; border-radius: 6px; border: 1px solid #E2E8F0;">
+                <button type="button" id="btnCsvcToggleLoc" class="btn btn-sm active" style="font-size: 0.75rem; padding: 0.25rem 0.6rem; border: none; border-radius: 4px; font-weight: 700; cursor: pointer; background: var(--brand-primary); color: white;">
+                  Theo Địa điểm
+                </button>
+                <button type="button" id="btnCsvcToggleProg" class="btn btn-sm" style="font-size: 0.75rem; padding: 0.25rem 0.6rem; border: none; border-radius: 4px; font-weight: 700; cursor: pointer; background: transparent; color: #475569;">
+                  Theo Chương trình
+                </button>
+              </div>
+              <div class="scroll-chart-hint" style="font-size: 0.75rem; font-weight: 700; color: var(--brand-primary); background: #FFF1F2; padding: 0.2rem 0.6rem; border-radius: 12px; border: 1px solid #FECDD3; display: inline-flex; align-items: center; gap: 0.35rem;">
+                <i class="fa-solid fa-arrows-left-right"></i> Kéo ngang xem tất cả <strong id="csvcScrollCountHint">26</strong> mục
+              </div>
+            </div>
+          </div>
+          <div class="chart-scroll-outer" id="csvcComparisonScrollOuter">
+            <div class="chart-scroll-inner" id="csvcComparisonScrollInner" style="min-width: 100%; height: 435px; position: relative;">
+              <canvas id="csvcComparisonChart"></canvas>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- DATA TABLE SECTION -->
+      <section class="table-card">
+        <div class="table-header">
+          <div class="table-title">
+            <h3>
+              <i class="fa-solid fa-table-list" style="color: var(--brand-primary);"></i>
+              KẾT QUẢ ĐÁNH GIÁ TỔ CHỨC & CƠ SỞ VẬT CHẤT THEO LỚP
+            </h3>
+          </div>
+          <div class="table-info-badge">
+            Hiển thị <span id="csvcTableFilteredCount">0</span> / <span id="csvcTableTotalCount">0</span> lớp
+          </div>
+        </div>
+
+        <div class="scroll-hint-mobile">
+          <i class="fa-solid fa-arrows-left-right"></i> Vuốt ngang để xem đầy đủ cột ➔
+        </div>
+
+        <div class="table-wrapper csvc-table-wrapper">
+          <table id="csvcClassesTable">
+            <thead>
+              <tr>
+                <th style="width: 3.5%; text-align: center;">STT</th>
+                <th data-csvc-sort="ma_lop" style="width: 21%;">MÃ LỚP / CHƯƠNG TRÌNH <i class="fa-solid fa-sort"></i></th>
+                <th data-csvc-sort="dia_diem" style="width: 12.5%;">ĐỊA ĐIỂM <i class="fa-solid fa-sort"></i></th>
+                <th data-csvc-sort="hinh_thuc_hoc" style="width: 11%; text-align: center;">HÌNH THỨC <i class="fa-solid fa-sort"></i></th>
+                <th data-csvc-sort="ngay_bd" style="width: 12%;">THỜI GIAN & CBQL <i class="fa-solid fa-sort"></i></th>
+                <th data-csvc-sort="tong_phieu" style="width: 5%; text-align: center;" title="Tổng số phiếu đánh giá">PHIẾU <i class="fa-solid fa-sort"></i></th>
+                <th data-csvc-sort="cttc_score" style="width: 7%; text-align: center;" title="Tiêu chí 1: Công tác tổ chức">TỔ CHỨC <i class="fa-solid fa-sort"></i></th>
+                <th data-csvc-sort="csvc_score" style="width: 7%; text-align: center;" title="Tiêu chí 2: Cơ sở vật chất">CSVC <i class="fa-solid fa-sort"></i></th>
+                <th data-csvc-sort="hc_score" style="width: 7%; text-align: center;" title="Tiêu chí 3: Công tác hậu cần (ăn, nghỉ, phục vụ)">HẬU CẦN <i class="fa-solid fa-sort"></i></th>
+                <th data-csvc-sort="diem_tb" style="width: 7%; text-align: center;" title="Điểm trung bình chung các tiêu chí">ĐIỂM TB <i class="fa-solid fa-sort"></i></th>
+                <th style="width: 7%; text-align: center;">CHI TIẾT</th>
+              </tr>
+            </thead>
+            <tbody id="csvcTableBody">
+              <!-- Rendered dynamically -->
+            </tbody>
+          </table>
+        </div>
+
+        <div class="table-footer-status" style="display: flex; justify-content: space-between; align-items: center; padding: 0.85rem 1.25rem; background: #F8FAFC; border-top: 1px solid var(--border-color); flex-wrap: wrap; gap: 0.5rem;">
+          <span style="font-size: 0.82rem; color: var(--text-muted); font-weight: 600;">
+            Đang hiển thị <strong id="csvcTableStatusCount">0</strong> lớp học có đánh giá tổ chức & CSVC
+          </span>
+          <span style="font-size: 0.8rem; color: var(--brand-primary); font-weight: 700; display: inline-flex; align-items: center; gap: 0.35rem;">
+            <i class="fa-solid fa-arrow-down-long"></i> Bấm "Chi tiết" tại từng dòng để xem phân rã số phiếu và tỷ lệ từng mức
+          </span>
+        </div>
+      </section>
+    </main>
+
     <!-- FOOTER -->
     <footer class="app-footer">
       Dashboard Quản lý Đào tạo 2026 &copy; Trường Đào tạo Cán bộ Agribank | Hệ thống Phân tích Dữ liệu Cao cấp
@@ -608,14 +1116,87 @@
     </div>
   </div>
 
+
+  <!-- PPHTDT DETAIL MODAL -->
+  <div class="modal-overlay" id="pphtdtDetailModal" onclick="window.closePphtdtModalOnOverlay(event)">
+    <div class="modal-content" onclick="event.stopPropagation()" style="max-width: 860px;">
+      <div class="modal-header">
+        <div>
+          <span class="badge" id="modalPphtdtClassCode" style="background: var(--brand-primary); color: white;">Mã Lớp</span>
+          <h2 id="modalPphtdtClassName" style="margin-top: 0.3rem; font-size: 1.25rem;">Tên Chương Trình Đào Tạo</h2>
+        </div>
+        <button class="modal-close" id="btnClosePphtdtModal" type="button" onclick="window.closePphtdtModal(event)" aria-label="Đóng">&times;</button>
+      </div>
+
+      <div class="modal-grid" id="modalPphtdtInfoGrid" style="margin-bottom: 1.25rem;">
+        <!-- Class Meta info rendered dynamically -->
+      </div>
+
+      <div style="border-top: 1px solid var(--border-color); padding-top: 1rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.85rem; flex-wrap: wrap; gap: 0.5rem;">
+          <h3 style="font-size: 1.05rem; font-weight: 800; color: var(--brand-primary); display: flex; align-items: center; gap: 0.5rem; margin: 0;">
+            <i class="fa-solid fa-chart-pie"></i> PHÂN BỐ ĐÁNH GIÁ THEO 2 TIÊU CHÍ CỐT LÕI
+          </h3>
+          <span style="font-size: 0.8rem; color: var(--text-muted); font-weight: 600;">Thang điểm 4 mức (Tốt: 4, Khá: 3, Bình thường: 2, Hạn chế: 1)</span>
+        </div>
+        <div id="modalPphtdtCriteriaContent" style="display: flex; flex-direction: column; gap: 1rem;">
+          <!-- 2 criteria breakdown boxes rendered dynamically -->
+        </div>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; margin-top: 1.25rem; padding-top: 0.85rem; border-top: 1px solid var(--border-color);">
+        <button type="button" class="btn" onclick="window.closePphtdtModal(event)"
+          style="padding: 0.5rem 1.25rem; font-size: 0.85rem; font-weight: 700; background: #F3F4F6; color: #374151; border: 1px solid var(--border-color); border-radius: var(--radius-sm); cursor: pointer; display: inline-flex; align-items: center; gap: 0.35rem;">
+          <i class="fa-solid fa-xmark"></i> Đóng cửa sổ
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CSVC DETAIL MODAL -->
+  <div class="modal-overlay" id="csvcDetailModal" onclick="window.closeCsvcModalOnOverlay(event)">
+    <div class="modal-content" onclick="event.stopPropagation()" style="max-width: 860px;">
+      <div class="modal-header">
+        <div>
+          <span class="badge" id="modalCsvcClassCode" style="background: var(--brand-primary); color: white;">Mã Lớp</span>
+          <h2 id="modalCsvcClassName" style="margin-top: 0.3rem; font-size: 1.25rem;">Tên Chương Trình Đào Tạo</h2>
+        </div>
+        <button class="modal-close" id="btnCloseCsvcModal" type="button" onclick="window.closeCsvcModal(event)" aria-label="Đóng">&times;</button>
+      </div>
+
+      <div class="modal-grid" id="modalCsvcInfoGrid" style="margin-bottom: 1.25rem;">
+        <!-- Class Meta info rendered dynamically -->
+      </div>
+
+      <div style="border-top: 1px solid var(--border-color); padding-top: 1rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.85rem; flex-wrap: wrap; gap: 0.5rem;">
+          <h3 style="font-size: 1.05rem; font-weight: 800; color: var(--brand-primary); display: flex; align-items: center; gap: 0.5rem; margin: 0;">
+            <i class="fa-solid fa-chart-pie"></i> PHÂN BỐ ĐÁNH GIÁ THEO 3 TIÊU CHÍ CỐT LÕI
+          </h3>
+          <span style="font-size: 0.8rem; color: var(--text-muted); font-weight: 600;">Thang điểm 4 mức (Tốt: 4, Khá: 3, Bình thường: 2, Hạn chế: 1)</span>
+        </div>
+        <div id="modalCsvcCriteriaContent" style="display: flex; flex-direction: column; gap: 1rem;">
+          <!-- 3 criteria breakdown boxes rendered dynamically -->
+        </div>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; margin-top: 1.25rem; padding-top: 0.85rem; border-top: 1px solid var(--border-color);">
+        <button type="button" class="btn" onclick="window.closeCsvcModal(event)"
+          style="padding: 0.5rem 1.25rem; font-size: 0.85rem; font-weight: 700; background: #F3F4F6; color: #374151; border: 1px solid var(--border-color); border-radius: var(--radius-sm); cursor: pointer; display: inline-flex; align-items: center; gap: 0.35rem;">
+          <i class="fa-solid fa-xmark"></i> Đóng cửa sổ
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- TOAST NOTIFICATION CONTAINER -->
   <div id="toastContainer"
     style="position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 10000; display: flex; flex-direction: column; gap: 0.5rem; pointer-events: none;">
   </div>
 
   <!-- JavaScript Files -->
-  <script src="data.js?v=9669_v17"></script>
-  <script src="app.js?v=9669_v17"></script>
+  <script src="data.js?v=9669_v20"></script>
+  <script src="app.js?v=9669_v20"></script>
 </body>
 
 </html>
