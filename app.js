@@ -16,9 +16,12 @@ window.openClassModalById = function(id) {
 
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
-    window.closeModal();
+    if (typeof window.closeModal === 'function') window.closeModal();
     if (typeof window.closeGvModal === 'function') window.closeGvModal();
     if (typeof window.closeNddtModal === 'function') window.closeNddtModal();
+    if (typeof window.closePphtdtModal === 'function') window.closePphtdtModal();
+    if (typeof window.closeCsvcModal === 'function') window.closeCsvcModal();
+    document.body.style.overflow = '';
   }
 });
 
@@ -328,16 +331,22 @@ document.addEventListener('DOMContentLoaded', () => {
   let allClasses = [];
   let filteredClasses = [];
 
-  // State Management for Lecturer View
+  // State Management for Lecturer View (Phân hệ 2: Đánh giá Giảng viên)
   let allGvItems = [];
   let filteredGvItems = [];
-  let gvCurrentSort = { column: 'so_tiet', dir: 'desc' };
+  let gvCurrentSort = { column: 'diem_tb', dir: 'desc' };
+  let gvCompareMode = 'lecturer';
+  let gvRankMetric = 'gpa'; // 'gpa' | 'classes' | 'hours'
+  let gvTopLimit = '15'; // '10' | '15' | '20' | '30' | 'all'
 
   let gvState = {
+    preset: 'all',
+    program: '',
     nguon: '',
-    hocHam: '',
     donVi: '',
-    hinhThuc: '',
+    format: '',
+    lecturer: '',
+    ratingLevel: '',
     searchQuery: ''
   };
 
@@ -364,15 +373,13 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   let gvCharts = {
-    topTiet: null,
-    structure: null,
-    criteria: null,
-    partner: null
+    stackedBar: null,
+    comparison: null
   };
 
   // Securely obfuscated endpoints to protect underlying Google Sheets from direct scrapers
   const _EP_CLASS = 'aHR0cHM6Ly9zY3JpcHQuZ29vZ2xlLmNvbS9tYWNyb3Mvcy9BS2Z5Y2J4akdKam5qMTFPb2M1ZjN5VEI4U1ppMThHRDYtYUc0RHFzdUYzSTVNQXNYY2R3YTNqM194T2RfZnBscmtQeG1tTkUvZXhlYw==';
-  const _EP_GV = 'aHR0cHM6Ly9kb2NzLmdvb2dsZS5jb20vc3ByZWFkc2hlZXRzL2QvMW5HdUV1d3Zkb0MtaS1GZmJEd0lmR3ZfQ29hZUliLTY2OEZyMnR1Z1MxVzQvZXhwb3J0P2Zvcm1hdD1jc3YmZ2lkPTE5MDM4NDcyNTE=';
+  const _EP_GV = 'aHR0cHM6Ly9kb2NzLmdvb2dsZS5jb20vc3ByZWFkc2hlZXRzL2QvMWtMbVM1YzdNdU5aWUhFN19BOUdSV3dKZ3hMNVowNWstck1KbC1CczBUZkUvZXhwb3J0P2Zvcm1hdD1jc3YmZ2lkPTE5MDM4NDcyNTE=';
 
   function safeDecode(str) {
     try {
@@ -400,17 +407,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function getDefaultGvUrl() {
     try {
+      const stored = localStorage.getItem(STORAGE_KEY_GV_URL);
+      if (stored && stored.includes('1kLmS5c7MuNZYHE7') && stored.includes('1903847251')) {
+        return stored;
+      }
       return safeDecode(_EP_GV);
     } catch (e) {
-      return '';
+      return safeDecode(_EP_GV);
     }
   }
-  
+
   const STORAGE_KEY_URL = 'dashboard_google_sheet_url';
   const STORAGE_KEY_DATA = 'dashboard_synced_data';
-  const STORAGE_KEY_GV_DATA = 'dashboard_synced_gv_data';
+  const STORAGE_KEY_GV_URL = 'dashboard_google_sheet_gv_url_v3';
+  const STORAGE_KEY_GV_DATA = 'dashboard_synced_gv_data_v3';
 
-    // State Management for Content Evaluation (Screen 3: Nội dung đào tạo)
+  // State Management for Content Evaluation (Screen 2: Nội dung đào tạo)
   let nddtActiveTemplate = 'new'; // 'new' (Mẫu mới - 135 lớp) | 'old' (Mẫu cũ - 155 lớp)
   let nddtNewItems = [];
   let nddtOldItems = [];
@@ -498,30 +510,26 @@ document.addEventListener('DOMContentLoaded', () => {
     comparison: null
   };
 
-  // Securely obfuscated endpoints:
-  // - _EP_CLASS: Link cũ Tình hình lớp học (1POvv-bVZMvKyXii-3Rxb9WAY67s93xAwxDwC_peA01o)
-  // - _EP_CLASS_DIRECT: Link export CSV trực tiếp sheet cũ
-  // - _EP_GV: Sheet Giảng viên
-  // - _EP_NDDT: Link Web App Google Apps Script mới deploy (Proxy ẩn link Google Sheet gốc)
+  // Securely obfuscated endpoints (Direct Google Sheet CSV Exports with exact gid):
   const _EP_CLASS_DIRECT = 'aHR0cHM6Ly9kb2NzLmdvb2dsZS5jb20vc3ByZWFkc2hlZXRzL2QvMVBPdnYtYlZaTXZLeVhpaS0zUnhiOVdBWTY3czkzeEF3eER3Q19wZUEwMW8vZXhwb3J0P2Zvcm1hdD1jc3YmZ2lkPTA=';
-  const _EP_NDDT = 'aHR0cHM6Ly9zY3JpcHQuZ29vZ2xlLmNvbS9tYWNyb3Mvcy9BS2Z5Y2J5YzRxYnBUTnVMUjB4RG43YnJTeXkwOVpFWXpkbmI2d1pLNFdpVHhXdVk4ci0tMEUzN05aU1l1MmpDUVg3TEhld19SQS9leGVj';
+  const _EP_NDDT = 'aHR0cHM6Ly9kb2NzLmdvb2dsZS5jb20vc3ByZWFkc2hlZXRzL2QvMWtMbVM1YzdNdU5aWUhFN19BOUdSV3dKZ3hMNVowNWstck1KbC1CczBUZkUvZXhwb3J0P2Zvcm1hdD1jc3YmZ2lkPTA=';
   const _EP_NDDT_OLD = 'aHR0cHM6Ly9kb2NzLmdvb2dsZS5jb20vc3ByZWFkc2hlZXRzL2QvMTNKVS03bkxHVHB0MWNlb1RKNHJDeWs3V01lVWFnUV8yY1h3VURfaVA1NUUvZXhwb3J0P2Zvcm1hdD1jc3YmZ2lkPTA=';
-  const STORAGE_KEY_NDDT_URL = 'dashboard_google_sheet_nddt_url';
-  const STORAGE_KEY_NDDT_DATA = 'dashboard_synced_nddt_data';
-  const STORAGE_KEY_NDDT_OLD_DATA = 'dashboard_synced_nddt_old_data';
+  const STORAGE_KEY_NDDT_URL = 'dashboard_google_sheet_nddt_url_v3';
+  const STORAGE_KEY_NDDT_DATA = 'dashboard_synced_nddt_data_v3';
+  const STORAGE_KEY_NDDT_OLD_DATA = 'dashboard_synced_nddt_old_data_v3';
   const _EP_PPHTDT_DIRECT = 'aHR0cHM6Ly9kb2NzLmdvb2dsZS5jb20vc3ByZWFkc2hlZXRzL2QvMWtMbVM1YzdNdU5aWUhFN19BOUdSV3dKZ3hMNVowNWstck1KbC1CczBUZkUvZXhwb3J0P2Zvcm1hdD1jc3YmZ2lkPTE0ODc5MjAxOTM=';
-  const _EP_PPHTDT = 'aHR0cHM6Ly9zY3JpcHQuZ29vZ2xlLmNvbS9tYWNyb3Mvcy9BS2Z5Y2J5YzRxYnBUTnVMUjB4RG43YnJTeXkwOVpFWXpkbmI2d1pLNFdpVHhXdVk4ci0tMEUzN05aU1l1MmpDUVg3TEhld19SQS9leGVjP2dpZD0xNDg3OTIwMTkz';
-  const STORAGE_KEY_PPHTDT_URL = 'dashboard_google_sheet_pphtdt_url';
-  const STORAGE_KEY_PPHTDT_DATA = 'dashboard_synced_pphtdt_data';
+  const _EP_PPHTDT = _EP_PPHTDT_DIRECT;
+  const STORAGE_KEY_PPHTDT_URL = 'dashboard_google_sheet_pphtdt_url_v3';
+  const STORAGE_KEY_PPHTDT_DATA = 'dashboard_synced_pphtdt_data_v3';
   const _EP_CSVC_DIRECT = 'aHR0cHM6Ly9kb2NzLmdvb2dsZS5jb20vc3ByZWFkc2hlZXRzL2QvMWtMbVM1YzdNdU5aWUhFN19BOUdSV3dKZ3hMNVowNWstck1KbC1CczBUZkUvZXhwb3J0P2Zvcm1hdD1jc3YmZ2lkPTE2Nzk2ODE5MzU=';
-  const _EP_CSVC = 'aHR0cHM6Ly9zY3JpcHQuZ29vZ2xlLmNvbS9tYWNyb3Mvcy9BS2Z5Y2J5YzRxYnBUTnVMUjB4RG43YnJTeXkwOVpFWXpkbmI2d1pLNFdpVHhXdVk4ci0tMEUzN05aU1l1MmpDUVg3TEhld19SQS9leGVjP2dpZD0xNjc5NjgxOTM1';
-  const STORAGE_KEY_CSVC_URL = 'dashboard_google_sheet_csvc_url';
-  const STORAGE_KEY_CSVC_DATA = 'dashboard_synced_csvc_data';
+  const _EP_CSVC = _EP_CSVC_DIRECT;
+  const STORAGE_KEY_CSVC_URL = 'dashboard_google_sheet_csvc_url_v3';
+  const STORAGE_KEY_CSVC_DATA = 'dashboard_synced_csvc_data_v3';
 
   function getDefaultCsvcUrl() {
     try {
       const stored = localStorage.getItem(STORAGE_KEY_CSVC_URL);
-      if (stored && (stored.includes('macros/s/') || stored.includes('script.google.com') || stored.includes('1kLmS5c7MuNZYHE7'))) {
+      if (stored && stored.includes('1kLmS5c7MuNZYHE7') && stored.includes('1679681935')) {
         return stored;
       }
       return safeDecode(_EP_CSVC);
@@ -533,7 +541,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function getDefaultPphtdtUrl() {
     try {
       const stored = localStorage.getItem(STORAGE_KEY_PPHTDT_URL);
-      if (stored && (stored.includes('macros/s/') || stored.includes('script.google.com') || stored.includes('1kLmS5c7MuNZYHE7'))) {
+      if (stored && stored.includes('1kLmS5c7MuNZYHE7') && stored.includes('1487920193')) {
         return stored;
       }
       return safeDecode(_EP_PPHTDT);
@@ -553,7 +561,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function getDefaultNddtUrl() {
     try {
       const stored = localStorage.getItem(STORAGE_KEY_NDDT_URL);
-      if (stored && (stored.includes('macros/s/') || stored.includes('script.google.com'))) {
+      if (stored && stored.includes('1kLmS5c7MuNZYHE7')) {
         return stored;
       }
       return safeDecode(_EP_NDDT);
@@ -562,12 +570,170 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  const MANUAL_PROGRAM_NAMES = {
+    'TD32': 'Bồi dưỡng tín dụng dành cho CBTD thực hiện nhiệm vụ khách hàng cá nhân',
+    'TD33': 'Bồi dưỡng tín dụng dành cho CBTD thực hiện nhiệm vụ khách hàng doanh nghiệp',
+    'TD34': 'Quản lý rủi ro tín dụng và xử lý nợ có vấn đề',
+    'TD35': 'Thẩm định dự án đầu tư nâng cao',
+    'TD15': 'Phân tích tài chính doanh nghiệp trong hoạt động cấp tín dụng',
+    'TC04': 'Nghiệp vụ kế toán ngân hàng và thanh toán trong nước',
+    'TC07': 'Bồi dưỡng nghiệp vụ kiểm ngân và an toàn kho quỹ',
+    'KT07': 'Kiểm tra, giám sát nội bộ trong hoạt động ngân hàng',
+    'PC05': 'Pháp chế ngân hàng và phòng chống rửa tiền (AML/KYC)',
+    'QL14': 'Nâng cao năng lực lãnh đạo và quản trị điều hành cấp Chi nhánh',
+    'NS05': 'Kỹ năng giao tiếp, chăm sóc khách hàng và văn hóa doanh nghiệp Agribank',
+    'CNTT15': 'An toàn thông tin mạng và chuyển đổi số trong ngân hàng'
+  };
+
+  function normalizeAllModuleData() {
+    const progMap = new Map(Object.entries(MANUAL_PROGRAM_NAMES));
+    const classFullMap = new Map();
+
+    // 1. Collect program full names from all available sources
+    if (Array.isArray(allClasses)) {
+      allClasses.forEach(c => {
+        const mct = (c.ma_ct || '').trim();
+        const tct = (c.ten_ct || '').trim();
+        const ml = (c.ma_lop || '').trim().toLowerCase();
+        if (mct && tct && tct !== mct) progMap.set(mct, tct);
+        if (ml && tct) classFullMap.set(ml, tct);
+      });
+    }
+
+    const collectFromEvalList = (list) => {
+      if (!Array.isArray(list)) return;
+      list.forEach(item => {
+        if (!item) return;
+        const ct = (item.chuong_trinh || '').trim();
+        const full = (item.ten_ct_full || '').trim();
+        const ml = (item.ma_lop || '').trim().toLowerCase();
+        if (ct && full && full !== ct) progMap.set(ct, full);
+        if (ml && full && full !== ct) classFullMap.set(ml, full);
+      });
+    };
+
+    if (typeof RAW_GV_DATA !== 'undefined') collectFromEvalList(RAW_GV_DATA);
+    if (typeof RAW_PPHTDT_DATA !== 'undefined') collectFromEvalList(RAW_PPHTDT_DATA);
+    if (typeof RAW_CSVC_DATA !== 'undefined') collectFromEvalList(RAW_CSVC_DATA);
+    collectFromEvalList(allGvItems);
+    collectFromEvalList(allPphtdtItems);
+    collectFromEvalList(allCsvcItems);
+    collectFromEvalList(nddtNewItems);
+    collectFromEvalList(nddtOldItems);
+
+    // 2. Collect hybrid classes (classes that have both direct and online rows)
+    const directClasses = new Set();
+    const recordDirectPresence = (list) => {
+      if (!Array.isArray(list)) return;
+      list.forEach(item => {
+        if (!item || !item.ma_lop) return;
+        const ml = item.ma_lop.trim().toLowerCase();
+        const fmt = (item.hinh_thuc_hoc || item.hinh_thuc_dt || '').toLowerCase();
+        if (fmt.includes('tiếp') && !fmt.includes('tuyến') && !fmt.includes('kết hợp')) {
+          directClasses.add(ml);
+        }
+      });
+    };
+
+    recordDirectPresence(allClasses);
+    recordDirectPresence(nddtNewItems);
+    recordDirectPresence(nddtOldItems);
+    recordDirectPresence(allPphtdtItems);
+    recordDirectPresence(allCsvcItems);
+    recordDirectPresence(allGvItems);
+
+    const normalizeFormatVal = (rawFmt, maLop) => {
+      const f = (rawFmt || 'Trực tiếp').trim();
+      const lower = f.toLowerCase();
+      if (lower.includes('kết hợp') || (lower.includes('tiếp') && lower.includes('tuyến'))) {
+        return 'Trực tiếp kết hợp Trực tuyến';
+      }
+      if (lower.includes('tuyến') || lower.includes('polycom') || lower.includes('online')) {
+        const ml = (maLop || '').trim().toLowerCase();
+        if (ml && directClasses.has(ml)) {
+          return 'Trực tiếp kết hợp Trực tuyến';
+        }
+        return 'Trực tuyến';
+      }
+      return 'Trực tiếp';
+    };
+
+    const normalizeList = (list, type) => {
+      if (!Array.isArray(list)) return;
+      list.forEach((item, idx) => {
+        if (!item) return;
+        if (!item.id) item.id = idx + 1;
+        const ml = (item.ma_lop || '').trim();
+        const mlLower = ml.toLowerCase();
+        const ct = (item.chuong_trinh || '').trim();
+
+        if (!item.ten_ct_full || item.ten_ct_full === ct) {
+          item.ten_ct_full = classFullMap.get(mlLower) || progMap.get(ct) || item.ten_ct_full || ct || ml || 'Chương trình đào tạo';
+        }
+
+        item.hinh_thuc_hoc = normalizeFormatVal(item.hinh_thuc_hoc, ml);
+
+        if (type === 'csvc') {
+          if (typeof item.tong_phieu !== 'number') {
+            item.tong_phieu = Number(item.so_phieu) || 0;
+          }
+          if (!item.ngay_bd && item.ngay_bd_raw) {
+            item.ngay_bd = parseDateStrISO(item.ngay_bd_raw);
+          }
+          if (!item.ngay_kt && item.ngay_kt_raw) {
+            item.ngay_kt = parseDateStrISO(item.ngay_kt_raw);
+          }
+        } else if (type === 'gv') {
+          item.ngay_bd_iso = parseDateStrISO(item.ngay_bd);
+          item.ngay_kt_iso = parseDateStrISO(item.ngay_kt);
+          item.diem_ktcm = Number(item.diem_ktcm) || 0;
+          item.diem_knsp = Number(item.diem_knsp) || 0;
+          item.diem_tdtp = Number(item.diem_tdtp) || 0;
+          item.diem_tb = Number(item.diem_tb) || 0;
+          item.tong_phieu = Number(item.tong_phieu) || 0;
+          item.so_tiet = Number(item.so_tiet) || 0;
+        } else {
+          if (!item.ngay_bd && item.ngay_bd_raw) {
+            item.ngay_bd = parseDateStrISO(item.ngay_bd_raw);
+          }
+          if (!item.ngay_kt && item.ngay_kt_raw) {
+            item.ngay_kt = parseDateStrISO(item.ngay_kt_raw);
+          }
+          item.diem_tb = Number(item.diem_tb) || 0;
+          item.ty_le_tich_cuc = Number(item.ty_le_tich_cuc) || 0;
+          item.tong_phieu = Number(item.tong_phieu) || 0;
+        }
+      });
+    };
+
+    normalizeList(nddtNewItems, 'nddt');
+    normalizeList(nddtOldItems, 'nddt');
+    normalizeList(allPphtdtItems, 'pphtdt');
+    normalizeList(allCsvcItems, 'csvc');
+    normalizeList(allGvItems, 'gv');
+  }
+
   let isSyncing = false;
 
   // 1. Initialize Application
   initApp();
 
   async function initApp() {
+    // Purge legacy unversioned / corrupted localStorage keys from older builds
+    try {
+      [
+        'dashboard_synced_gv_data',
+        'dashboard_synced_nddt_data',
+        'dashboard_synced_nddt_old_data',
+        'dashboard_synced_pphtdt_data',
+        'dashboard_synced_csvc_data',
+        'dashboard_google_sheet_gv_url',
+        'dashboard_google_sheet_nddt_url',
+        'dashboard_google_sheet_pphtdt_url',
+        'dashboard_google_sheet_csvc_url'
+      ].forEach(k => localStorage.removeItem(k));
+    } catch (e) {}
+
     let loadedClasses = null;
     let loadedGvItems = null;
 
@@ -576,7 +742,9 @@ document.addEventListener('DOMContentLoaded', () => {
       const savedDataStr = localStorage.getItem(STORAGE_KEY_DATA);
       if (savedDataStr) {
         const parsed = JSON.parse(savedDataStr);
-        if (Array.isArray(parsed) && parsed.length > 0) loadedClasses = parsed;
+        if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].ma_ct !== undefined) {
+          loadedClasses = parsed;
+        }
       }
     } catch (e) {
       console.warn("Could not read localStorage class data:", e);
@@ -591,12 +759,14 @@ document.addEventListener('DOMContentLoaded', () => {
       window.allClasses = allClasses;
     }
 
-    // Load Lecturer Data
+    // Load Lecturer Data (with schema check)
     try {
       const savedGvStr = localStorage.getItem(STORAGE_KEY_GV_DATA);
       if (savedGvStr) {
         const parsedGv = JSON.parse(savedGvStr);
-        if (Array.isArray(parsedGv) && parsedGv.length > 0) loadedGvItems = parsedGv;
+        if (Array.isArray(parsedGv) && parsedGv.length > 0 && parsedGv[0].ten_gv && typeof parsedGv[0].diem_tb === 'number' && typeof parsedGv[0].ten_ct_full === 'string') {
+          loadedGvItems = parsedGv;
+        }
       }
     } catch (e) {
       console.warn("Could not read localStorage gv data:", e);
@@ -606,9 +776,8 @@ document.addEventListener('DOMContentLoaded', () => {
       loadedGvItems = RAW_GV_DATA;
     }
 
-    if (loadedGvItems) {
-      allGvItems = loadedGvItems;
-    }
+    allGvItems = loadedGvItems || [];
+    window.allGvItems = allGvItems;
 
     // Load NDDT Data (Content Evaluation: Mẫu mới & Mẫu cũ)
     let loadedNewItems = null;
@@ -616,7 +785,9 @@ document.addEventListener('DOMContentLoaded', () => {
       const savedNddtStr = localStorage.getItem(STORAGE_KEY_NDDT_DATA);
       if (savedNddtStr) {
         const parsed = JSON.parse(savedNddtStr);
-        if (Array.isArray(parsed) && parsed.length > 0) loadedNewItems = parsed;
+        if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].ma_lop && typeof parsed[0].c3_score === 'number') {
+          loadedNewItems = parsed;
+        }
       }
     } catch (e) {}
     if (!loadedNewItems && typeof RAW_NDDT_DATA !== 'undefined' && Array.isArray(RAW_NDDT_DATA)) {
@@ -629,7 +800,9 @@ document.addEventListener('DOMContentLoaded', () => {
       const savedOldStr = localStorage.getItem(STORAGE_KEY_NDDT_OLD_DATA);
       if (savedOldStr) {
         const parsedOld = JSON.parse(savedOldStr);
-        if (Array.isArray(parsedOld) && parsedOld.length > 0) loadedOldItems = parsedOld;
+        if (Array.isArray(parsedOld) && parsedOld.length > 0 && parsedOld[0].ma_lop && typeof parsedOld[0].c3_score === 'number') {
+          loadedOldItems = parsedOld;
+        }
       }
     } catch (e) {}
     if (!loadedOldItems && typeof RAW_NDDT_OLD_DATA !== 'undefined' && Array.isArray(RAW_NDDT_OLD_DATA)) {
@@ -640,15 +813,15 @@ document.addEventListener('DOMContentLoaded', () => {
     allNddtItems = (nddtActiveTemplate === 'old' ? nddtOldItems : nddtNewItems);
     window.allNddtItems = allNddtItems;
 
-    updateBookmarkBadges();
-
     // Load PPHTDT Data
     let loadedPphtdtItems = null;
     try {
       const savedPphtdtStr = localStorage.getItem(STORAGE_KEY_PPHTDT_DATA);
       if (savedPphtdtStr) {
         const parsed = JSON.parse(savedPphtdtStr);
-        if (Array.isArray(parsed) && parsed.length > 0) loadedPphtdtItems = parsed;
+        if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].ma_lop && typeof parsed[0].c2_score === 'number' && parsed[0].c3_score === undefined) {
+          loadedPphtdtItems = parsed;
+        }
       }
     } catch (e) {}
     if (!loadedPphtdtItems && typeof RAW_PPHTDT_DATA !== 'undefined' && Array.isArray(RAW_PPHTDT_DATA)) {
@@ -663,7 +836,9 @@ document.addEventListener('DOMContentLoaded', () => {
       const savedCsvcStr = localStorage.getItem(STORAGE_KEY_CSVC_DATA);
       if (savedCsvcStr) {
         const parsed = JSON.parse(savedCsvcStr);
-        if (Array.isArray(parsed) && parsed.length > 0) loadedCsvcItems = parsed;
+        if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].ma_lop && typeof parsed[0].dia_diem === 'string' && ('cttc_score' in parsed[0])) {
+          loadedCsvcItems = parsed;
+        }
       }
     } catch (e) {}
     if (!loadedCsvcItems && typeof RAW_CSVC_DATA !== 'undefined' && Array.isArray(RAW_CSVC_DATA)) {
@@ -672,11 +847,19 @@ document.addEventListener('DOMContentLoaded', () => {
     allCsvcItems = loadedCsvcItems || [];
     window.allCsvcItems = allCsvcItems;
 
-    setupDashboard();
-    setupNddtModule();
-    setupPphtdtModule();
-    setupCsvcModule();
+    // Normalize all datasets (ten_ct_full, hybrid hinh_thuc_hoc, ISO dates, numeric fields)
+    normalizeAllModuleData();
+    updateBookmarkBadges();
+
+    // Initialize Tab Navigation FIRST so tabs always work regardless of module state
     initTabNavigation();
+
+    // Initialize all 5 modules with isolated error boundaries
+    try { setupDashboard(); } catch (e) { console.error("Error in setupDashboard:", e); }
+    try { setupNddtModule(); } catch (e) { console.error("Error in setupNddtModule:", e); }
+    try { setupPphtdtModule(); } catch (e) { console.error("Error in setupPphtdtModule:", e); }
+    try { setupCsvcModule(); } catch (e) { console.error("Error in setupCsvcModule:", e); }
+    try { setupGvModule(); } catch (e) { console.error("Error in setupGvModule:", e); }
 
     // Background sync from Google Sheets if online
     try {
@@ -692,38 +875,62 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // --- TAB NAVIGATION ---
+  let _lastSwitchId = '';
+  let _lastSwitchTime = 0;
+  function switchScreen(targetId) {
+    if (!targetId) return;
+    const now = Date.now();
+    if (_lastSwitchId === targetId && (now - _lastSwitchTime) < 60) return;
+    _lastSwitchId = targetId;
+    _lastSwitchTime = now;
+
+    document.querySelectorAll('.screen-tab').forEach(t => {
+      t.classList.toggle('active', t.dataset.screen === targetId);
+    });
+    document.querySelectorAll('.screen-content').forEach(c => {
+      c.classList.toggle('active', c.id === targetId);
+    });
+
+    if (targetId === 'screenClassStatus') {
+      activeView = 'overview';
+      try { applyFilters(); } catch (e) { console.error("applyFilters error:", e); }
+      requestAnimationFrame(() => {
+        try { renderCharts(); } catch (e) { console.error("renderCharts error:", e); }
+      });
+    } else if (targetId === 'screenContentEval') {
+      activeView = 'content';
+      try { if (typeof applyNddtFilters === 'function') applyNddtFilters(); } catch (e) { console.error("applyNddtFilters error:", e); }
+      requestAnimationFrame(() => {
+        try { if (typeof renderNddtCharts === 'function') renderNddtCharts(); } catch (e) { console.error("renderNddtCharts error:", e); }
+      });
+    } else if (targetId === 'screenPphtdt') {
+      activeView = 'pphtdt';
+      try { if (typeof applyPphtdtFilters === 'function') applyPphtdtFilters(); } catch (e) { console.error("applyPphtdtFilters error:", e); }
+      requestAnimationFrame(() => {
+        try { if (typeof renderPphtdtCharts === 'function') renderPphtdtCharts(); } catch (e) { console.error("renderPphtdtCharts error:", e); }
+      });
+    } else if (targetId === 'screenCsvc') {
+      activeView = 'csvc';
+      try { if (typeof applyCsvcFilters === 'function') applyCsvcFilters(); } catch (e) { console.error("applyCsvcFilters error:", e); }
+      requestAnimationFrame(() => {
+        try { if (typeof renderCsvcCharts === 'function') renderCsvcCharts(); } catch (e) { console.error("renderCsvcCharts error:", e); }
+      });
+    } else if (targetId === 'screenGv') {
+      activeView = 'gv';
+      try { if (typeof applyGvFilters === 'function') applyGvFilters(); } catch (e) { console.error("applyGvFilters error:", e); }
+      requestAnimationFrame(() => {
+        try { if (typeof renderGvCharts === 'function') renderGvCharts(); } catch (e) { console.error("renderGvCharts error:", e); }
+      });
+    }
+  }
+  window.switchScreen = switchScreen;
+
   function initTabNavigation() {
     document.querySelectorAll('.screen-tab').forEach(tab => {
-      tab.addEventListener('click', () => {
+      tab.addEventListener('click', (e) => {
+        e.preventDefault();
         const targetId = tab.dataset.screen;
-        if (!targetId) return;
-
-        document.querySelectorAll('.screen-tab').forEach(t => t.classList.remove('active'));
-        document.querySelectorAll('.screen-content').forEach(c => c.classList.remove('active'));
-
-        tab.classList.add('active');
-        const targetContent = document.getElementById(targetId);
-        if (targetContent) targetContent.classList.add('active');
-
-        if (targetId === 'screenClassStatus') {
-          activeView = 'overview';
-          applyFilters();
-        } else if (targetId === 'screenContentEval') {
-          activeView = 'content';
-          if (typeof applyNddtFilters === 'function') {
-            applyNddtFilters();
-          }
-        } else if (targetId === 'screenPphtdt') {
-          activeView = 'pphtdt';
-          if (typeof applyPphtdtFilters === 'function') {
-            applyPphtdtFilters();
-          }
-        } else if (targetId === 'screenCsvc') {
-          activeView = 'csvc';
-          if (typeof applyCsvcFilters === 'function') {
-            applyCsvcFilters();
-          }
-        }
+        if (targetId) switchScreen(targetId);
       });
     });
   }
@@ -734,12 +941,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const rawLower = raw.toLowerCase();
 
     // Nếu dữ liệu gốc đã ghi rõ là kết hợp
-    if (rawLower.includes('kết hợp')) {
+    if (rawLower.includes('kết hợp') || (rawLower.includes('tiếp') && rawLower.includes('tuyến'))) {
       return 'Trực tiếp kết hợp Trực tuyến';
     }
 
-    // Nếu dòng này là Trực tuyến
-    if (rawLower.includes('tuyến') || rawLower.includes('online')) {
+    // Nếu dòng này là Trực tuyến / Polycom / Online
+    if (rawLower.includes('tuyến') || rawLower.includes('online') || rawLower.includes('polycom')) {
       const maLop = (c.ma_lop || '').trim();
       if (maLop && typeof allClasses !== 'undefined' && Array.isArray(allClasses)) {
         // Kiểm tra xem cùng mã lớp này có dòng nào là Trực tiếp không
@@ -765,7 +972,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const lower = text.toLowerCase();
     if (lower.includes('kết hợp') || (lower.includes('tiếp') && lower.includes('tuyến'))) {
       return `<span class="badge-format-hybrid"><i class="fa-solid fa-shapes"></i> ${text.toUpperCase()}</span>`;
-    } else if (lower.includes('tuyến') || lower.includes('online')) {
+    } else if (lower.includes('tuyến') || lower.includes('online') || lower.includes('polycom')) {
       return `<span class="badge-format-online"><i class="fa-solid fa-desktop"></i> ${text.toUpperCase()}</span>`;
     } else {
       return `<span class="badge-format-direct"><i class="fa-solid fa-user-group"></i> ${text.toUpperCase()}</span>`;
@@ -779,18 +986,15 @@ document.addEventListener('DOMContentLoaded', () => {
     if (endInp) endInp.value = state.endDate;
 
     populateFilterDropdowns();
-    populateGvFilterDropdowns();
     attachEventListeners();
-    attachGvEventListeners();
 
-    // Set initial preset pill active state
-    document.querySelectorAll('.preset-pills .pill').forEach(p => {
+    // Set initial preset pill active state (scoped to Screen 1 only)
+    document.querySelectorAll('#screenClassStatus .preset-pills .pill').forEach(p => {
       if (p.dataset.preset === state.preset) p.classList.add('active');
       else p.classList.remove('active');
     });
 
     applyFilters();
-    applyGvFilters();
   }
 
   // Populate Dropdowns for Class Overview
@@ -832,38 +1036,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Populate Dropdowns for Lecturer View
-  function populateGvFilterDropdowns() {
-    const donViSelect = document.getElementById('filterGvDonVi');
-    const hinhThucSelect = document.getElementById('filterGvHinhThuc');
-
-    if (!donViSelect || !hinhThucSelect) return;
-
-    const donVis = [...new Set(allGvItems.map(item => item.don_vi).filter(Boolean))].sort();
-    const hinhThucs = [...new Set(allGvItems.map(item => item.hinh_thuc_hoc).filter(Boolean))].sort();
-
-    donViSelect.innerHTML = '<option value="">-- Tất cả Đơn vị / Đối tác --</option>';
-    hinhThucSelect.innerHTML = '<option value="">-- Tất cả Hình thức --</option>';
-
-    donVis.forEach(dv => {
-      const opt = document.createElement('option');
-      opt.value = dv;
-      opt.textContent = dv;
-      donViSelect.appendChild(opt);
-    });
-
-    hinhThucs.forEach(ht => {
-      const opt = document.createElement('option');
-      opt.value = ht;
-      opt.textContent = ht;
-      hinhThucSelect.appendChild(opt);
-    });
-
-    // Update Header Badge Count
-    const uniqueGvNames = new Set(allGvItems.map(x => x.ten_gv).filter(Boolean));
-    const badge = document.getElementById('gvBadgeCount');
-    if (badge) badge.textContent = `${uniqueGvNames.size} GV`;
-  }
+  // Old lecturer filter dropdown populate removed - handled by setupGvModule
 
   function parseGvDateISO(str) {
     if (!str) return '';
@@ -910,58 +1083,7 @@ document.addEventListener('DOMContentLoaded', () => {
     renderTable();
   }
 
-  // Filter Lecturer View
-  function applyGvFilters() {
-    filteredGvItems = allGvItems.filter(item => {
-      if (state.startDate || state.endDate) {
-        const startISO = parseGvDateISO(item.ngay_bat_dau);
-        const endISO = parseGvDateISO(item.ngay_ket_thuc);
-
-        if (startISO && state.endDate && startISO > state.endDate) return false;
-        if (endISO && state.startDate && endISO < state.startDate) return false;
-      }
-
-      if (gvState.nguon) {
-        if ((item.nguon_gv || '').trim().toLowerCase() !== gvState.nguon.toLowerCase()) return false;
-      }
-
-      if (gvState.hocHam) {
-        const hh = (item.hoc_ham_hoc_vi || '').trim().toLowerCase();
-        if (gvState.hocHam === 'GS_PGS') {
-          if (!hh.includes('gs') && !hh.includes('pgs')) return false;
-        } else if (gvState.hocHam === 'TS') {
-          if (!hh.includes('ts') && !hh.includes('tiến sĩ')) return false;
-          if (hh.includes('pgs')) return false;
-        } else if (gvState.hocHam === 'ThS') {
-          if (!hh.includes('ths') && !hh.includes('thạc sĩ')) return false;
-        } else if (gvState.hocHam === 'LS') {
-          if (!hh.includes('luật sư') && !hh.includes('ls')) return false;
-        } else if (gvState.hocHam === 'Khac') {
-          if (hh.includes('ts') || hh.includes('ths') || hh.includes('gs') || hh.includes('pgs') || hh.includes('ls')) return false;
-        }
-      }
-
-      if (gvState.donVi && item.don_vi !== gvState.donVi) return false;
-      if (gvState.hinhThuc && item.hinh_thuc_hoc !== gvState.hinhThuc) return false;
-
-      if (gvState.searchQuery) {
-        const q = gvState.searchQuery.toLowerCase();
-        const matchName = (item.ten_gv || '').toLowerCase().includes(q);
-        const matchMaGv = (item.ma_gv || '').toLowerCase().includes(q);
-        const matchNoiDung = (item.noi_dung_giang || '').toLowerCase().includes(q);
-        const matchLop = (item.ma_lop || '').toLowerCase().includes(q);
-        const matchCt = (item.chuong_trinh || '').toLowerCase().includes(q);
-        const matchDonVi = (item.don_vi || '').toLowerCase().includes(q);
-        if (!matchName && !matchMaGv && !matchNoiDung && !matchLop && !matchCt && !matchDonVi) return false;
-      }
-
-      return true;
-    });
-
-    updateGvKPIs();
-    renderGvCharts();
-    renderGvTable();
-  }
+  // Old lecturer apply filter removed - handled by setupGvModule in Screen 5
 
   // --- CLASS OVERVIEW METRICS & CHARTS ---
   function updateKPIs() {
@@ -1307,503 +1429,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }).join('');
   }
 
-  // --- LECTURER METRICS & CHARTS ---
-  function getLecturerAggregates() {
-    const map = {};
-
-    filteredGvItems.forEach(item => {
-      const name = (item.ten_gv || '').trim();
-      if (!name) return;
-
-      if (!map[name]) {
-        map[name] = {
-          ten_gv: name,
-          hoc_ham_hoc_vi: item.hoc_ham_hoc_vi || '',
-          nguon_gv: item.nguon_gv || '',
-          don_vi: item.don_vi || '',
-          chuc_danh: item.chuc_danh || '',
-          so_tiet: 0,
-          assignments: 0,
-          classes: new Set(),
-          ktcm_pts: 0, ktcm_votes: 0,
-          knsp_pts: 0, knsp_votes: 0,
-          tdtp_pts: 0, tdtp_votes: 0,
-          history: []
-        };
-      }
-
-      const l = map[name];
-      l.so_tiet += (item.so_tiet || 0);
-      l.assignments += 1;
-      if (item.ma_lop) l.classes.add(item.ma_lop);
-      if (item.hoc_ham_hoc_vi && !l.hoc_ham_hoc_vi) l.hoc_ham_hoc_vi = item.hoc_ham_hoc_vi;
-      if (item.nguon_gv && !l.nguon_gv) l.nguon_gv = item.nguon_gv;
-      if (item.don_vi && !l.don_vi) l.don_vi = item.don_vi;
-
-      const c5_kt = item.c5_ktcm || 0, c4_kt = item.c4_ktcm || 0, c3_kt = item.c3_ktcm || 0, c2_kt = item.c2_ktcm || 0, c1_kt = item.c1_ktcm || 0;
-      const c5_sp = item.c5_knsp || 0, c4_sp = item.c4_knsp || 0, c3_sp = item.c3_knsp || 0, c2_sp = item.c2_knsp || 0, c1_sp = item.c1_knsp || 0;
-      const c5_td = item.c5_tdtp || 0, c4_td = item.c4_tdtp || 0, c3_td = item.c3_tdtp || 0, c2_td = item.c2_tdtp || 0, c1_td = item.c1_tdtp || 0;
-
-      l.ktcm_pts += 5*c5_kt + 4*c4_kt + 3*c3_kt + 2*c2_kt + 1*c1_kt;
-      l.ktcm_votes += c5_kt + c4_kt + c3_kt + c2_kt + c1_kt;
-
-      l.knsp_pts += 5*c5_sp + 4*c4_sp + 3*c3_sp + 2*c2_sp + 1*c1_sp;
-      l.knsp_votes += c5_sp + c4_sp + c3_sp + c2_sp + c1_sp;
-
-      l.tdtp_pts += 5*c5_td + 4*c4_td + 3*c3_td + 2*c2_td + 1*c1_td;
-      l.tdtp_votes += c5_td + c4_td + c3_td + c2_td + c1_td;
-
-      l.history.push(item);
-    });
-
-    return Object.values(map).map(l => {
-      const avg_ktcm = l.ktcm_votes > 0 ? l.ktcm_pts / l.ktcm_votes : 0;
-      const avg_knsp = l.knsp_votes > 0 ? l.knsp_pts / l.knsp_votes : 0;
-      const avg_tdtp = l.tdtp_votes > 0 ? l.tdtp_pts / l.tdtp_votes : 0;
-      const avg_all = (avg_ktcm > 0 && avg_knsp > 0 && avg_tdtp > 0) ? (avg_ktcm + avg_knsp + avg_tdtp) / 3 : (avg_ktcm || avg_knsp || avg_tdtp || 0);
-
-      return {
-        ...l,
-        class_count: l.classes.size,
-        avg_ktcm: avg_ktcm,
-        avg_knsp: avg_knsp,
-        avg_tdtp: avg_tdtp,
-        avg_all: avg_all
-      };
-    });
-  }
-
-  function updateGvKPIs() {
-    const aggs = getLecturerAggregates();
-    const totalGv = aggs.length;
-
-    let internalCount = 0;
-    let externalCount = 0;
-    let totalTiet = 0;
-    let totalAssignments = filteredGvItems.length;
-
-    aggs.forEach(g => {
-      totalTiet += g.so_tiet;
-      const nguon = (g.nguon_gv || '').toLowerCase();
-      if (nguon.includes('agribank') || nguon.includes('nội bộ')) internalCount++;
-      else externalCount++;
-    });
-
-    const avgTietPerGv = totalGv > 0 ? (totalTiet / totalGv).toFixed(1) : '0.0';
-    const externalRatio = totalGv > 0 ? ((externalCount / totalGv) * 100).toFixed(1) : '0.0';
-    const internalRatio = totalGv > 0 ? ((internalCount / totalGv) * 100).toFixed(1) : '0.0';
-
-    let overallPts = 0, overallVotes = 0;
-    aggs.forEach(g => {
-      overallPts += g.ktcm_pts + g.knsp_pts + g.tdtp_pts;
-      overallVotes += g.ktcm_votes + g.knsp_votes + g.tdtp_votes;
-    });
-    const avgRatingScore = overallVotes > 0 ? (overallPts / overallVotes).toFixed(2) : '0.00';
-
-    const elemGvTot = document.getElementById('kpiGvTotalCount');
-    const elemNguonSub = document.getElementById('kpiGvNguonSubtext');
-    const elemGvTiet = document.getElementById('kpiGvTotalTiet');
-    const elemAvgTietSub = document.getElementById('kpiGvAvgTietSubtext');
-    const elemAssign = document.getElementById('kpiGvAssignments');
-    const elemRating = document.getElementById('kpiGvAvgRating');
-    const elemExtRatio = document.getElementById('kpiGvExternalRatio');
-    const elemIntSub = document.getElementById('kpiGvInternalSubtext');
-
-    if (elemGvTot) elemGvTot.textContent = totalGv;
-    if (elemNguonSub) elemNguonSub.textContent = `${internalCount} Nội bộ / ${externalCount} Mời ngoài`;
-    if (elemGvTiet) elemGvTiet.textContent = totalTiet.toLocaleString();
-    if (elemAvgTietSub) elemAvgTietSub.textContent = `TB ${avgTietPerGv} tiết/Giảng viên`;
-    if (elemAssign) elemAssign.textContent = totalAssignments.toLocaleString();
-    if (elemRating) elemRating.textContent = avgRatingScore;
-    if (elemExtRatio) elemExtRatio.textContent = externalRatio;
-    if (elemIntSub) elemIntSub.textContent = `Nội bộ Agribank: ${internalRatio}%`;
-  }
-
-  function renderGvCharts() {
-    renderGvTopTietChart();
-    renderGvStructureChart();
-    renderGvCriteriaChart();
-    renderGvPartnerChart();
-  }
-
-  function renderGvTopTietChart() {
-    const ctx = document.getElementById('gvTopTietChart');
-    if (!ctx) return;
-
-    if (gvCharts.topTiet) gvCharts.topTiet.destroy();
-
-    const aggs = getLecturerAggregates().sort((a, b) => b.so_tiet - a.so_tiet).slice(0, 15);
-    const labels = aggs.map(g => g.ten_gv);
-    const data = aggs.map(g => g.so_tiet);
-    const bgColors = aggs.map(g => (g.nguon_gv || '').toLowerCase().includes('agribank') ? '#AE1C3F' : '#10B981');
-
-    gvCharts.topTiet = new Chart(ctx, {
-      type: 'bar',
-      data: {
-        labels: labels,
-        datasets: [{
-          label: 'Số tiết giảng dạy',
-          data: data,
-          backgroundColor: bgColors,
-          borderRadius: 6
-        }]
-      },
-      options: {
-        indexAxis: 'y',
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { display: false },
-          tooltip: {
-            callbacks: {
-              label: (ctx) => {
-                const item = aggs[ctx.dataIndex];
-                return `${item.so_tiet} tiết (${item.nguon_gv || 'N/A'}, ${item.don_vi || 'N/A'}) - Đánh giá: ${item.avg_all.toFixed(2)}/5.0`;
-              }
-            }
-          }
-        },
-        scales: {
-          x: { beginAtZero: true, title: { display: true, text: 'Số tiết' } },
-          y: { grid: { display: false } }
-        }
-      }
-    });
-  }
-
-  function renderGvStructureChart() {
-    const ctx = document.getElementById('gvStructureChart');
-    if (!ctx) return;
-
-    if (gvCharts.structure) gvCharts.structure.destroy();
-
-    const aggs = getLecturerAggregates();
-    let internal = 0, external = 0;
-    aggs.forEach(g => {
-      if ((g.nguon_gv || '').toLowerCase().includes('agribank')) internal++;
-      else external++;
-    });
-
-    gvCharts.structure = new Chart(ctx, {
-      type: 'doughnut',
-      data: {
-        labels: ['Nội bộ Agribank', 'Mời ngoài'],
-        datasets: [{
-          data: [internal, external],
-          backgroundColor: ['#AE1C3F', '#10B981'],
-          borderWidth: 2,
-          borderColor: '#ffffff'
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { position: 'bottom' },
-          tooltip: {
-            callbacks: {
-              label: (ctx) => `${ctx.label}: ${ctx.raw} Giảng viên (${((ctx.raw / (internal + external || 1)) * 100).toFixed(1)}%)`
-            }
-          }
-        },
-        cutout: '65%'
-      }
-    });
-  }
-
-  function renderGvCriteriaChart() {
-    const ctx = document.getElementById('gvCriteriaChart');
-    if (!ctx) return;
-
-    if (gvCharts.criteria) gvCharts.criteria.destroy();
-
-    const aggs = getLecturerAggregates().sort((a, b) => b.so_tiet - a.so_tiet).slice(0, 8);
-    const labels = aggs.map(g => g.ten_gv);
-    const ktcmData = aggs.map(g => g.avg_ktcm.toFixed(2));
-    const knspData = aggs.map(g => g.avg_knsp.toFixed(2));
-    const tdtpData = aggs.map(g => g.avg_tdtp.toFixed(2));
-
-    gvCharts.criteria = new Chart(ctx, {
-      type: 'bar',
-      data: {
-        labels: labels,
-        datasets: [
-          { label: 'KT Chuyên môn', data: ktcmData, backgroundColor: '#2563EB', borderRadius: 4 },
-          { label: 'KN Sư phạm', data: knspData, backgroundColor: '#10B981', borderRadius: 4 },
-          { label: 'Thái độ, Tác phong', data: tdtpData, backgroundColor: '#F59E0B', borderRadius: 4 }
-        ]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { position: 'top' }
-        },
-        scales: {
-          y: { min: 3.5, max: 5.0 }
-        }
-      }
-    });
-  }
-
-  function renderGvPartnerChart() {
-    const ctx = document.getElementById('gvPartnerChart');
-    if (!ctx) return;
-
-    if (gvCharts.partner) gvCharts.partner.destroy();
-
-    const partnerMap = {};
-    filteredGvItems.forEach(item => {
-      const dv = item.don_vi || 'Khác';
-      if (!partnerMap[dv]) partnerMap[dv] = { count: 0, tiet: 0 };
-      partnerMap[dv].count += 1;
-      partnerMap[dv].tiet += (item.so_tiet || 0);
-    });
-
-    const sortedPartners = Object.keys(partnerMap).map(k => ({
-      name: k,
-      tiet: partnerMap[k].tiet,
-      count: partnerMap[k].count
-    })).sort((a, b) => b.tiet - a.tiet).slice(0, 10);
-
-    const labels = sortedPartners.map(p => p.name);
-    const data = sortedPartners.map(p => p.tiet);
-
-    gvCharts.partner = new Chart(ctx, {
-      type: 'bar',
-      data: {
-        labels: labels,
-        datasets: [{
-          label: 'Tổng số tiết',
-          data: data,
-          backgroundColor: '#D97706',
-          borderRadius: 6
-        }]
-      },
-      options: {
-        indexAxis: 'y',
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { display: false }
-        },
-        scales: {
-          x: { beginAtZero: true },
-          y: { grid: { display: false } }
-        }
-      }
-    });
-  }
-
-  function renderGvTable() {
-    const tbody = document.getElementById('gvTableBody');
-    if (!tbody) return;
-
-    const sorted = [...filteredGvItems].sort((a, b) => {
-      let valA = a[gvCurrentSort.column] || '';
-      let valB = b[gvCurrentSort.column] || '';
-
-      if (gvCurrentSort.column.startsWith('avg_')) {
-        const getScore = (item, type) => {
-          if (type === 'avg_ktcm') {
-            const votes = (item.c5_ktcm||0)+(item.c4_ktcm||0)+(item.c3_ktcm||0)+(item.c2_ktcm||0)+(item.c1_ktcm||0);
-            return votes > 0 ? (5*(item.c5_ktcm||0) + 4*(item.c4_ktcm||0) + 3*(item.c3_ktcm||0) + 2*(item.c2_ktcm||0) + 1*(item.c1_ktcm||0))/votes : 0;
-          }
-          if (type === 'avg_knsp') {
-            const votes = (item.c5_knsp||0)+(item.c4_knsp||0)+(item.c3_knsp||0)+(item.c2_knsp||0)+(item.c1_knsp||0);
-            return votes > 0 ? (5*(item.c5_knsp||0) + 4*(item.c4_knsp||0) + 3*(item.c3_knsp||0) + 2*(item.c2_knsp||0) + 1*(item.c1_knsp||0))/votes : 0;
-          }
-          if (type === 'avg_tdtp') {
-            const votes = (item.c5_tdtp||0)+(item.c4_tdtp||0)+(item.c3_tdtp||0)+(item.c2_tdtp||0)+(item.c1_tdtp||0);
-            return votes > 0 ? (5*(item.c5_tdtp||0) + 4*(item.c4_tdtp||0) + 3*(item.c3_tdtp||0) + 2*(item.c2_tdtp||0) + 1*(item.c1_tdtp||0))/votes : 0;
-          }
-          const s1 = getScore(item, 'avg_ktcm'), s2 = getScore(item, 'avg_knsp'), s3 = getScore(item, 'avg_tdtp');
-          return (s1+s2+s3)/3;
-        };
-        valA = getScore(a, gvCurrentSort.column);
-        valB = getScore(b, gvCurrentSort.column);
-      }
-
-      if (typeof valA === 'number' && typeof valB === 'number') {
-        return gvCurrentSort.dir === 'asc' ? valA - valB : valB - valA;
-      }
-      return gvCurrentSort.dir === 'asc' ? String(valA).localeCompare(String(valB)) : String(valB).localeCompare(String(valA));
-    });
-
-    const elemFilt = document.getElementById('gvTableFilteredCount');
-    const elemTot = document.getElementById('gvTableTotalCount');
-    const elemScrollMode = document.getElementById('gvScrollModeTotalCount');
-
-    if (elemFilt) elemFilt.textContent = sorted.length;
-    if (elemTot) elemTot.textContent = allGvItems.length;
-    if (elemScrollMode) elemScrollMode.textContent = sorted.length;
-
-    if (sorted.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="11" style="text-align: center; color: var(--text-muted); padding: 2rem;">Không tìm thấy dữ liệu Giảng viên phù hợp.</td></tr>`;
-      return;
-    }
-
-    tbody.innerHTML = sorted.map(item => {
-      const isInternal = (item.nguon_gv || '').toLowerCase().includes('agribank');
-      const nguonBadge = isInternal
-        ? `<span class="badge badge-agribank"><i class="fa-solid fa-building-columns"></i> Agribank</span>`
-        : `<span class="badge badge-external"><i class="fa-solid fa-user-tie"></i> Mời ngoài</span>`;
-
-      const degreeStr = (item.hoc_ham_hoc_vi || '').trim();
-      const degreeBadge = degreeStr ? `<span class="badge badge-degree">${degreeStr}</span>` : '';
-
-      const calcScore = (c5, c4, c3, c2, c1) => {
-        const v = c5+c4+c3+c2+c1;
-        return v > 0 ? (5*c5 + 4*c4 + 3*c3 + 2*c2 + 1*c1)/v : 0;
-      };
-
-      const sKtcm = calcScore(item.c5_ktcm||0, item.c4_ktcm||0, item.c3_ktcm||0, item.c2_ktcm||0, item.c1_ktcm||0);
-      const sKnsp = calcScore(item.c5_knsp||0, item.c4_knsp||0, item.c3_knsp||0, item.c2_knsp||0, item.c1_knsp||0);
-      const sTdtp = calcScore(item.c5_tdtp||0, item.c4_tdtp||0, item.c3_tdtp||0, item.c2_tdtp||0, item.c1_tdtp||0);
-      const sAvg = (sKtcm > 0 && sKnsp > 0 && sTdtp > 0) ? (sKtcm + sKnsp + sTdtp) / 3 : (sKtcm || sKnsp || sTdtp || 0);
-
-      const pillClass = sAvg >= 4.6 ? 'rating-high' : (sAvg >= 4.0 ? 'rating-med' : 'rating-low');
-
-      return `
-        <tr>
-          <td>
-            <div style="font-weight: 800; color: var(--text-primary); display: flex; align-items: center; gap: 0.35rem;">
-              ${item.ten_gv || 'N/A'} ${degreeBadge}
-            </div>
-            <div style="font-size: 0.775rem; color: var(--text-muted);">${item.chuc_danh || item.phong_ban || ''}</div>
-          </td>
-          <td>${nguonBadge}</td>
-          <td>
-            <div style="font-weight: 600;">${item.don_vi || 'N/A'}</div>
-          </td>
-          <td>
-            <div style="font-weight: 700; color: var(--brand-crimson);">${item.ma_lop || 'N/A'}</div>
-            <div style="font-size: 0.775rem; color: var(--text-secondary);">${item.chuong_trinh || ''}</div>
-          </td>
-          <td>
-            <!-- Rule: Display original raw format string -->
-            <span class="badge" style="background: #F3F4F6; color: #374151;">${item.hinh_thuc_hoc || 'Trực tiếp'}</span>
-          </td>
-          <td style="text-align: center; font-weight: 800; color: var(--text-primary);">${item.so_tiet || 0}</td>
-          <td style="text-align: center; font-weight: 600;">${sKtcm > 0 ? sKtcm.toFixed(2) : '--'}</td>
-          <td style="text-align: center; font-weight: 600;">${sKnsp > 0 ? sKnsp.toFixed(2) : '--'}</td>
-          <td style="text-align: center; font-weight: 600;">${sTdtp > 0 ? sTdtp.toFixed(2) : '--'}</td>
-          <td style="text-align: center;">
-            <span class="rating-pill ${pillClass}">${sAvg > 0 ? sAvg.toFixed(2) : '--'} <i class="fa-solid fa-star" style="font-size: 0.7rem;"></i></span>
-          </td>
-          <td style="text-align: center;">
-            <button class="btn" onclick="window.openGvModal('${(item.ten_gv||'').replace(/'/g, "\\'")}')" style="padding: 0.3rem 0.6rem; font-size: 0.775rem; background: #EEF2FF; color: #4F46E5; border: 1px solid #C7D2FE;">
-              <i class="fa-solid fa-id-card"></i> Hồ sơ
-            </button>
-          </td>
-        </tr>
-      `;
-    }).join('');
-  }
-
-  // --- LECTURER PROFILE MODAL ---
-  window.openGvModal = function(gvName) {
-    if (!gvName) return;
-
-    const matches = allGvItems.filter(item => (item.ten_gv || '').trim().toLowerCase() === gvName.trim().toLowerCase());
-    if (matches.length === 0) return;
-
-    const first = matches[0];
-    const isInternal = (first.nguon_gv || '').toLowerCase().includes('agribank');
-
-    const elemName = document.getElementById('gvModalName');
-    const elemOrg = document.getElementById('gvModalOrg');
-    if (elemName) elemName.textContent = first.ten_gv || 'Giảng viên';
-    if (elemOrg) elemOrg.textContent = `${first.don_vi || 'N/A'} ${first.chuc_danh ? '• ' + first.chuc_danh : ''}`;
-
-    const degreeBadge = document.getElementById('gvModalDegreeBadge');
-    if (degreeBadge) degreeBadge.textContent = first.hoc_ham_hoc_vi || 'Giảng viên';
-
-    const sourceBadge = document.getElementById('gvModalSourceBadge');
-    if (sourceBadge) {
-      sourceBadge.textContent = isInternal ? 'Nội bộ Agribank' : 'Mời ngoài';
-      sourceBadge.style.background = isInternal ? '#AE1C3F' : '#10B981';
-    }
-
-    const totalTiet = matches.reduce((sum, item) => sum + (item.so_tiet || 0), 0);
-    const elemTotTiet = document.getElementById('gvModalTotalTiet');
-    const elemTotClasses = document.getElementById('gvModalTotalClasses');
-    if (elemTotTiet) elemTotTiet.textContent = `${totalTiet} tiết`;
-    if (elemTotClasses) elemTotClasses.textContent = `${matches.length} lượt dạy`;
-
-    const calcScore = (keyC5, keyC4, keyC3, keyC2, keyC1) => {
-      let pts = 0, votes = 0;
-      matches.forEach(m => {
-        const c5 = m[keyC5]||0, c4 = m[keyC4]||0, c3 = m[keyC3]||0, c2 = m[keyC2]||0, c1 = m[keyC1]||0;
-        pts += 5*c5 + 4*c4 + 3*c3 + 2*c2 + 1*c1;
-        votes += c5 + c4 + c3 + c2 + c1;
-      });
-      return votes > 0 ? pts / votes : 0;
-    };
-
-    const avgKtcm = calcScore('c5_ktcm', 'c4_ktcm', 'c3_ktcm', 'c2_ktcm', 'c1_ktcm');
-    const avgKnsp = calcScore('c5_knsp', 'c4_knsp', 'c3_knsp', 'c2_knsp', 'c1_knsp');
-    const avgTdtp = calcScore('c5_tdtp', 'c4_tdtp', 'c3_tdtp', 'c2_tdtp', 'c1_tdtp');
-    const avgOverall = (avgKtcm + avgKnsp + avgTdtp) / 3;
-
-    const elemAvgScore = document.getElementById('gvModalAvgScore');
-    if (elemAvgScore) elemAvgScore.textContent = `${avgOverall.toFixed(2)} / 5.0`;
-
-    const elemKtScore = document.getElementById('gvModalKtcmScore');
-    const elemKtBar = document.getElementById('gvModalKtcmBar');
-    if (elemKtScore) elemKtScore.textContent = `${avgKtcm.toFixed(2)} / 5.0`;
-    if (elemKtBar) elemKtBar.style.width = `${(avgKtcm / 5.0) * 100}%`;
-
-    const elemKnScore = document.getElementById('gvModalKnspScore');
-    const elemKnBar = document.getElementById('gvModalKnspBar');
-    if (elemKnScore) elemKnScore.textContent = `${avgKnsp.toFixed(2)} / 5.0`;
-    if (elemKnBar) elemKnBar.style.width = `${(avgKnsp / 5.0) * 100}%`;
-
-    const elemTdScore = document.getElementById('gvModalTdtpScore');
-    const elemTdBar = document.getElementById('gvModalTdtpBar');
-    if (elemTdScore) elemTdScore.textContent = `${avgTdtp.toFixed(2)} / 5.0`;
-    if (elemTdBar) elemTdBar.style.width = `${(avgTdtp / 5.0) * 100}%`;
-
-    const historyBody = document.getElementById('gvModalHistoryBody');
-    if (historyBody) {
-      historyBody.innerHTML = matches.map(m => `
-        <tr style="border-bottom: 1px solid var(--border-color);">
-          <td style="padding: 0.5rem 0.75rem;">
-            <div style="font-weight: 700; color: var(--brand-crimson);">${m.ma_lop || 'N/A'}</div>
-            <div style="font-size: 0.75rem; color: var(--text-muted);">${m.chuong_trinh || ''} (${m.ngay_bat_dau || ''})</div>
-          </td>
-          <td style="padding: 0.5rem 0.75rem;">
-            <span class="badge" style="background: #F3F4F6; color: #374151; font-size: 0.75rem;">${m.hinh_thuc_hoc || 'Trực tiếp'}</span>
-          </td>
-          <td style="padding: 0.5rem 0.75rem; font-size: 0.8rem; color: var(--text-primary); max-width: 320px;">
-            ${m.noi_dung_giang || 'N/A'}
-          </td>
-          <td style="padding: 0.5rem 0.75rem; text-align: center; font-weight: 800; color: var(--text-primary);">
-            ${m.so_tiet || 0}
-          </td>
-        </tr>
-      `).join('');
-    }
-
-    const modal = document.getElementById('lecturerDetailModal');
-    if (modal) {
-      modal.style.setProperty('display', 'flex', 'important');
-      modal.style.visibility = 'visible';
-      modal.style.opacity = '1';
-      modal.style.pointerEvents = 'auto';
-      modal.classList.add('active');
-    }
-  };
-
-  // Event Listeners for Filters
+  // Event Listeners for Filters (Screen 1: Tình hình lớp học)
   function attachEventListeners() {
-    // Shared Date Presets
-    document.querySelectorAll('.preset-pills .pill').forEach(pill => {
+    // Shared Date Presets (Scoped to Screen 1 only so Screens 2-4 preset pills are untouched)
+    document.querySelectorAll('#screenClassStatus .preset-pills .pill').forEach(pill => {
       pill.addEventListener('click', (e) => {
-        document.querySelectorAll('.preset-pills .pill').forEach(p => p.classList.remove('active'));
-        e.target.classList.add('active');
+        document.querySelectorAll('#screenClassStatus .preset-pills .pill').forEach(p => p.classList.remove('active'));
+        e.currentTarget.classList.add('active');
 
-        const preset = e.target.dataset.preset;
+        const preset = e.currentTarget.dataset.preset;
         state.preset = preset;
 
         if (preset === 'today') {
@@ -1840,8 +1474,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (startInp) startInp.value = state.startDate;
         if (endInp) endInp.value = state.endDate;
 
-        if (activeView === 'overview') applyFilters();
-        else applyGvFilters();
+        applyFilters();
       });
     });
 
@@ -1853,10 +1486,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const endInp = document.getElementById('endDate');
         if (startInp) state.startDate = startInp.value;
         if (endInp) state.endDate = endInp.value;
-        document.querySelectorAll('.preset-pills .pill').forEach(p => p.classList.remove('active'));
+        document.querySelectorAll('#screenClassStatus .preset-pills .pill').forEach(p => p.classList.remove('active'));
 
-        if (activeView === 'overview') applyFilters();
-        else applyGvFilters();
+        applyFilters();
       });
     }
 
@@ -1871,13 +1503,21 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
 
-    // Window Resize Handler for Class Chart
+    // Window Resize Handler for Active Module Charts
     let chartResizeTimer;
     window.addEventListener('resize', () => {
       clearTimeout(chartResizeTimer);
       chartResizeTimer = setTimeout(() => {
         if (activeView === 'overview') {
           renderClassAttendanceChart();
+        } else if (activeView === 'content' && typeof renderNddtCharts === 'function') {
+          renderNddtCharts();
+        } else if (activeView === 'pphtdt' && typeof renderPphtdtCharts === 'function') {
+          renderPphtdtCharts();
+        } else if (activeView === 'csvc' && typeof renderCsvcCharts === 'function') {
+          renderCsvcCharts();
+        } else if (activeView === 'gv' && typeof renderGvCharts === 'function') {
+          renderGvCharts();
         }
       }, 150);
     });
@@ -1908,48 +1548,17 @@ document.addEventListener('DOMContentLoaded', () => {
         renderTable();
       });
     });
-  }
-
-  function attachGvEventListeners() {
-    const nguonSelect = document.getElementById('filterGvNguon');
-    if (nguonSelect) nguonSelect.addEventListener('change', (e) => { gvState.nguon = e.target.value; applyGvFilters(); });
-
-    const hocHamSelect = document.getElementById('filterGvHocHam');
-    if (hocHamSelect) hocHamSelect.addEventListener('change', (e) => { gvState.hocHam = e.target.value; applyGvFilters(); });
-
-    const donViSelect = document.getElementById('filterGvDonVi');
-    if (donViSelect) donViSelect.addEventListener('change', (e) => { gvState.donVi = e.target.value; applyGvFilters(); });
-
-    const hinhThucSelect = document.getElementById('filterGvHinhThuc');
-    if (hinhThucSelect) hinhThucSelect.addEventListener('change', (e) => { gvState.hinhThuc = e.target.value; applyGvFilters(); });
-
-    const gvSearchInp = document.getElementById('gvSearchInput');
-    if (gvSearchInp) gvSearchInp.addEventListener('input', (e) => { gvState.searchQuery = e.target.value; applyGvFilters(); });
-
-    // Table Sorting
-    document.querySelectorAll('#gvTable th[data-gv-sort]').forEach(th => {
-      th.addEventListener('click', () => {
-        const col = th.dataset.gvSort;
-        if (gvCurrentSort.column === col) {
-          gvCurrentSort.dir = gvCurrentSort.dir === 'asc' ? 'desc' : 'asc';
-        } else {
-          gvCurrentSort.column = col;
-          gvCurrentSort.dir = 'desc';
-        }
-        renderGvTable();
-      });
-    });
 
     // Sheet Sync Header Controls
     const btnSyncNow = document.getElementById('btnSyncNow');
     if (btnSyncNow) {
       btnSyncNow.addEventListener('click', () => {
         syncGoogleSheetData(getDefaultClassUrl(), { silent: false });
-        syncGvGoogleSheetData(getDefaultGvUrl(), { silent: true });
-        syncNddtGoogleSheetData(getDefaultNddtUrl(), { silent: true });
-        syncNddtOldGoogleSheetData(getDefaultNddtOldUrl(), { silent: true });
-        syncPphtdtGoogleSheetData(getDefaultPphtdtUrl(), { silent: true });
-        syncCsvcGoogleSheetData(getDefaultCsvcUrl(), { silent: true });
+        if (typeof syncGvGoogleSheetData === 'function') syncGvGoogleSheetData(getDefaultGvUrl(), { silent: true });
+        if (typeof syncNddtGoogleSheetData === 'function') syncNddtGoogleSheetData(getDefaultNddtUrl(), { silent: true });
+        if (typeof syncNddtOldGoogleSheetData === 'function') syncNddtOldGoogleSheetData(getDefaultNddtOldUrl(), { silent: true });
+        if (typeof syncPphtdtGoogleSheetData === 'function') syncPphtdtGoogleSheetData(getDefaultPphtdtUrl(), { silent: true });
+        if (typeof syncCsvcGoogleSheetData === 'function') syncCsvcGoogleSheetData(getDefaultCsvcUrl(), { silent: true });
       });
     }
   }
@@ -2006,6 +1615,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (parsedData && parsedData.length > 0) {
         allClasses = parsedData.filter(x => x.is_class);
         window.allClasses = allClasses;
+        normalizeAllModuleData();
         try {
           localStorage.setItem(STORAGE_KEY_DATA, JSON.stringify(parsedData));
         } catch (stErr) {
@@ -2037,29 +1647,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  async function syncGvGoogleSheetData(gvSheetUrl, options = {}) {
-    try {
-      const csvUrl = getGoogleSheetCsvExportUrl(gvSheetUrl);
-      const fetchUrl = `${csvUrl}${csvUrl.includes('?') ? '&' : '?'}_t=${Date.now()}`;
-      const res = await fetch(fetchUrl, { cache: 'no-store' });
-      if (!res.ok) throw new Error(`HTTP error ${res.status}`);
-      const csvText = await res.text();
-      const parsedGv = parseCsvToGvItems(csvText);
-
-      if (parsedGv && parsedGv.length > 0) {
-        allGvItems = parsedGv;
-        try {
-          localStorage.setItem(STORAGE_KEY_GV_DATA, JSON.stringify(parsedGv));
-        } catch (stErr) {
-          console.warn("Could not save GV data to localStorage:", stErr);
-        }
-        populateGvFilterDropdowns();
-        if (activeView === 'lecturer') applyGvFilters();
-      }
-    } catch (e) {
-      console.warn("GV sheet sync error:", e);
-    }
-  }
+  // syncGvGoogleSheetData is defined in GV Module Logic below
 
   function getGoogleSheetCsvExportUrl(url) {
     if (!url) return '';
@@ -2212,56 +1800,8 @@ document.addEventListener('DOMContentLoaded', () => {
     return result;
   }
 
-  function parseCsvToGvItems(csvText) {
-    const rows = parseCsvToRows(csvText);
-    if (rows.length <= 1) return [];
-
-    const result = [];
-    for (let i = 1; i < rows.length; i++) {
-      const cols = rows[i];
-      if (cols.length < 13 || !cols[12] || !cols[12].trim()) continue;
-
-      result.push({
-        chuong_trinh: cols[0] || '',
-        ma_lop: cols[1] || '',
-        hinh_thuc_hoc: cols[2] || '',
-        ngay_bat_dau: cols[3] || '',
-        ngay_ket_thuc: cols[4] || '',
-        ma_gv: cols[5] || '',
-        nguon_gv: cols[6] || '',
-        doi_tuong_gv: cols[7] || '',
-        don_vi: cols[8] || '',
-        chuc_danh: cols[9] || '',
-        phong_ban: cols[10] || '',
-        hoc_ham_hoc_vi: cols[11] || '',
-        ten_gv: cols[12] || '',
-        noi_dung_giang: cols[13] || '',
-        so_tiet: safeParseFloat(cols[14]),
-        c5_ktcm: safeParseInt(cols[15]),
-        c4_ktcm: safeParseInt(cols[16]),
-        c3_ktcm: safeParseInt(cols[17]),
-        c2_ktcm: safeParseInt(cols[18]),
-        c1_ktcm: safeParseInt(cols[19]),
-        c5_knsp: safeParseInt(cols[20]),
-        c4_knsp: safeParseInt(cols[21]),
-        c3_knsp: safeParseInt(cols[22]),
-        c2_knsp: safeParseInt(cols[23]),
-        c1_knsp: safeParseInt(cols[24]),
-        c5_tdtp: safeParseInt(cols[25]),
-        c4_tdtp: safeParseInt(cols[26]),
-        c3_tdtp: safeParseInt(cols[27]),
-        c2_tdtp: safeParseInt(cols[28]),
-        c1_tdtp: safeParseInt(cols[29]),
-        cbql: cols[30] || ''
-      });
-    }
-    return result;
-  }
-
-
-
-    // ==========================================================================
-  // PHÂN HỆ 3: NỘI DUNG ĐÀO TẠO (CONTENT EVALUATION) LOGIC
+  // ==========================================================================
+  // PHÂN HỆ 2: NỘI DUNG ĐÀO TẠO (CONTENT EVALUATION) LOGIC
   // ==========================================================================
 
   function setupNddtModule() {
@@ -2993,17 +2533,12 @@ document.addEventListener('DOMContentLoaded', () => {
         return '<div class="mini-score-bar-wrapper"><span class="mini-score-val">' + score.toFixed(2) + '</span><div class="mini-score-track"><div class="mini-score-fill" style="width: ' + pct + '%; background: ' + color + ';"></div></div></div>';
       };
 
-      let badgeHtml = '<span class="badge" style="background: #F3F4F6; color: #374151; font-size: 0.7rem; padding: 0.18rem 0.4rem;">' + (r.hinh_thuc_hoc || 'Trực tiếp') + '</span>';
-      const fmtLower = (r.hinh_thuc_hoc || '').toLowerCase();
-      if (fmtLower.includes('tuyến') || fmtLower.includes('polycom')) {
-        badgeHtml = '<span class="badge badge-format-online" style="font-size: 0.68rem; padding: 0.18rem 0.35rem;"><i class="fa-solid fa-desktop"></i> TRỰC TUYẾN</span>';
-      } else if (fmtLower.includes('kết hợp')) {
-        badgeHtml = '<span class="badge badge-format-hybrid" style="font-size: 0.68rem; padding: 0.18rem 0.35rem;"><i class="fa-solid fa-shapes"></i> KẾT HỢP</span>';
-      } else {
-        badgeHtml = '<span class="badge badge-format-direct" style="font-size: 0.68rem; padding: 0.18rem 0.35rem;"><i class="fa-solid fa-user-group"></i> TRỰC TIẾP</span>';
+      let badgeHtml = getFormatBadge(r);
+      if (badgeHtml && badgeHtml.includes('TRỰC TIẾP KẾT HỢP TRỰC TUYẾN')) {
+        badgeHtml = badgeHtml.replace('TRỰC TIẾP KẾT HỢP TRỰC TUYẾN', 'TRỰC TIẾP KẾT HỢP<br>TRỰC TUYẾN');
       }
 
-      return '<tr>' +
+      return '<tr onclick="window.openNddtModalById(' + r.id + ')" style="cursor: pointer;">' +
         '<td style="text-align: center; color: var(--text-muted); font-size: 0.76rem;">' + (idx + 1) + '</td>' +
         '<td>' +
           '<div style="font-weight: 800; color: var(--brand-primary); font-size: 0.82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="' + r.ma_lop + '">' + r.ma_lop + '</div>' +
@@ -3024,8 +2559,8 @@ document.addEventListener('DOMContentLoaded', () => {
         '<td style="text-align: center;">' +
           '<span class="badge" style="background: #ECFDF5; color: #0F5132; font-weight: 700; font-size: 0.74rem; padding: 0.15rem 0.35rem;">' + r.ty_le_tich_cuc.toFixed(1) + '%</span>' +
         '</td>' +
-        '<td style="text-align: center;">' +
-          '<button class="btn-detail-nddt" type="button" onclick="window.openNddtModalById(' + r.id + ')" title="Xem phân rã 4 mức đánh giá">' +
+        '<td style="text-align: center;" onclick="event.stopPropagation(); window.openNddtModalById(' + r.id + ');">' +
+          '<button class="btn-detail-nddt" type="button" title="Xem phân rã 4 mức đánh giá">' +
             '<i class="fa-solid fa-chart-pie"></i> Chi tiết' +
           '</button>' +
         '</td>' +
@@ -3115,8 +2650,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (parsed && parsed.length > 0) {
         nddtOldItems = parsed;
+        normalizeAllModuleData();
         try {
-          localStorage.setItem(STORAGE_KEY_NDDT_OLD_DATA, JSON.stringify(parsed));
+          localStorage.setItem(STORAGE_KEY_NDDT_OLD_DATA, JSON.stringify(nddtOldItems));
         } catch (stErr) {}
 
         if (nddtActiveTemplate === 'old') {
@@ -3158,20 +2694,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (parsed && parsed.length > 0) {
         nddtNewItems = parsed;
+        normalizeAllModuleData();
         if (nddtActiveTemplate === 'new') {
           allNddtItems = nddtNewItems;
           window.allNddtItems = allNddtItems;
         }
         try {
-          localStorage.setItem(STORAGE_KEY_NDDT_DATA, JSON.stringify(parsed));
+          localStorage.setItem(STORAGE_KEY_NDDT_DATA, JSON.stringify(nddtNewItems));
         } catch (stErr) {
           console.warn('Could not save NDDT to localStorage:', stErr);
         }
+        updateBookmarkBadges();
         populateNddtFilterDropdowns();
         if (activeView === 'content') applyNddtFilters();
 
         if (!isSilent) {
-          showToast('Đã đồng bộ ' + allNddtItems.length + ' lớp đánh giá nội dung từ Google Sheet / Apps Script!', 'success');
+          showToast('Đã đồng bộ ' + allNddtItems.length + ' lớp đánh giá nội dung từ Google Sheet!', 'success');
         }
       }
     } catch (e) {
@@ -3180,7 +2718,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function parseCsvToNddtItems(csvText) {
-    if (!csvText) return [];
+    if (!csvText || csvText.trim().startsWith('<')) return [];
     const lines = csvText.split(/\r?\n/).filter(l => l.trim().length > 0);
     if (lines.length <= 1) return [];
 
@@ -3236,16 +2774,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const headerCols = parseLine(lines[0]);
     const headers = headerCols.map(h => h.trim().toLowerCase());
 
-    // Dynamic header indexes
+    // Strict schema check for NDDT CSV (must have Chương trình in col 0, Mã lớp, and 3 4-point criteria)
+    if (headers[0] && headers[0].includes('địa điểm')) return [];
     let idxProg = headers.findIndex(h => h.includes('chương trình'));
     let idxMaLop = headers.findIndex(h => h.includes('mã lớp'));
+    if (idxProg < 0 || idxMaLop < 0) return [];
+
     let idxFmt = headers.findIndex(h => h.includes('hình thức'));
     let idxNgayBd = headers.findIndex(h => h.includes('bắt đầu'));
     let idxNgayKt = headers.findIndex(h => h.includes('kết thúc'));
     let idxCbql = headers.findIndex(h => h.includes('cbql') || h.includes('cán bộ'));
 
-    if (idxProg < 0) idxProg = 0;
-    if (idxMaLop < 0) idxMaLop = 1;
     if (idxFmt < 0) idxFmt = 2;
     if (idxNgayBd < 0) idxNgayBd = 3;
     if (idxNgayKt < 0) idxNgayKt = 4;
@@ -3256,6 +2795,7 @@ document.addEventListener('DOMContentLoaded', () => {
         c4Indices.push(idx);
       }
     });
+    if (c4Indices.length !== 3) return [];
 
     const c1_start = c4Indices.length > 0 ? c4Indices[0] : 5;
     const c2_start = c4Indices.length > 1 ? c4Indices[1] : 9;
@@ -4005,29 +3545,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (infoGrid) {
       infoGrid.innerHTML = `
-        <div class="modal-info-item">
-          <label>CHƯƠNG TRÌNH</label>
-          <div class="val">${row.chuong_trinh}</div>
+        <div class="modal-item">
+          <label><i class="fa-solid fa-graduation-cap"></i> Chương Trình</label>
+          <span style="font-weight: 700;">${row.chuong_trinh}</span>
         </div>
-        <div class="modal-info-item">
-          <label>HÌNH THỨC</label>
-          <div class="val">${getFormatBadge(row)}</div>
+        <div class="modal-item">
+          <label><i class="fa-solid fa-shapes"></i> Hình Thức</label>
+          <span>${getFormatBadge(row)}</span>
         </div>
-        <div class="modal-info-item">
-          <label>THỜI GIAN TỔ CHỨC</label>
-          <div class="val">${timeStr}</div>
+        <div class="modal-item">
+          <label><i class="fa-regular fa-calendar-days"></i> Thời Gian Tổ Chức</label>
+          <span>${timeStr}</span>
         </div>
-        <div class="modal-info-item">
-          <label>CÁN BỘ QUẢN LÝ</label>
-          <div class="val">${row.cbql || 'Chưa phân công'}</div>
+        <div class="modal-item">
+          <label><i class="fa-solid fa-user-tie"></i> Cán Bộ Quản Lý</label>
+          <span>${row.cbql || 'Chưa phân công'}</span>
         </div>
-        <div class="modal-info-item">
-          <label>TỔNG SỐ PHIẾU ĐÁNH GIÁ</label>
-          <div class="val" style="font-weight: 800; color: var(--brand-primary);">${row.tong_phieu} phiếu hợp lệ</div>
+        <div class="modal-item">
+          <label><i class="fa-solid fa-clipboard-check"></i> Tổng Số Phiếu Đánh Giá</label>
+          <span style="font-weight: 800; color: var(--brand-primary);">${row.tong_phieu} phiếu hợp lệ</span>
         </div>
-        <div class="modal-info-item">
-          <label>ĐIỂM TB & TỶ LỆ TÍCH CỰC</label>
-          <div class="val" style="font-weight: 800; color: #0F5132;">${row.diem_tb.toFixed(2)} / 4.0 (${row.ty_le_tich_cuc.toFixed(1)}% - ${scoreRating})</div>
+        <div class="modal-item">
+          <label><i class="fa-solid fa-star"></i> Điểm TB & Tỷ Lệ Tích Cực</label>
+          <span style="font-weight: 800; color: #0F5132;">${row.diem_tb.toFixed(2)} / 4.0 (${row.ty_le_tich_cuc.toFixed(1)}% - ${scoreRating})</span>
         </div>
       `;
     }
@@ -4182,9 +3722,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (parsed && parsed.length > 0) {
         allPphtdtItems = parsed;
+        normalizeAllModuleData();
         window.allPphtdtItems = allPphtdtItems;
         try {
-          localStorage.setItem(STORAGE_KEY_PPHTDT_DATA, JSON.stringify(parsed));
+          localStorage.setItem(STORAGE_KEY_PPHTDT_DATA, JSON.stringify(allPphtdtItems));
         } catch (stErr) {
           console.warn('Could not save PPHTDT to localStorage:', stErr);
         }
@@ -4202,7 +3743,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function parseCsvToPphtdtItems(csvText) {
-    if (!csvText) return [];
+    if (!csvText || csvText.trim().startsWith('<')) return [];
     const lines = csvText.split(/\r?\n/).filter(l => l.trim().length > 0);
     if (lines.length <= 1) return [];
 
@@ -4257,15 +3798,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const headerCols = parseLine(lines[0]);
     const headers = headerCols.map(h => h.trim().toLowerCase());
 
+    if (headers[0] && headers[0].includes('địa điểm')) return [];
     let idxProg = headers.findIndex(h => h.includes('chương trình'));
     let idxMaLop = headers.findIndex(h => h.includes('mã lớp'));
+    if (idxProg < 0 || idxMaLop < 0) return [];
+
     let idxFmt = headers.findIndex(h => h.includes('hình thức'));
     let idxNgayBd = headers.findIndex(h => h.includes('bắt đầu'));
     let idxNgayKt = headers.findIndex(h => h.includes('kết thúc'));
     let idxCbql = headers.findIndex(h => h.includes('cbql') || h.includes('cán bộ'));
 
-    if (idxProg < 0) idxProg = 0;
-    if (idxMaLop < 0) idxMaLop = 1;
     if (idxFmt < 0) idxFmt = 2;
     if (idxNgayBd < 0) idxNgayBd = 3;
     if (idxNgayKt < 0) idxNgayKt = 4;
@@ -4276,6 +3818,8 @@ document.addEventListener('DOMContentLoaded', () => {
         c4Indices.push(idx);
       }
     });
+    // Strict schema check: PPHTDT has exactly 2 4-point criteria (unlike NDDT which has 3)
+    if (c4Indices.length !== 2) return [];
 
     const c1_start = c4Indices.length > 0 ? c4Indices[0] : 5;
     const c2_start = c4Indices.length > 1 ? c4Indices[1] : 9;
@@ -5439,7 +4983,7 @@ document.addEventListener('DOMContentLoaded', () => {
   async function syncCsvcGoogleSheetData(url, options = {}) {
     if (!url) return;
     try {
-      const res = await fetch(url, { redirect: 'follow' });
+      const res = await fetch(url, { cache: 'no-store', redirect: 'follow' });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const csvText = await res.text();
       if (!csvText || csvText.length < 50) return;
@@ -5447,11 +4991,13 @@ document.addEventListener('DOMContentLoaded', () => {
       const parsedItems = parseCsvToCsvcItems(csvText);
       if (parsedItems && parsedItems.length > 0) {
         allCsvcItems = parsedItems;
+        normalizeAllModuleData();
         window.allCsvcItems = allCsvcItems;
         try {
-          localStorage.setItem(STORAGE_KEY_CSVC_DATA, JSON.stringify(parsedItems));
+          localStorage.setItem(STORAGE_KEY_CSVC_DATA, JSON.stringify(allCsvcItems));
         } catch(e) {}
-        if (typeof applyCsvcFilters === 'function') {
+        populateCsvcFilterDropdowns();
+        if (activeView === 'csvc' && typeof applyCsvcFilters === 'function') {
           applyCsvcFilters();
         }
         if (!options.silent) {
@@ -5467,7 +5013,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function parseCsvToCsvcItems(csvText) {
-    if (!csvText) return [];
+    if (!csvText || csvText.trim().startsWith('<')) return [];
     const lines = csvText.split(/\r?\n/).filter(l => l.trim().length > 0);
     if (lines.length < 2) return [];
 
@@ -5487,6 +5033,11 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       result.push(cur);
       return result;
+    }
+
+    const headerRow = parseCSVLine(lines[0]).map(s => s.trim().toLowerCase());
+    if (!headerRow[0] || !headerRow[0].includes('địa điểm') || !headerRow[2] || !headerRow[2].includes('mã lớp')) {
+      return [];
     }
 
     const items = [];
@@ -5566,6 +5117,1595 @@ document.addEventListener('DOMContentLoaded', () => {
 
     return items;
   }
+
+
+  // ==========================================
+  // GV (ĐÁNH GIÁ GIẢNG VIÊN) MODULE LOGIC
+  // ==========================================
+
+  function setupGvModule() {
+    populateGvFilterDropdowns();
+    attachGvEventListeners();
+    applyGvFilters();
+  }
+
+  function populateGvFilterDropdowns() {
+    const progSelect = document.getElementById('filterGvProgram');
+    const nguonSelect = document.getElementById('filterGvNguon');
+    const donViSelect = document.getElementById('filterGvDonVi');
+    const fmtSelect = document.getElementById('filterGvFormat');
+    const nameSelect = document.getElementById('filterGvName');
+
+    if (!progSelect || !donViSelect || !fmtSelect || !nameSelect) return;
+
+    // Distinct lists
+    const progMap = new Map();
+    allGvItems.forEach(item => {
+      const code = item.chuong_trinh || '';
+      const full = item.ten_ct_full || code;
+      if (code && !progMap.has(code)) progMap.set(code, full);
+    });
+    const sortedProgs = Array.from(progMap.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+
+    const donVis = [...new Set(allGvItems.map(c => c.don_vi).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+    const formats = [...new Set(allGvItems.map(c => c.hinh_thuc_hoc).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+    const lecturers = [...new Set(allGvItems.map(c => c.ten_gv).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+
+    progSelect.innerHTML = '<option value="">-- Tất cả Chương trình (' + sortedProgs.length + ') --</option>' +
+      sortedProgs.map(([code, full]) => '<option value="' + code + '">' + code + ' - ' + (full.length > 45 ? full.slice(0, 42) + '...' : full) + '</option>').join('');
+
+    donViSelect.innerHTML = '<option value="">-- Tất cả Đơn vị / Đối tác (' + donVis.length + ') --</option>' +
+      donVis.map(d => '<option value="' + d + '">' + d + '</option>').join('');
+
+    fmtSelect.innerHTML = '<option value="">-- Tất cả Hình thức (' + formats.length + ') --</option>' +
+      formats.map(f => '<option value="' + f + '">' + f + '</option>').join('');
+
+    nameSelect.innerHTML = '<option value="">-- Tất cả Giảng viên (' + lecturers.length + ') --</option>' +
+      lecturers.map(g => '<option value="' + g + '">' + g + '</option>').join('');
+  }
+
+  function attachGvEventListeners() {
+    // 1. Preset Buttons
+    document.querySelectorAll('.gv-preset-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.gv-preset-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        gvState.preset = btn.dataset.gvPreset || 'all';
+        applyGvFilters();
+      });
+    });
+
+    // 2. Dropdown Filters
+    const progSelect = document.getElementById('filterGvProgram');
+    if (progSelect) {
+      progSelect.addEventListener('change', (e) => {
+        gvState.program = e.target.value;
+        applyGvFilters();
+      });
+    }
+
+    const nguonSelect = document.getElementById('filterGvNguon');
+    if (nguonSelect) {
+      nguonSelect.addEventListener('change', (e) => {
+        gvState.nguon = e.target.value;
+        applyGvFilters();
+      });
+    }
+
+    const donViSelect = document.getElementById('filterGvDonVi');
+    if (donViSelect) {
+      donViSelect.addEventListener('change', (e) => {
+        gvState.donVi = e.target.value;
+        applyGvFilters();
+      });
+    }
+
+    const fmtSelect = document.getElementById('filterGvFormat');
+    if (fmtSelect) {
+      fmtSelect.addEventListener('change', (e) => {
+        gvState.format = e.target.value;
+        applyGvFilters();
+      });
+    }
+
+    const nameSelect = document.getElementById('filterGvName');
+    if (nameSelect) {
+      nameSelect.addEventListener('change', (e) => {
+        gvState.lecturer = e.target.value;
+        applyGvFilters();
+      });
+    }
+
+    const ratingSelect = document.getElementById('filterGvRatingLevel');
+    if (ratingSelect) {
+      ratingSelect.addEventListener('change', (e) => {
+        gvState.ratingLevel = e.target.value;
+        applyGvFilters();
+      });
+    }
+
+    // 3. Search Box with Debouncing
+    const searchInput = document.getElementById('filterGvSearch');
+    let searchDebounceTimer = null;
+    if (searchInput) {
+      searchInput.addEventListener('input', (e) => {
+        clearTimeout(searchDebounceTimer);
+        searchDebounceTimer = setTimeout(() => {
+          gvState.searchQuery = (e.target.value || '').trim();
+          applyGvFilters();
+        }, 250);
+      });
+    }
+
+    // 4. Reset Button
+    const btnReset = document.getElementById('btnResetGvFilter');
+    if (btnReset) {
+      btnReset.addEventListener('click', () => {
+        gvState = {
+          preset: 'all',
+          program: '',
+          nguon: '',
+          donVi: '',
+          format: '',
+          lecturer: '',
+          ratingLevel: '',
+          searchQuery: ''
+        };
+        // Reset inputs
+        document.querySelectorAll('.gv-preset-btn').forEach(b => b.classList.remove('active'));
+        const defaultPreset = document.querySelector('.gv-preset-btn[data-gv-preset="all"]');
+        if (defaultPreset) defaultPreset.classList.add('active');
+
+        if (progSelect) progSelect.value = '';
+        if (nguonSelect) nguonSelect.value = '';
+        if (donViSelect) donViSelect.value = '';
+        if (fmtSelect) fmtSelect.value = '';
+        if (nameSelect) nameSelect.value = '';
+        if (ratingSelect) ratingSelect.value = '';
+        if (searchInput) searchInput.value = '';
+
+        gvRankMetric = 'gpa';
+        gvTopLimit = '15';
+        if (selectGvTopLimit) selectGvTopLimit.value = '15';
+        updateGvRankButtons();
+
+        applyGvFilters();
+        if (typeof showToast === 'function') {
+          showToast('Đã đặt lại toàn bộ bộ lọc Đánh giá Giảng viên', 'info');
+        }
+      });
+    }
+
+    // 5. Comparison Chart Toggles & Slicers
+    const btnToggleLecturer = document.getElementById('btnGvToggleLecturer');
+    const btnToggleUnit = document.getElementById('btnGvToggleUnit');
+    if (btnToggleLecturer && btnToggleUnit) {
+      btnToggleLecturer.addEventListener('click', () => {
+        gvCompareMode = 'lecturer';
+        btnToggleLecturer.classList.add('active');
+        btnToggleLecturer.style.background = 'var(--brand-primary)';
+        btnToggleLecturer.style.color = 'white';
+        btnToggleUnit.classList.remove('active');
+        btnToggleUnit.style.background = 'transparent';
+        btnToggleUnit.style.color = '#475569';
+        renderGvComparisonChart();
+      });
+
+      btnToggleUnit.addEventListener('click', () => {
+        gvCompareMode = 'unit';
+        btnToggleUnit.classList.add('active');
+        btnToggleUnit.style.background = 'var(--brand-primary)';
+        btnToggleUnit.style.color = 'white';
+        btnToggleLecturer.classList.remove('active');
+        btnToggleLecturer.style.background = 'transparent';
+        btnToggleLecturer.style.color = '#475569';
+        renderGvComparisonChart();
+      });
+    }
+
+    // Rank metric sub-slicers (Top GPA, Top Số lớp, Top Số tiết)
+    const btnGvRankGpa = document.getElementById('btnGvRankGpa');
+    const btnGvRankClasses = document.getElementById('btnGvRankClasses');
+    const btnGvRankHours = document.getElementById('btnGvRankHours');
+    const selectGvTopLimit = document.getElementById('selectGvTopLimit');
+
+    function updateGvRankButtons() {
+      const gpa = document.getElementById('btnGvRankGpa');
+      const cls = document.getElementById('btnGvRankClasses');
+      const hrs = document.getElementById('btnGvRankHours');
+      if (!gpa || !cls || !hrs) return;
+
+      [gpa, cls, hrs].forEach(b => {
+        b.classList.remove('active');
+        b.style.background = 'transparent';
+        b.style.color = '#475569';
+      });
+
+      if (gvRankMetric === 'gpa') {
+        gpa.classList.add('active');
+        gpa.style.background = '#8C1D40';
+        gpa.style.color = 'white';
+      } else if (gvRankMetric === 'classes') {
+        cls.classList.add('active');
+        cls.style.background = '#0284C7';
+        cls.style.color = 'white';
+      } else if (gvRankMetric === 'hours') {
+        hrs.classList.add('active');
+        hrs.style.background = '#059669';
+        hrs.style.color = 'white';
+      }
+    }
+
+    if (btnGvRankGpa) {
+      btnGvRankGpa.addEventListener('click', () => {
+        gvRankMetric = 'gpa';
+        updateGvRankButtons();
+        renderGvComparisonChart();
+      });
+    }
+
+    if (btnGvRankClasses) {
+      btnGvRankClasses.addEventListener('click', () => {
+        gvRankMetric = 'classes';
+        updateGvRankButtons();
+        renderGvComparisonChart();
+      });
+    }
+
+    if (btnGvRankHours) {
+      btnGvRankHours.addEventListener('click', () => {
+        gvRankMetric = 'hours';
+        updateGvRankButtons();
+        renderGvComparisonChart();
+      });
+    }
+
+    if (selectGvTopLimit) {
+      selectGvTopLimit.addEventListener('change', (e) => {
+        gvTopLimit = e.target.value;
+        renderGvComparisonChart();
+      });
+    }
+
+    // 6. Table Sorting
+    document.querySelectorAll('#gvClassesTable th[data-gv-sort]').forEach(th => {
+      th.addEventListener('click', () => {
+        const col = th.dataset.gvSort;
+        if (gvCurrentSort.column === col) {
+          gvCurrentSort.dir = gvCurrentSort.dir === 'asc' ? 'desc' : 'asc';
+        } else {
+          gvCurrentSort.column = col;
+          gvCurrentSort.dir = 'desc';
+        }
+        applyGvFilters();
+      });
+    });
+
+    // 7. Export Buttons
+    const btnExportCsv = document.getElementById('btnExportGvCsv');
+    if (btnExportCsv) {
+      btnExportCsv.addEventListener('click', exportGvToCsv);
+    }
+
+    const btnExportExcel = document.getElementById('btnExportGvExcel');
+    if (btnExportExcel) {
+      btnExportExcel.addEventListener('click', exportGvToExcel);
+    }
+  }
+
+  function applyGvFilters() {
+    let filtered = [...allGvItems];
+
+    // 1. Time Preset Filter
+    if (gvState.preset && gvState.preset !== 'all') {
+      filtered = filtered.filter(item => {
+        if (!item.ngay_bd) return true;
+        const parts = item.ngay_bd.split('/');
+        if (parts.length < 3) return true;
+        const month = parseInt(parts[1], 10);
+        const year = parseInt(parts[2], 10);
+
+        if (gvState.preset === '2026') return year === 2026;
+        if (gvState.preset === 'q1') return year === 2026 && month >= 1 && month <= 3;
+        if (gvState.preset === 'q2') return year === 2026 && month >= 4 && month <= 6;
+        if (gvState.preset === 'q3') return year === 2026 && month >= 7 && month <= 9;
+        if (gvState.preset === 'q4') return year === 2026 && month >= 10 && month <= 12;
+        return true;
+      });
+    }
+
+    // 2. Program Filter
+    if (gvState.program) {
+      filtered = filtered.filter(item => item.chuong_trinh === gvState.program || item.ten_ct_full === gvState.program);
+    }
+
+    // 3. Nguồn GV Filter
+    if (gvState.nguon) {
+      filtered = filtered.filter(item => item.nguon_gv === gvState.nguon);
+    }
+
+    // 4. Đơn vị Filter
+    if (gvState.donVi) {
+      filtered = filtered.filter(item => item.don_vi === gvState.donVi);
+    }
+
+    // 5. Format Filter
+    if (gvState.format) {
+      filtered = filtered.filter(item => item.hinh_thuc_hoc === gvState.format);
+    }
+
+    // 6. Lecturer Filter
+    if (gvState.lecturer) {
+      filtered = filtered.filter(item => item.ten_gv === gvState.lecturer);
+    }
+
+    // 7. Rating Level Filter
+    if (gvState.ratingLevel) {
+      filtered = filtered.filter(item => {
+        const score = item.diem_tb || 0;
+        if (gvState.ratingLevel === 'excellent') return score >= 4.5;
+        if (gvState.ratingLevel === 'good') return score >= 4.0 && score < 4.5;
+        if (gvState.ratingLevel === 'fair') return score >= 3.0 && score < 4.0;
+        if (gvState.ratingLevel === 'warning') return score < 3.0;
+        return true;
+      });
+    }
+
+    // 8. Search Query Filter
+    if (gvState.searchQuery) {
+      const q = gvState.searchQuery.toLowerCase();
+      filtered = filtered.filter(item => {
+        return (item.ten_gv && item.ten_gv.toLowerCase().includes(q)) ||
+               (item.ma_lop && item.ma_lop.toLowerCase().includes(q)) ||
+               (item.chuong_trinh && item.chuong_trinh.toLowerCase().includes(q)) ||
+               (item.ten_ct_full && item.ten_ct_full.toLowerCase().includes(q)) ||
+               (item.don_vi && item.don_vi.toLowerCase().includes(q)) ||
+               (item.noi_dung_giang && item.noi_dung_giang.toLowerCase().includes(q)) ||
+               (item.cbql && item.cbql.toLowerCase().includes(q));
+      });
+    }
+
+    // 9. Sort
+    const col = gvCurrentSort.column;
+    const dir = gvCurrentSort.dir === 'asc' ? 1 : -1;
+    filtered.sort((a, b) => {
+      let valA = col === 'ngay_bd' ? (a.ngay_bd_iso || a.ngay_bd) : a[col];
+      let valB = col === 'ngay_bd' ? (b.ngay_bd_iso || b.ngay_bd) : b[col];
+
+      if (valA === undefined || valA === null) valA = '';
+      if (valB === undefined || valB === null) valB = '';
+
+      if (typeof valA === 'number' && typeof valB === 'number') {
+        return (valA - valB) * dir;
+      }
+      return String(valA).localeCompare(String(valB), 'vi', { numeric: true }) * dir;
+    });
+
+    filteredGvItems = filtered;
+    window.filteredGvItems = filteredGvItems;
+
+    // Update UI components
+    updateGvKPIs();
+    renderGvCharts();
+    renderGvTable();
+    updateGvSortHeaders();
+  }
+
+  function updateGvSortHeaders() {
+    document.querySelectorAll('#gvClassesTable th[data-gv-sort]').forEach(th => {
+      const col = th.dataset.gvSort;
+      const icon = th.querySelector('i');
+      if (!icon) return;
+      if (gvCurrentSort.column === col) {
+        th.style.color = 'var(--brand-primary)';
+        icon.className = gvCurrentSort.dir === 'asc' ? 'fa-solid fa-sort-up' : 'fa-solid fa-sort-down';
+      } else {
+        th.style.color = '';
+        icon.className = 'fa-solid fa-sort';
+      }
+    });
+  }
+
+  function updateGvKPIs() {
+    const totalLecturersElem = document.getElementById('kpiGvTotalLecturers');
+    const totalClassesElem = document.getElementById('kpiGvTotalClasses');
+    const totalVotesElem = document.getElementById('kpiGvTotalVotes');
+    const avgScoreElem = document.getElementById('kpiGvAvgScore');
+    const badgeElem = document.getElementById('kpiGvScoreRatingBadge');
+    const posRateElem = document.getElementById('kpiGvPosRate');
+    const crit1Elem = document.getElementById('kpiGvCrit1Score');
+    const crit2Elem = document.getElementById('kpiGvCrit2Score');
+    const crit3Elem = document.getElementById('kpiGvCrit3Score');
+
+    if (!totalLecturersElem) return;
+
+    if (filteredGvItems.length === 0) {
+      totalLecturersElem.textContent = '0';
+      totalClassesElem.textContent = '0';
+      totalVotesElem.textContent = '0';
+      avgScoreElem.textContent = '0.00';
+      if (badgeElem) {
+        badgeElem.textContent = 'Chưa có dữ liệu';
+        badgeElem.style.color = 'var(--text-muted)';
+      }
+      posRateElem.textContent = '0.0';
+      crit1Elem.textContent = '0.00';
+      crit2Elem.textContent = '0.00';
+      crit3Elem.textContent = '0.00';
+      return;
+    }
+
+    // 1. Distinct Lecturers & Classes
+    const distinctLecturers = new Set(filteredGvItems.map(x => x.ten_gv).filter(Boolean)).size;
+    const distinctClasses = new Set(filteredGvItems.map(x => x.ma_lop).filter(Boolean)).size;
+
+    // 2. Votes aggregation
+    let totKTCM = { 5:0, 4:0, 3:0, 2:0, 1:0 };
+    let totKNSP = { 5:0, 4:0, 3:0, 2:0, 1:0 };
+    let totTDTP = { 5:0, 4:0, 3:0, 2:0, 1:0 };
+    let totalVotes = 0;
+
+    filteredGvItems.forEach(item => {
+      totKTCM[5] += item.c5_ktcm || 0;
+      totKTCM[4] += item.c4_ktcm || 0;
+      totKTCM[3] += item.c3_ktcm || 0;
+      totKTCM[2] += item.c2_ktcm || 0;
+      totKTCM[1] += item.c1_ktcm || 0;
+
+      totKNSP[5] += item.c5_knsp || 0;
+      totKNSP[4] += item.c4_knsp || 0;
+      totKNSP[3] += item.c3_knsp || 0;
+      totKNSP[2] += item.c2_knsp || 0;
+      totKNSP[1] += item.c1_knsp || 0;
+
+      totTDTP[5] += item.c5_tdtp || 0;
+      totTDTP[4] += item.c4_tdtp || 0;
+      totTDTP[3] += item.c3_tdtp || 0;
+      totTDTP[2] += item.c2_tdtp || 0;
+      totTDTP[1] += item.c1_tdtp || 0;
+
+      totalVotes += item.tong_phieu || 0;
+    });
+
+    const sumVotes1 = totKTCM[5] + totKTCM[4] + totKTCM[3] + totKTCM[2] + totKTCM[1];
+    const score1 = sumVotes1 > 0 ? (5*totKTCM[5] + 4*totKTCM[4] + 3*totKTCM[3] + 2*totKTCM[2] + 1*totKTCM[1]) / sumVotes1 : 0;
+
+    const sumVotes2 = totKNSP[5] + totKNSP[4] + totKNSP[3] + totKNSP[2] + totKNSP[1];
+    const score2 = sumVotes2 > 0 ? (5*totKNSP[5] + 4*totKNSP[4] + 3*totKNSP[3] + 2*totKNSP[2] + 1*totKNSP[1]) / sumVotes2 : 0;
+
+    const sumVotes3 = totTDTP[5] + totTDTP[4] + totTDTP[3] + totTDTP[2] + totTDTP[1];
+    const score3 = sumVotes3 > 0 ? (5*totTDTP[5] + 4*totTDTP[4] + 3*totTDTP[3] + 2*totTDTP[2] + 1*totTDTP[1]) / sumVotes3 : 0;
+
+    let validCritCount = 0;
+    let sumScores = 0;
+    if (sumVotes1 > 0) { sumScores += score1; validCritCount++; }
+    if (sumVotes2 > 0) { sumScores += score2; validCritCount++; }
+    if (sumVotes3 > 0) { sumScores += score3; validCritCount++; }
+    const overallScore = validCritCount > 0 ? (sumScores / validCritCount) : 0;
+
+    const totalAllVotes = sumVotes1 + sumVotes2 + sumVotes3;
+    const positiveVotes = (totKTCM[5] + totKTCM[4]) + (totKNSP[5] + totKNSP[4]) + (totTDTP[5] + totTDTP[4]);
+    const overallPosRate = totalAllVotes > 0 ? (positiveVotes / totalAllVotes) * 100 : 0;
+
+    // Display formatted
+    totalLecturersElem.textContent = distinctLecturers.toLocaleString('vi-VN');
+    totalClassesElem.textContent = distinctClasses.toLocaleString('vi-VN');
+    totalVotesElem.textContent = totalVotes.toLocaleString('vi-VN');
+    avgScoreElem.textContent = overallScore.toFixed(2);
+    posRateElem.textContent = overallPosRate.toFixed(1);
+
+    crit1Elem.textContent = score1.toFixed(2);
+    crit2Elem.textContent = score2.toFixed(2);
+    crit3Elem.textContent = score3.toFixed(2);
+
+    if (badgeElem) {
+      if (overallScore >= 4.5) {
+        badgeElem.textContent = 'Đánh giá chung: Xuất sắc';
+        badgeElem.style.color = '#0F5132';
+      } else if (overallScore >= 4.0) {
+        badgeElem.textContent = 'Đánh giá chung: Tốt';
+        badgeElem.style.color = '#22C55E';
+      } else if (overallScore >= 3.0) {
+        badgeElem.textContent = 'Đánh giá chung: Khá';
+        badgeElem.style.color = '#D97706';
+      } else {
+        badgeElem.textContent = 'Đánh giá chung: Cần cải thiện';
+        badgeElem.style.color = '#DC2626';
+      }
+    }
+  }
+
+  function renderGvCharts() {
+    renderGvStackedBarChart();
+    renderGvComparisonChart();
+  }
+
+  function renderGvStackedBarChart() {
+    const canvas = document.getElementById('gvStackedBarChart');
+    if (!canvas) return;
+
+    if (gvCharts.stackedBar) {
+      gvCharts.stackedBar.destroy();
+      gvCharts.stackedBar = null;
+    }
+
+    if (filteredGvItems.length === 0) return;
+
+    // Aggregate counts for the 3 criteria
+    let c1 = { 5:0, 4:0, 3:0, 2:0, 1:0 };
+    let c2 = { 5:0, 4:0, 3:0, 2:0, 1:0 };
+    let c3 = { 5:0, 4:0, 3:0, 2:0, 1:0 };
+
+    filteredGvItems.forEach(item => {
+      c1[5] += item.c5_ktcm || 0; c1[4] += item.c4_ktcm || 0; c1[3] += item.c3_ktcm || 0; c1[2] += item.c2_ktcm || 0; c1[1] += item.c1_ktcm || 0;
+      c2[5] += item.c5_knsp || 0; c2[4] += item.c4_knsp || 0; c2[3] += item.c3_knsp || 0; c2[2] += item.c2_knsp || 0; c2[1] += item.c1_knsp || 0;
+      c3[5] += item.c5_tdtp || 0; c3[4] += item.c4_tdtp || 0; c3[3] += item.c3_tdtp || 0; c3[2] += item.c2_tdtp || 0; c3[1] += item.c1_tdtp || 0;
+    });
+
+    const tot1 = c1[5] + c1[4] + c1[3] + c1[2] + c1[1];
+    const tot2 = c2[5] + c2[4] + c2[3] + c2[2] + c2[1];
+    const tot3 = c3[5] + c3[4] + c3[3] + c3[2] + c3[1];
+
+    const p5 = [
+      tot1 ? (c1[5] / tot1) * 100 : 0,
+      tot2 ? (c2[5] / tot2) * 100 : 0,
+      tot3 ? (c3[5] / tot3) * 100 : 0
+    ];
+    const p4 = [
+      tot1 ? (c1[4] / tot1) * 100 : 0,
+      tot2 ? (c2[4] / tot2) * 100 : 0,
+      tot3 ? (c3[4] / tot3) * 100 : 0
+    ];
+    const p3 = [
+      tot1 ? (c1[3] / tot1) * 100 : 0,
+      tot2 ? (c2[3] / tot2) * 100 : 0,
+      tot3 ? (c3[3] / tot3) * 100 : 0
+    ];
+    const p2 = [
+      tot1 ? (c1[2] / tot1) * 100 : 0,
+      tot2 ? (c2[2] / tot2) * 100 : 0,
+      tot3 ? (c3[2] / tot3) * 100 : 0
+    ];
+    const p1 = [
+      tot1 ? (c1[1] / tot1) * 100 : 0,
+      tot2 ? (c2[1] / tot2) * 100 : 0,
+      tot3 ? (c3[1] / tot3) * 100 : 0
+    ];
+
+    const ctx = canvas.getContext('2d');
+    gvCharts.stackedBar = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: [
+          '1. Chuyên môn (KTCM)',
+          '2. Sư phạm (KNSP)',
+          '3. Tác phong (TDTP)'
+        ],
+        datasets: [
+          {
+            label: 'Mức 5: Xuất sắc',
+            data: p5.map(v => Number(v.toFixed(1))),
+            backgroundColor: '#0F5132', // ESG Green
+            rawVotes: [c1[5], c2[5], c3[5]],
+            barThickness: 32
+          },
+          {
+            label: 'Mức 4: Tốt',
+            data: p4.map(v => Number(v.toFixed(1))),
+            backgroundColor: '#22C55E', // Green
+            rawVotes: [c1[4], c2[4], c3[4]],
+            barThickness: 32
+          },
+          {
+            label: 'Mức 3: Khá',
+            data: p3.map(v => Number(v.toFixed(1))),
+            backgroundColor: '#EAB308', // Amber
+            rawVotes: [c1[3], c2[3], c3[3]],
+            barThickness: 32
+          },
+          {
+            label: 'Mức 2: Bình thường',
+            data: p2.map(v => Number(v.toFixed(1))),
+            backgroundColor: '#F97316', // Orange
+            rawVotes: [c1[2], c2[2], c3[2]],
+            barThickness: 32
+          },
+          {
+            label: 'Mức 1: Hạn chế',
+            data: p1.map(v => Number(v.toFixed(1))),
+            backgroundColor: '#EF4444', // Red
+            rawVotes: [c1[1], c2[1], c3[1]],
+            barThickness: 32
+          }
+        ]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: 'top',
+            labels: {
+              boxWidth: 12,
+              padding: 10,
+              font: { size: 10.5, weight: '700' }
+            }
+          },
+          tooltip: {
+            callbacks: {
+              label: function(context) {
+                const ds = context.dataset;
+                const vote = ds.rawVotes ? ds.rawVotes[context.dataIndex] : 0;
+                return ds.label + ': ' + context.parsed.x + '% (' + vote.toLocaleString('vi-VN') + ' phiếu)';
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            stacked: true,
+            max: 100,
+            ticks: {
+              callback: function(v) { return v + '%'; },
+              font: { size: 10 }
+            },
+            grid: { color: '#F1F5F9' }
+          },
+          y: {
+            stacked: true,
+            ticks: {
+              font: { size: 11, weight: '700' },
+              color: '#334155'
+            },
+            grid: { display: false }
+          }
+        }
+      }
+    });
+  }
+
+  function renderGvComparisonChart() {
+    const canvas = document.getElementById('gvComparisonChart');
+    const scrollInner = document.getElementById('gvComparisonScrollInner');
+    const scrollOuter = document.getElementById('gvComparisonScrollOuter');
+    const hintElem = document.getElementById('gvScrollCountHint');
+    const hintTextElem = document.getElementById('gvScrollHintText');
+    if (!canvas || !scrollInner) return;
+
+    if (gvCharts.comparison) {
+      gvCharts.comparison.destroy();
+      gvCharts.comparison = null;
+    }
+
+    if (filteredGvItems.length === 0) {
+      if (hintElem) hintElem.textContent = '0';
+      if (hintTextElem) hintTextElem.innerHTML = 'Không có dữ liệu';
+      return;
+    }
+
+    let fullList = [];
+
+    if (gvCompareMode === 'lecturer') {
+      // Group by Lecturer Name
+      const map = new Map();
+      filteredGvItems.forEach(item => {
+        const name = item.ten_gv || 'Chưa rõ';
+        if (!map.has(name)) {
+          map.set(name, {
+            name,
+            unit: item.don_vi || '',
+            v1: 0, s1: 0,
+            v2: 0, s2: 0,
+            v3: 0, s3: 0,
+            classes: new Set(),
+            hours: 0
+          });
+        }
+        const g = map.get(name);
+        g.classes.add(item.ma_lop);
+        g.hours += item.so_tiet || 0;
+        if (item.tong_phieu_ktcm) {
+          g.v1 += item.tong_phieu_ktcm;
+          g.s1 += (item.diem_ktcm || 0) * item.tong_phieu_ktcm;
+        }
+        if (item.tong_phieu_knsp) {
+          g.v2 += item.tong_phieu_knsp;
+          g.s2 += (item.diem_knsp || 0) * item.tong_phieu_knsp;
+        }
+        if (item.tong_phieu_tdtp) {
+          g.v3 += item.tong_phieu_tdtp;
+          g.s3 += (item.diem_tdtp || 0) * item.tong_phieu_tdtp;
+        }
+      });
+
+      fullList = Array.from(map.values()).map(g => {
+        const sc1 = g.v1 ? g.s1 / g.v1 : 0;
+        const sc2 = g.v2 ? g.s2 / g.v2 : 0;
+        const sc3 = g.v3 ? g.s3 / g.v3 : 0;
+        let cCount = 0; let cSum = 0;
+        if (g.v1) { cSum += sc1; cCount++; }
+        if (g.v2) { cSum += sc2; cCount++; }
+        if (g.v3) { cSum += sc3; cCount++; }
+        const scAll = cCount ? cSum / cCount : 0;
+        return {
+          key: g.name,
+          displayName: g.name,
+          unit: g.unit,
+          sc1: Number(sc1.toFixed(2)),
+          sc2: Number(sc2.toFixed(2)),
+          sc3: Number(sc3.toFixed(2)),
+          scAll: Number(scAll.toFixed(2)),
+          classCount: g.classes.size,
+          hours: g.hours
+        };
+      });
+
+      // Sort by gvRankMetric
+      if (gvRankMetric === 'classes') {
+        fullList.sort((a, b) => b.classCount - a.classCount || b.hours - a.hours || b.scAll - a.scAll);
+      } else if (gvRankMetric === 'hours') {
+        fullList.sort((a, b) => b.hours - a.hours || b.classCount - a.classCount || b.scAll - a.scAll);
+      } else {
+        // default 'gpa'
+        fullList.sort((a, b) => b.scAll - a.scAll || b.classCount - a.classCount || b.hours - a.hours);
+      }
+    } else {
+      // Group by Unit / Partner
+      const map = new Map();
+      filteredGvItems.forEach(item => {
+        const unit = item.don_vi || 'Khác / Chưa rõ';
+        if (!map.has(unit)) {
+          map.set(unit, {
+            unit,
+            v1: 0, s1: 0,
+            v2: 0, s2: 0,
+            v3: 0, s3: 0,
+            lecturers: new Set(),
+            classes: new Set(),
+            hours: 0
+          });
+        }
+        const u = map.get(unit);
+        if (item.ten_gv) u.lecturers.add(item.ten_gv);
+        u.classes.add(item.ma_lop);
+        u.hours += item.so_tiet || 0;
+        if (item.tong_phieu_ktcm) {
+          u.v1 += item.tong_phieu_ktcm;
+          u.s1 += (item.diem_ktcm || 0) * item.tong_phieu_ktcm;
+        }
+        if (item.tong_phieu_knsp) {
+          u.v2 += item.tong_phieu_knsp;
+          u.s2 += (item.diem_knsp || 0) * item.tong_phieu_knsp;
+        }
+        if (item.tong_phieu_tdtp) {
+          u.v3 += item.tong_phieu_tdtp;
+          u.s3 += (item.diem_tdtp || 0) * item.tong_phieu_tdtp;
+        }
+      });
+
+      fullList = Array.from(map.values()).map(u => {
+        const sc1 = u.v1 ? u.s1 / u.v1 : 0;
+        const sc2 = u.v2 ? u.s2 / u.v2 : 0;
+        const sc3 = u.v3 ? u.s3 / u.v3 : 0;
+        let cCount = 0; let cSum = 0;
+        if (u.v1) { cSum += sc1; cCount++; }
+        if (u.v2) { cSum += sc2; cCount++; }
+        if (u.v3) { cSum += sc3; cCount++; }
+        const scAll = cCount ? cSum / cCount : 0;
+        return {
+          key: u.unit,
+          displayName: u.unit,
+          unit: u.unit,
+          sc1: Number(sc1.toFixed(2)),
+          sc2: Number(sc2.toFixed(2)),
+          sc3: Number(sc3.toFixed(2)),
+          scAll: Number(scAll.toFixed(2)),
+          gvCount: u.lecturers.size,
+          classCount: u.classes.size,
+          hours: u.hours
+        };
+      });
+
+      // Sort by gvRankMetric
+      if (gvRankMetric === 'classes') {
+        fullList.sort((a, b) => b.classCount - a.classCount || b.hours - a.hours || b.scAll - a.scAll);
+      } else if (gvRankMetric === 'hours') {
+        fullList.sort((a, b) => b.hours - a.hours || b.classCount - a.classCount || b.scAll - a.scAll);
+      } else {
+        // default 'gpa'
+        fullList.sort((a, b) => b.scAll - a.scAll || b.classCount - a.classCount || b.hours - a.hours);
+      }
+    }
+
+    // Apply Top Limit
+    const totalCount = fullList.length;
+    let displayList = fullList;
+    let isLimited = false;
+    if (gvTopLimit && gvTopLimit !== 'all') {
+      const limit = parseInt(gvTopLimit, 10);
+      if (!isNaN(limit) && limit > 0 && limit < totalCount) {
+        displayList = fullList.slice(0, limit);
+        isLimited = true;
+      }
+    }
+
+    // Update hints
+    if (hintElem) {
+      hintElem.textContent = isLimited ? `${displayList.length} / ${totalCount}` : `${totalCount}`;
+    }
+    if (hintTextElem) {
+      if (isLimited) {
+        hintTextElem.innerHTML = `Top <strong>${displayList.length}</strong> / ${totalCount} mục`;
+      } else {
+        hintTextElem.innerHTML = `Xem tất cả <strong>${totalCount}</strong> mục`;
+      }
+    }
+
+    // Dynamic width sizing:
+    // If <= 15 items, 100% width fits cleanly in 8-column container
+    // If > 15 items, horizontal scroll with 75px per item
+    if (displayList.length <= 15) {
+      scrollInner.style.width = '100%';
+    } else {
+      const containerWidth = scrollOuter ? scrollOuter.clientWidth : 850;
+      const dynWidth = Math.max(containerWidth, displayList.length * 75);
+      scrollInner.style.width = dynWidth + 'px';
+    }
+
+    // Only display full name (hide class count and hour text from axis)
+    const labels = displayList.map(item => item.displayName);
+
+    const keys = displayList.map(x => x.key);
+    const ktcmData = displayList.map(x => x.sc1);
+    const knspData = displayList.map(x => x.sc2);
+    const tdtpData = displayList.map(x => x.sc3);
+    const overallData = displayList.map(x => x.scAll);
+    const hoursData = displayList.map(x => x.hours);
+    const classCountData = displayList.map(x => x.classCount);
+
+    const maxHours = Math.max(...hoursData, 10);
+    const suggestedMaxHours = Math.max(Math.ceil(maxHours * 1.25), 20);
+
+    const ctx = canvas.getContext('2d');
+    gvCharts.comparison = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [
+          // LINE 1: 1. Chuyên môn (KTCM) - Đỏ Bordeaux Agribank (Tương phản mạnh, trọng tâm)
+          {
+            type: 'line',
+            label: '1. Chuyên môn (KTCM)',
+            data: ktcmData,
+            borderColor: '#8C1D40',
+            backgroundColor: '#8C1D40',
+            borderWidth: 2.8,
+            pointRadius: 5,
+            pointHoverRadius: 7,
+            pointStyle: 'circle',
+            pointBackgroundColor: '#FFFFFF',
+            pointBorderColor: '#8C1D40',
+            pointBorderWidth: 2.5,
+            tension: 0.25,
+            yAxisID: 'yScores',
+            order: 1
+          },
+          // LINE 2: 2. Sư phạm (KNSP) - Xanh dương Sapphire (Đối lập sắc bén với đỏ)
+          {
+            type: 'line',
+            label: '2. Sư phạm (KNSP)',
+            data: knspData,
+            borderColor: '#0284C7',
+            backgroundColor: '#0284C7',
+            borderWidth: 2.8,
+            pointRadius: 5,
+            pointHoverRadius: 7,
+            pointStyle: 'rectRot',
+            pointBackgroundColor: '#FFFFFF',
+            pointBorderColor: '#0284C7',
+            pointBorderWidth: 2.5,
+            tension: 0.25,
+            yAxisID: 'yScores',
+            order: 1
+          },
+          // LINE 3: 3. Tác phong (TDTP) - Xanh lá ngọc ESG Agribank (Tươi sáng, dịu mắt, không lóa)
+          {
+            type: 'line',
+            label: '3. Tác phong (TDTP)',
+            data: tdtpData,
+            borderColor: '#059669',
+            backgroundColor: '#059669',
+            borderWidth: 2.8,
+            pointRadius: 5,
+            pointHoverRadius: 7,
+            pointStyle: 'triangle',
+            pointBackgroundColor: '#FFFFFF',
+            pointBorderColor: '#059669',
+            pointBorderWidth: 2.5,
+            tension: 0.25,
+            yAxisID: 'yScores',
+            order: 1
+          },
+          // BAR 1: Tổng số tiết giảng dạy (Thanh Slate Gray trung tính nhẹ)
+          {
+            type: 'bar',
+            label: 'Tổng số tiết',
+            data: hoursData,
+            backgroundColor: 'rgba(148, 163, 184, 0.22)',
+            borderColor: 'rgba(100, 116, 139, 0.45)',
+            borderWidth: 1.2,
+            borderRadius: 4,
+            barPercentage: 0.55,
+            categoryPercentage: 0.7,
+            yAxisID: 'yVolume',
+            order: 2
+          },
+          // BAR 2: Tổng số lớp giảng dạy (Thanh Amber Cam đất nhẹ)
+          {
+            type: 'bar',
+            label: 'Tổng số lớp',
+            data: classCountData,
+            backgroundColor: 'rgba(217, 119, 6, 0.2)',
+            borderColor: 'rgba(217, 119, 6, 0.45)',
+            borderWidth: 1.2,
+            borderRadius: 4,
+            barPercentage: 0.55,
+            categoryPercentage: 0.7,
+            yAxisID: 'yVolume',
+            order: 2
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        onClick: (evt, elements) => {
+          if (!elements || elements.length === 0) return;
+          const idx = elements[0].index;
+          const clickedKey = keys[idx];
+          if (!clickedKey) return;
+
+          if (gvCompareMode === 'lecturer') {
+            const nameSelect = document.getElementById('filterGvName');
+            if (nameSelect) {
+              nameSelect.value = clickedKey;
+              gvState.lecturer = clickedKey;
+              applyGvFilters();
+              if (typeof showToast === 'function') {
+                showToast('Đang lọc kết quả cho Giảng viên: ' + clickedKey, 'info');
+              }
+            }
+          } else {
+            const donViSelect = document.getElementById('filterGvDonVi');
+            if (donViSelect) {
+              donViSelect.value = clickedKey;
+              gvState.donVi = clickedKey;
+              applyGvFilters();
+              if (typeof showToast === 'function') {
+                showToast('Đang lọc kết quả cho Đơn vị: ' + clickedKey, 'info');
+              }
+            }
+          }
+        },
+        plugins: {
+          legend: {
+            position: 'top',
+            labels: {
+              boxWidth: 13,
+              padding: 10,
+              font: { size: 10.5, weight: '700' },
+              usePointStyle: true
+            }
+          },
+          tooltip: {
+            mode: 'index',
+            intersect: false,
+            callbacks: {
+              title: function(items) {
+                if (!items || items.length === 0) return '';
+                const idx = items[0].dataIndex;
+                const it = displayList[idx];
+                if (!it) return '';
+                if (gvCompareMode === 'lecturer') {
+                  return it.key + (it.unit ? ' (' + it.unit + ')' : '');
+                } else {
+                  return it.key + ' (' + it.gvCount + ' GV)';
+                }
+              },
+              beforeBody: function(items) {
+                if (!items || items.length === 0) return [];
+                const idx = items[0].dataIndex;
+                const it = displayList[idx];
+                if (!it) return [];
+                return [
+                  '📚 Số lớp giảng dạy: ' + it.classCount + ' lớp',
+                  '⏱️ Số tiết giảng dạy: ' + it.hours + ' tiết',
+                  '⭐ Điểm TB chung: ' + it.scAll.toFixed(2) + ' / 5.0',
+                  '--------------------------------'
+                ];
+              },
+              label: function(context) {
+                const ds = context.dataset;
+                const val = context.parsed.y;
+                if (val === null || val === undefined) return '';
+                if (ds.yAxisID === 'yVolume') {
+                  if (ds.label.includes('lớp')) {
+                    return ds.label + ': ' + val + ' lớp';
+                  }
+                  return ds.label + ': ' + val + ' tiết';
+                }
+                return ds.label + ': ' + Number(val).toFixed(2) + ' / 5.0';
+              }
+            }
+          }
+        },
+        scales: {
+          yScores: {
+            type: 'linear',
+            position: 'left',
+            min: 3.5,
+            max: 5.0,
+            ticks: {
+              stepSize: 0.25,
+              callback: function(v) { return Number(v).toFixed(2); },
+              font: { size: 10.5, weight: '700' },
+              color: '#8C1D40'
+            },
+            title: {
+              display: true,
+              text: 'Điểm đánh giá (1.0 - 5.0)',
+              font: { size: 10, weight: '700' },
+              color: '#8C1D40'
+            },
+            grid: { color: '#F1F5F9' }
+          },
+          yVolume: {
+            type: 'linear',
+            position: 'right',
+            beginAtZero: true,
+            suggestedMax: suggestedMaxHours,
+            ticks: {
+              font: { size: 10, weight: '600' },
+              color: '#475569',
+              callback: function(v) { return Number.isInteger(v) ? v : ''; }
+            },
+            title: {
+              display: true,
+              text: 'Số tiết / Số lớp',
+              font: { size: 10, weight: '700' },
+              color: '#475569'
+            },
+            grid: { display: false }
+          },
+          x: {
+            ticks: {
+              font: { size: 10.5, weight: '600' },
+              color: '#1E293B',
+              maxRotation: 45,
+              minRotation: 30,
+              autoSkip: false
+            },
+            grid: { display: false }
+          }
+        }
+      }
+    });
+
+    // Enable drag-to-scroll on horizontal container
+    if (scrollOuter && !scrollOuter._hasDragScroll) {
+      scrollOuter._hasDragScroll = true;
+      let isDown = false;
+      let startX = 0;
+      let scrollLeft = 0;
+
+      scrollOuter.addEventListener('mousedown', (e) => {
+        isDown = true;
+        startX = e.pageX - scrollOuter.offsetLeft;
+        scrollLeft = scrollOuter.scrollLeft;
+      });
+      scrollOuter.addEventListener('mouseleave', () => { isDown = false; });
+      scrollOuter.addEventListener('mouseup', () => { isDown = false; });
+      scrollOuter.addEventListener('mousemove', (e) => {
+        if (!isDown) return;
+        e.preventDefault();
+        const x = e.pageX - scrollOuter.offsetLeft;
+        const walk = (x - startX) * 1.5;
+        scrollOuter.scrollLeft = scrollLeft - walk;
+      });
+    }
+  }
+
+  function renderGvTable() {
+    const tbody = document.getElementById('gvClassesTableBody');
+    const filteredCountElem = document.getElementById('gvTableFilteredCount');
+    const totalCountElem = document.getElementById('gvTableTotalCount');
+
+    if (totalCountElem) totalCountElem.textContent = allGvItems.length.toLocaleString('vi-VN');
+    if (filteredCountElem) filteredCountElem.textContent = filteredGvItems.length.toLocaleString('vi-VN');
+
+    if (!tbody) return;
+
+    if (filteredGvItems.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="13" style="text-align: center; padding: 2.5rem; color: var(--text-muted); font-style: italic;">Không tìm thấy bản ghi giảng viên nào phù hợp với điều kiện lọc hiện tại.</td></tr>';
+      return;
+    }
+
+    const html = filteredGvItems.map((item, idx) => {
+      // Format Badge
+      let fmtBadgeClass = 'badge-format-direct';
+      if (item.hinh_thuc_hoc === 'Trực tuyến') fmtBadgeClass = 'badge-format-online';
+      else if (item.hinh_thuc_hoc === 'Trực tiếp kết hợp Trực tuyến') fmtBadgeClass = 'badge-format-hybrid';
+
+      // Score Badges
+      const scoreBadge = (score) => {
+        if (!score && score !== 0) return '<span style="color: #94A3B8;">—</span>';
+        let color = '#0F5132';
+        let bg = '#ECFDF5';
+        if (score >= 4.5) { color = '#0F5132'; bg = '#ECFDF5'; }
+        else if (score >= 4.0) { color = '#0284C7'; bg = '#E0F2FE'; }
+        else if (score >= 3.0) { color = '#D97706'; bg = '#FEF3C7'; }
+        else { color = '#DC2626'; bg = '#FEE2E2'; }
+        return '<span class="score-badge" style="background: ' + bg + '; color: ' + color + '; font-weight: 800; padding: 0.15rem 0.45rem; border-radius: 4px; font-size: 0.8rem;">' + score.toFixed(2) + '</span>';
+      };
+
+      const titleDegree = item.hoc_ham_hoc_vi ? '<span style="font-size: 0.72rem; color: #64748B; font-weight: 600; margin-right: 0.25rem;">(' + item.hoc_ham_hoc_vi + ')</span>' : '';
+      const nguonTag = item.nguon_gv === 'Agribank' ? 
+        '<span style="background: #FEE2E2; color: var(--brand-crimson); font-size: 0.68rem; font-weight: 700; padding: 1px 5px; border-radius: 3px;">Agribank</span>' : 
+        '<span style="background: #E0F2FE; color: #0369A1; font-size: 0.68rem; font-weight: 700; padding: 1px 5px; border-radius: 3px;">Mời ngoài</span>';
+
+      const fullProg = String(item.ten_ct_full || item.chuong_trinh || '');
+      const fmtBadge = getFormatBadge(item).replace('TRỰC TIẾP KẾT HỢP TRỰC TUYẾN', 'TRỰC TIẾP KẾT HỢP<br>TRỰC TUYẾN');
+
+      return '<tr onclick="window.openGvModalById(' + item.id + ')" style="cursor: pointer;">' +
+        '<td style="text-align: center; color: var(--text-muted); font-weight: 600;">' + (idx + 1) + '</td>' +
+        '<td>' +
+          '<div style="font-weight: 800; color: #1E293B;">' + titleDegree + (item.ten_gv || '') + '</div>' +
+          (item.chuc_danh ? '<div style="font-size: 0.72rem; color: #64748B;">' + item.chuc_danh + '</div>' : '') +
+        '</td>' +
+        '<td>' +
+          '<div style="display: flex; align-items: center; gap: 0.35rem; margin-bottom: 0.15rem;">' + nguonTag + '</div>' +
+          '<div style="font-size: 0.75rem; color: #334155; font-weight: 600;">' + (item.don_vi || 'Chưa cập nhật') + '</div>' +
+        '</td>' +
+        '<td>' +
+          '<div style="font-weight: 800; color: var(--brand-primary);">' + (item.ma_lop || '') + '</div>' +
+          '<div style="font-size: 0.73rem; color: #64748B; line-height: 1.25;" title="' + fullProg + '">' + 
+            (fullProg.length > 55 ? fullProg.slice(0, 52) + '...' : fullProg) + 
+          '</div>' +
+        '</td>' +
+        '<td style="text-align: center;">' +
+          fmtBadge +
+        '</td>' +
+        '<td style="text-align: center; font-size: 0.74rem;">' +
+          '<div>' + (item.ngay_bd || '—') + '</div>' +
+          (item.cbql ? '<div style="font-size: 0.7rem; color: #64748B;">QL: ' + item.cbql + '</div>' : '') +
+        '</td>' +
+        '<td style="text-align: center; font-weight: 700;">' + (item.so_tiet || '—') + '</td>' +
+        '<td style="text-align: center; font-weight: 700; color: #475569;">' + (item.tong_phieu || 0) + '</td>' +
+        '<td style="text-align: center;">' + scoreBadge(item.diem_ktcm) + '</td>' +
+        '<td style="text-align: center;">' + scoreBadge(item.diem_knsp) + '</td>' +
+        '<td style="text-align: center;">' + scoreBadge(item.diem_tdtp) + '</td>' +
+        '<td style="text-align: center;">' + scoreBadge(item.diem_tb) + '</td>' +
+        '<td style="text-align: center;" onclick="event.stopPropagation(); window.openGvModalById(' + item.id + ');">' +
+          '<button type="button" class="btn btn-sm btn-outline-primary" style="padding: 0.2rem 0.55rem; font-size: 0.75rem; font-weight: 700; border-radius: 4px; cursor: pointer;">' +
+            '<i class="fa-solid fa-eye"></i> Xem' +
+          '</button>' +
+        '</td>' +
+      '</tr>';
+    }).join('');
+
+    tbody.innerHTML = html;
+  }
+
+  // Detail Modal Handlers
+  window.openGvModalById = function(id) {
+    if (!id) return;
+    const item = allGvItems.find(x => x.id === Number(id));
+    if (!item) return;
+
+    const modal = document.getElementById('gvDetailModal');
+    if (!modal) return;
+
+    // Set Header
+    const elemCode = document.getElementById('modalGvClassCode');
+    const elemName = document.getElementById('modalGvLecturerName');
+    if (elemCode) elemCode.textContent = item.ma_lop;
+    if (elemName) {
+      const degree = item.hoc_ham_hoc_vi ? '(' + item.hoc_ham_hoc_vi + ') ' : '';
+      elemName.textContent = degree + item.ten_gv;
+    }
+
+    // Set Info Grid
+    const infoGrid = document.getElementById('modalGvInfoGrid');
+    if (infoGrid) {
+      infoGrid.innerHTML = 
+        '<div class="modal-item">' +
+          '<label><i class="fa-solid fa-user-tie"></i> Giảng viên</label>' +
+          '<span style="font-weight: 800; color: #1E293B;">' + item.ten_gv + '</span>' +
+        '</div>' +
+        '<div class="modal-item">' +
+          '<label><i class="fa-solid fa-building-columns"></i> Đơn vị công tác / Đối tác</label>' +
+          '<span>' + (item.don_vi || 'Chưa cập nhật') + ' (' + item.nguon_gv + ')</span>' +
+        '</div>' +
+        '<div class="modal-item full-width">' +
+          '<label><i class="fa-solid fa-book-open"></i> Chương trình đào tạo</label>' +
+          '<span style="font-weight: 700; color: var(--brand-primary);">' + item.ten_ct_full + '</span>' +
+        '</div>' +
+        '<div class="modal-item">' +
+          '<label><i class="fa-solid fa-shapes"></i> Hình thức đào tạo</label>' +
+          '<span>' + item.hinh_thuc_hoc + '</span>' +
+        '</div>' +
+        '<div class="modal-item">' +
+          '<label><i class="fa-regular fa-calendar-days"></i> Thời gian tổ chức</label>' +
+          '<span>' + item.ngay_bd + (item.ngay_kt ? ' — ' + item.ngay_kt : '') + '</span>' +
+        '</div>' +
+        '<div class="modal-item">' +
+          '<label><i class="fa-solid fa-clock"></i> Số tiết giảng dạy</label>' +
+          '<span style="font-weight: 800; color: #0284C7;">' + (item.so_tiet || 0) + ' tiết</span>' +
+        '</div>' +
+        '<div class="modal-item">' +
+          '<label><i class="fa-solid fa-square-poll-vertical"></i> Tổng phiếu khảo sát</label>' +
+          '<span style="font-weight: 800; color: #0F5132;">' + (item.tong_phieu || 0) + ' phiếu hợp lệ</span>' +
+        '</div>' +
+        (item.cbql ? 
+          '<div class="modal-item">' +
+            '<label><i class="fa-solid fa-user-shield"></i> Cán bộ quản lý</label>' +
+            '<span>' + item.cbql + '</span>' +
+          '</div>' : '') +
+        (item.noi_dung_giang ? 
+          '<div class="modal-item full-width">' +
+            '<label><i class="fa-solid fa-graduation-cap"></i> Nội dung / Chuyên đề giảng dạy</label>' +
+            '<span style="white-space: pre-line; font-size: 0.82rem; line-height: 1.5; color: #334155;">' + item.noi_dung_giang + '</span>' +
+          '</div>' : '');
+    }
+
+    // Set Criteria Breakdown
+    const critContent = document.getElementById('modalGvCriteriaContent');
+    if (critContent) {
+      const renderCritBox = (title, icon, color, c5, c4, c3, c2, c1, score, posRate, totVotes) => {
+        const p5 = totVotes ? ((c5 / totVotes) * 100).toFixed(1) : '0.0';
+        const p4 = totVotes ? ((c4 / totVotes) * 100).toFixed(1) : '0.0';
+        const p3 = totVotes ? ((c3 / totVotes) * 100).toFixed(1) : '0.0';
+        const p2 = totVotes ? ((c2 / totVotes) * 100).toFixed(1) : '0.0';
+        const p1 = totVotes ? ((c1 / totVotes) * 100).toFixed(1) : '0.0';
+
+        return '<div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 1rem;">' +
+          '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">' +
+            '<div style="display: flex; align-items: center; gap: 0.5rem;">' +
+              '<i class="' + icon + '" style="color: ' + color + '; font-size: 1.1rem;"></i>' +
+              '<strong style="font-size: 0.95rem; color: #1E293B;">' + title + '</strong>' +
+            '</div>' +
+            '<div style="display: flex; align-items: center; gap: 0.75rem;">' +
+              '<span style="font-size: 0.8rem; font-weight: 700; color: #0F5132; background: #ECFDF5; padding: 2px 8px; border-radius: 4px;">Tích cực: ' + posRate + '%</span>' +
+              '<span style="font-size: 1.1rem; font-weight: 800; color: ' + color + ';">' + (score ? score.toFixed(2) : '0.00') + ' <span style="font-size: 0.75rem; font-weight: 600; color: #64748B;">/ 5.0</span></span>' +
+            '</div>' +
+          '</div>' +
+          // 5-level stacked bar visual
+          '<div style="height: 14px; display: flex; border-radius: 4px; overflow: hidden; background: #E2E8F0; margin-bottom: 0.75rem;">' +
+            '<div style="width: ' + p5 + '%; background: #0F5132;" title="Xuất sắc: ' + c5 + ' (' + p5 + '%)"></div>' +
+            '<div style="width: ' + p4 + '%; background: #22C55E;" title="Tốt: ' + c4 + ' (' + p4 + '%)"></div>' +
+            '<div style="width: ' + p3 + '%; background: #EAB308;" title="Khá: ' + c3 + ' (' + p3 + '%)"></div>' +
+            '<div style="width: ' + p2 + '%; background: #F97316;" title="Bình thường: ' + c2 + ' (' + p2 + '%)"></div>' +
+            '<div style="width: ' + p1 + '%; background: #EF4444;" title="Hạn chế: ' + c1 + ' (' + p1 + '%)"></div>' +
+          '</div>' +
+          // 5 stats pill row
+          '<div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.5rem; text-align: center; font-size: 0.75rem;">' +
+            '<div style="background: white; border: 1px solid #E2E8F0; padding: 4px; border-radius: 4px;">' +
+              '<div style="color: #0F5132; font-weight: 700;">5 - Xuất sắc</div>' +
+              '<div style="font-weight: 800;">' + c5 + ' <span style="font-size: 0.68rem; font-weight: 600; color: #64748B;">(' + p5 + '%)</span></div>' +
+            '</div>' +
+            '<div style="background: white; border: 1px solid #E2E8F0; padding: 4px; border-radius: 4px;">' +
+              '<div style="color: #22C55E; font-weight: 700;">4 - Tốt</div>' +
+              '<div style="font-weight: 800;">' + c4 + ' <span style="font-size: 0.68rem; font-weight: 600; color: #64748B;">(' + p4 + '%)</span></div>' +
+            '</div>' +
+            '<div style="background: white; border: 1px solid #E2E8F0; padding: 4px; border-radius: 4px;">' +
+              '<div style="color: #EAB308; font-weight: 700;">3 - Khá</div>' +
+              '<div style="font-weight: 800;">' + c3 + ' <span style="font-size: 0.68rem; font-weight: 600; color: #64748B;">(' + p3 + '%)</span></div>' +
+            '</div>' +
+            '<div style="background: white; border: 1px solid #E2E8F0; padding: 4px; border-radius: 4px;">' +
+              '<div style="color: #F97316; font-weight: 700;">2 - Bình thường</div>' +
+              '<div style="font-weight: 800;">' + c2 + ' <span style="font-size: 0.68rem; font-weight: 600; color: #64748B;">(' + p2 + '%)</span></div>' +
+            '</div>' +
+            '<div style="background: white; border: 1px solid #E2E8F0; padding: 4px; border-radius: 4px;">' +
+              '<div style="color: #EF4444; font-weight: 700;">1 - Hạn chế</div>' +
+              '<div style="font-weight: 800;">' + c1 + ' <span style="font-size: 0.68rem; font-weight: 600; color: #64748B;">(' + p1 + '%)</span></div>' +
+            '</div>' +
+          '</div>' +
+        '</div>';
+      };
+
+      critContent.innerHTML = 
+        renderCritBox('Tiêu chí 1: Kiến thức chuyên môn', 'fa-solid fa-graduation-cap', '#0F5132', item.c5_ktcm, item.c4_ktcm, item.c3_ktcm, item.c2_ktcm, item.c1_ktcm, item.diem_ktcm, item.ty_le_tich_cuc_ktcm, item.tong_phieu_ktcm) +
+        renderCritBox('Tiêu chí 2: Kỹ năng sư phạm / Phương pháp giảng dạy', 'fa-solid fa-chalkboard-user', '#0284C7', item.c5_knsp, item.c4_knsp, item.c3_knsp, item.c2_knsp, item.c1_knsp, item.diem_knsp, item.ty_le_tich_cuc_knsp, item.tong_phieu_knsp) +
+        renderCritBox('Tiêu chí 3: Thái độ và tác phong chuyên nghiệp', 'fa-solid fa-user-check', '#D97706', item.c5_tdtp, item.c4_tdtp, item.c3_tdtp, item.c2_tdtp, item.c1_tdtp, item.diem_tdtp, item.ty_le_tich_cuc_tdtp, item.tong_phieu_tdtp);
+    }
+
+    modal.classList.add('active');
+  };
+
+  window.closeGvModal = function(e) {
+    if (e && e.preventDefault) e.preventDefault();
+    const modal = document.getElementById('gvDetailModal');
+    if (modal) modal.classList.remove('active');
+  };
+
+  window.closeGvModalOnOverlay = function(e) {
+    if (e.target && e.target.id === 'gvDetailModal') {
+      window.closeGvModal(e);
+    }
+  };
+
+  // Export functions
+  function exportGvToCsv() {
+    if (!filteredGvItems || filteredGvItems.length === 0) {
+      if (typeof showToast === 'function') showToast('Không có dữ liệu giảng viên để xuất CSV', 'warning');
+      return;
+    }
+
+    const headers = [
+      'STT', 'Mã lớp', 'Chương trình đào tạo', 'Hình thức học', 'Ngày bắt đầu', 'Ngày kết thúc',
+      'Giảng viên', 'Học hàm học vị', 'Nguồn GV', 'Đơn vị công tác', 'Chức danh', 'Số tiết',
+      'Tổng phiếu', 'Điểm KTCM', 'Điểm KNSP', 'Điểm TDTP', 'Điểm TB', 'Tỷ lệ tích cực (%)', 'Cán bộ QL'
+    ];
+
+    const rows = filteredGvItems.map((item, idx) => [
+      idx + 1,
+      '"' + (item.ma_lop || '').replace(/"/g, '""') + '"',
+      '"' + (item.ten_ct_full || item.chuong_trinh || '').replace(/"/g, '""') + '"',
+      '"' + (item.hinh_thuc_hoc || '').replace(/"/g, '""') + '"',
+      '"' + (item.ngay_bd || '') + '"',
+      '"' + (item.ngay_kt || '') + '"',
+      '"' + (item.ten_gv || '').replace(/"/g, '""') + '"',
+      '"' + (item.hoc_ham_hoc_vi || '').replace(/"/g, '""') + '"',
+      '"' + (item.nguon_gv || '').replace(/"/g, '""') + '"',
+      '"' + (item.don_vi || '').replace(/"/g, '""') + '"',
+      '"' + (item.chuc_danh || '').replace(/"/g, '""') + '"',
+      item.so_tiet || 0,
+      item.tong_phieu || 0,
+      item.diem_ktcm ? item.diem_ktcm.toFixed(2) : '',
+      item.diem_knsp ? item.diem_knsp.toFixed(2) : '',
+      item.diem_tdtp ? item.diem_tdtp.toFixed(2) : '',
+      item.diem_tb ? item.diem_tb.toFixed(2) : '',
+      item.ty_le_tich_cuc_tb ? item.ty_le_tich_cuc_tb.toFixed(1) : '',
+      '"' + (item.cbql || '').replace(/"/g, '""') + '"'
+    ]);
+
+    const csvContent = '\\uFEFF' + [headers.join(','), ...rows.map(r => r.join(','))].join('\\r\\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'Danh_sach_danh_gia_giang_vien_2026.csv';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    if (typeof showToast === 'function') {
+      showToast('Đã xuất thành công ' + filteredGvItems.length + ' bản ghi ra file CSV!', 'success');
+    }
+  }
+
+  function exportGvToExcel() {
+    if (!filteredGvItems || filteredGvItems.length === 0) {
+      if (typeof showToast === 'function') showToast('Không có dữ liệu giảng viên để xuất Excel', 'warning');
+      return;
+    }
+
+    let tableHtml = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">';
+    tableHtml += '<head><meta charset="utf-8"/><style>table{border-collapse:collapse;width:100%;font-family:Arial,sans-serif;font-size:12px;} th,td{border:1px solid #CBD5E1;padding:6px;text-align:left;} th{background:#8C1D40;color:#ffffff;font-weight:bold;text-align:center;} .center{text-align:center;} .num{text-align:right;} .badge{font-weight:bold;color:#0F5132;}</style></head><body>';
+    tableHtml += '<h2 style="color:#8C1D40;text-align:center;">BÁO CÁO KẾT QUẢ ĐÁNH GIÁ CHẤT LƯỢNG GIẢNG VIÊN</h2>';
+    tableHtml += '<p style="text-align:center;font-style:italic;color:#64748B;">Hệ thống Quản lý Đào tạo Agribank 2026 — Xuất ngày: ' + new Date().toLocaleDateString('vi-VN') + '</p>';
+    tableHtml += '<table><thead><tr>';
+    tableHtml += '<th>STT</th><th>Mã lớp</th><th>Chương trình đào tạo</th><th>Hình thức</th><th>Ngày BD</th><th>Giảng viên</th><th>Học vị</th><th>Nguồn</th><th>Đơn vị</th><th>Số tiết</th><th>Phiếu</th><th>KTCM</th><th>KNSP</th><th>TDTP</th><th>Điểm TB</th><th>Cán bộ QL</th>';
+    tableHtml += '</tr></thead><tbody>';
+
+    filteredGvItems.forEach((item, idx) => {
+      tableHtml += '<tr>' +
+        '<td class="center">' + (idx + 1) + '</td>' +
+        '<td>' + (item.ma_lop || '') + '</td>' +
+        '<td>' + (item.ten_ct_full || item.chuong_trinh || '') + '</td>' +
+        '<td class="center">' + (item.hinh_thuc_hoc || '') + '</td>' +
+        '<td class="center">' + (item.ngay_bd || '') + '</td>' +
+        '<td><b>' + (item.ten_gv || '') + '</b></td>' +
+        '<td class="center">' + (item.hoc_ham_hoc_vi || '') + '</td>' +
+        '<td class="center">' + (item.nguon_gv || '') + '</td>' +
+        '<td>' + (item.don_vi || '') + '</td>' +
+        '<td class="center">' + (item.so_tiet || 0) + '</td>' +
+        '<td class="center">' + (item.tong_phieu || 0) + '</td>' +
+        '<td class="center">' + (item.diem_ktcm ? item.diem_ktcm.toFixed(2) : '') + '</td>' +
+        '<td class="center">' + (item.diem_knsp ? item.diem_knsp.toFixed(2) : '') + '</td>' +
+        '<td class="center">' + (item.diem_tdtp ? item.diem_tdtp.toFixed(2) : '') + '</td>' +
+        '<td class="center badge">' + (item.diem_tb ? item.diem_tb.toFixed(2) : '') + '</td>' +
+        '<td>' + (item.cbql || '') + '</td>' +
+      '</tr>';
+    });
+
+    tableHtml += '</tbody></table></body></html>';
+
+    const blob = new Blob([tableHtml], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'Bao_cao_danh_gia_giang_vien_2026.xls';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    if (typeof showToast === 'function') {
+      showToast('Đã xuất thành công báo cáo Excel Đánh giá Giảng viên!', 'success');
+    }
+  }
+
+  // Live Sync for GV
+  async function syncGvGoogleSheetData(url, options = {}) {
+    if (!url) return;
+    try {
+      const response = await fetch(url, { cache: 'no-store', redirect: 'follow' });
+      if (!response.ok) return;
+      const csvText = await response.text();
+      if (!csvText || csvText.length < 50) return;
+
+      const parsedItems = parseGvCsvContent(csvText);
+      if (Array.isArray(parsedItems) && parsedItems.length > 0) {
+        allGvItems = parsedItems;
+        normalizeAllModuleData();
+        window.allGvItems = allGvItems;
+        try {
+          localStorage.setItem(STORAGE_KEY_GV_DATA, JSON.stringify(allGvItems));
+        } catch (e) {}
+
+        populateGvFilterDropdowns();
+        if (activeView === 'gv') applyGvFilters();
+
+        if (!options.silent && typeof showToast === 'function') {
+          showToast('Đã đồng bộ ' + allGvItems.length + ' bản ghi Đánh giá Giảng viên từ Google Sheets!', 'success');
+        }
+      }
+    } catch (e) {
+      console.warn('Sync GV Sheet error:', e);
+    }
+  }
+
+  function parseGvCsvContent(csvText) {
+    if (!csvText || csvText.trim().startsWith('<')) return null;
+    const rows = parseCsvToRows(csvText);
+    if (!rows || rows.length < 2) return null;
+
+    const headerRow = rows[0].map(h => (h || '').trim().toLowerCase());
+    if (!headerRow.some(h => h.includes('giảng viên')) || !headerRow.some(h => h.includes('mã lớp'))) {
+      return null;
+    }
+
+    const validRows = rows.slice(1).filter(r => r[1] && r[1].trim().length > 0 && r[12] && r[12].trim().length > 0);
+    if (validRows.length === 0) return null;
+
+    // Check class formats
+    const classFormats = new Map();
+    validRows.forEach(r => {
+      const ml = (r[1] || '').trim();
+      const fmt = (r[2] || '').trim();
+      if (!classFormats.has(ml)) classFormats.set(ml, new Set());
+      if (fmt) classFormats.get(ml).add(fmt);
+    });
+
+    const items = [];
+    validRows.forEach((r, idx) => {
+      const chuongTrinh = (r[0] || '').trim();
+      const maLop = (r[1] || '').trim();
+      let hinhThucHoc = (r[2] || '').trim();
+      const ngayBd = (r[3] || '').trim();
+      const ngayKt = (r[4] || '').trim();
+      const maGv = (r[5] || '').trim();
+      const nguonGv = (r[6] || '').trim() || 'Mời ngoài';
+      const doiTuongGv = (r[7] || '').trim();
+      const donVi = (r[8] || '').trim();
+      const chucDanh = (r[9] || '').trim();
+      const phongBan = (r[10] || '').trim();
+      const hocHamHocVi = (r[11] || '').trim();
+      const tenGv = (r[12] || '').trim();
+      const noiDungGiang = (r[13] || '').trim();
+      const soTiet = Number(r[14]) || 0;
+
+      const formatsForClass = classFormats.get(maLop);
+      if (formatsForClass && formatsForClass.has('Trực tiếp') && formatsForClass.has('Trực tuyến') && hinhThucHoc === 'Trực tuyến') {
+        hinhThucHoc = 'Trực tiếp kết hợp Trực tuyến';
+      }
+
+      // KTCM
+      const c5_ktcm = Number(r[15]) || 0;
+      const c4_ktcm = Number(r[16]) || 0;
+      const c3_ktcm = Number(r[17]) || 0;
+      const c2_ktcm = Number(r[18]) || 0;
+      const c1_ktcm = Number(r[19]) || 0;
+      const tong_phieu_ktcm = c5_ktcm + c4_ktcm + c3_ktcm + c2_ktcm + c1_ktcm;
+      const diem_ktcm = tong_phieu_ktcm > 0 ? (5 * c5_ktcm + 4 * c4_ktcm + 3 * c3_ktcm + 2 * c2_ktcm + 1 * c1_ktcm) / tong_phieu_ktcm : 0;
+      const ty_le_tich_cuc_ktcm = tong_phieu_ktcm > 0 ? ((c5_ktcm + c4_ktcm) / tong_phieu_ktcm) * 100 : 0;
+
+      // KNSP
+      const c5_knsp = Number(r[20]) || 0;
+      const c4_knsp = Number(r[21]) || 0;
+      const c3_knsp = Number(r[22]) || 0;
+      const c2_knsp = Number(r[23]) || 0;
+      const c1_knsp = Number(r[24]) || 0;
+      const tong_phieu_knsp = c5_knsp + c4_knsp + c3_knsp + c2_knsp + c1_knsp;
+      const diem_knsp = tong_phieu_knsp > 0 ? (5 * c5_knsp + 4 * c4_knsp + 3 * c3_knsp + 2 * c2_knsp + 1 * c1_knsp) / tong_phieu_knsp : 0;
+      const ty_le_tich_cuc_knsp = tong_phieu_knsp > 0 ? ((c5_knsp + c4_knsp) / tong_phieu_knsp) * 100 : 0;
+
+      // TDTP
+      const c5_tdtp = Number(r[25]) || 0;
+      const c4_tdtp = Number(r[26]) || 0;
+      const c3_tdtp = Number(r[27]) || 0;
+      const c2_tdtp = Number(r[28]) || 0;
+      const c1_tdtp = Number(r[29]) || 0;
+      const tong_phieu_tdtp = c5_tdtp + c4_tdtp + c3_tdtp + c2_tdtp + c1_tdtp;
+      const diem_tdtp = tong_phieu_tdtp > 0 ? (5 * c5_tdtp + 4 * c4_tdtp + 3 * c3_tdtp + 2 * c2_tdtp + 1 * c1_tdtp) / tong_phieu_tdtp : 0;
+      const ty_le_tich_cuc_tdtp = tong_phieu_tdtp > 0 ? ((c5_tdtp + c4_tdtp) / tong_phieu_tdtp) * 100 : 0;
+
+      const cbql = (r[30] || '').trim();
+
+      const tong_phieu = Math.max(tong_phieu_ktcm, tong_phieu_knsp, tong_phieu_tdtp);
+      let diem_tb = 0;
+      let validCritCount = 0;
+      if (tong_phieu_ktcm > 0) { diem_tb += diem_ktcm; validCritCount++; }
+      if (tong_phieu_knsp > 0) { diem_tb += diem_knsp; validCritCount++; }
+      if (tong_phieu_tdtp > 0) { diem_tb += diem_tdtp; validCritCount++; }
+      diem_tb = validCritCount > 0 ? diem_tb / validCritCount : 0;
+
+      let ty_le_tich_cuc_tb = validCritCount > 0 ? (ty_le_tich_cuc_ktcm + ty_le_tich_cuc_knsp + ty_le_tich_cuc_tdtp) / validCritCount : 0;
+
+      let tenCtFull = chuongTrinh;
+      if (typeof allNddtItems !== 'undefined') {
+        const f = allNddtItems.find(x => x.ma_lop === maLop || x.chuong_trinh === chuongTrinh);
+        if (f && f.ten_ct_full && f.ten_ct_full !== f.chuong_trinh) tenCtFull = f.ten_ct_full;
+      }
+      if (tenCtFull === chuongTrinh && typeof allPphtdtItems !== 'undefined') {
+        const f = allPphtdtItems.find(x => x.ma_lop === maLop || x.chuong_trinh === chuongTrinh);
+        if (f && f.ten_ct_full && f.ten_ct_full !== f.chuong_trinh) tenCtFull = f.ten_ct_full;
+      }
+      if (tenCtFull === chuongTrinh && typeof RAW_GV_DATA !== 'undefined') {
+        const f = RAW_GV_DATA.find(x => x.ma_lop === maLop || x.chuong_trinh === chuongTrinh);
+        if (f && f.ten_ct_full && f.ten_ct_full !== f.chuong_trinh) tenCtFull = f.ten_ct_full;
+      }
+
+      items.push({
+        id: idx + 1,
+        chuong_trinh: chuongTrinh,
+        ten_ct_full: tenCtFull,
+        ma_lop: maLop,
+        hinh_thuc_hoc: hinhThucHoc,
+        ngay_bd: ngayBd,
+        ngay_kt: ngayKt,
+        ma_gv: maGv,
+        nguon_gv: nguonGv,
+        doi_tuong_gv: doiTuongGv,
+        don_vi: donVi,
+        chuc_danh: chucDanh,
+        phong_ban: phongBan,
+        hoc_ham_hoc_vi: hocHamHocVi,
+        ten_gv: tenGv,
+        noi_dung_giang: noiDungGiang,
+        so_tiet: soTiet,
+        c5_ktcm, c4_ktcm, c3_ktcm, c2_ktcm, c1_ktcm, tong_phieu_ktcm,
+        diem_ktcm: Number(diem_ktcm.toFixed(2)),
+        ty_le_tich_cuc_ktcm: Number(ty_le_tich_cuc_ktcm.toFixed(1)),
+        c5_knsp, c4_knsp, c3_knsp, c2_knsp, c1_knsp, tong_phieu_knsp,
+        diem_knsp: Number(diem_knsp.toFixed(2)),
+        ty_le_tich_cuc_knsp: Number(ty_le_tich_cuc_knsp.toFixed(1)),
+        c5_tdtp, c4_tdtp, c3_tdtp, c2_tdtp, c1_tdtp, tong_phieu_tdtp,
+        diem_tdtp: Number(diem_tdtp.toFixed(2)),
+        ty_le_tich_cuc_tdtp: Number(ty_le_tich_cuc_tdtp.toFixed(1)),
+        tong_phieu,
+        diem_tb: Number(diem_tb.toFixed(2)),
+        ty_le_tich_cuc_tb: Number(ty_le_tich_cuc_tb.toFixed(1)),
+        cbql
+      });
+    });
+
+    return items;
+  }
+  // End of GV Module
 
 
   function closeSheetUrlModal() {
