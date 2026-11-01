@@ -510,6 +510,28 @@ document.addEventListener('DOMContentLoaded', () => {
     comparison: null
   };
 
+  // DGC (Đánh giá chung) Module State
+  let allDgcItems = [];
+  let filteredDgcItems = [];
+  let dgcCurrentSort = { column: 'ngay_bd', dir: 'desc' };
+  let dgcCompareMode = 'class'; // 'class' | 'program'
+  let dgcRankMetric = 'avg'; // 'avg' | 'kt' | 'kn' | 'votes'
+  let dgcTopLimit = '15'; // '10' | '15' | '20' | '30' | 'all'
+  let dgcState = {
+    preset: 'all',
+    startDate: '',
+    endDate: '',
+    program: '',
+    format: '',
+    cbql: '',
+    ratingLevel: '',
+    searchQuery: ''
+  };
+  let dgcCharts = {
+    stackedBar: null,
+    comparison: null
+  };
+
   // Securely obfuscated endpoints (Direct Google Sheet CSV Exports with exact gid):
   const _EP_CLASS_DIRECT = 'aHR0cHM6Ly9kb2NzLmdvb2dsZS5jb20vc3ByZWFkc2hlZXRzL2QvMVBPdnYtYlZaTXZLeVhpaS0zUnhiOVdBWTY3czkzeEF3eER3Q19wZUEwMW8vZXhwb3J0P2Zvcm1hdD1jc3YmZ2lkPTA=';
   const _EP_NDDT = 'aHR0cHM6Ly9kb2NzLmdvb2dsZS5jb20vc3ByZWFkc2hlZXRzL2QvMWtMbVM1YzdNdU5aWUhFN19BOUdSV3dKZ3hMNVowNWstck1KbC1CczBUZkUvZXhwb3J0P2Zvcm1hdD1jc3YmZ2lkPTA=';
@@ -525,6 +547,22 @@ document.addEventListener('DOMContentLoaded', () => {
   const _EP_CSVC = _EP_CSVC_DIRECT;
   const STORAGE_KEY_CSVC_URL = 'dashboard_google_sheet_csvc_url_v3';
   const STORAGE_KEY_CSVC_DATA = 'dashboard_synced_csvc_data_v3';
+  const _EP_DGC_DIRECT = 'aHR0cHM6Ly9kb2NzLmdvb2dsZS5jb20vc3ByZWFkc2hlZXRzL2QvMWtMbVM1YzdNdU5aWUhFN19BOUdSV3dKZ3hMNVowNWstck1KbC1CczBUZkUvZXhwb3J0P2Zvcm1hdD1jc3YmZ2lkPTE5NDY4NjY2Ng==';
+  const _EP_DGC = _EP_DGC_DIRECT;
+  const STORAGE_KEY_DGC_URL = 'dashboard_google_sheet_dgc_url_v1';
+  const STORAGE_KEY_DGC_DATA = 'dashboard_synced_dgc_data_v1';
+
+  function getDefaultDgcUrl() {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY_DGC_URL);
+      if (stored && stored.includes('1kLmS5c7MuNZYHE7') && stored.includes('194686666')) {
+        return stored;
+      }
+      return safeDecode(_EP_DGC);
+    } catch (e) {
+      return safeDecode(_EP_DGC);
+    }
+  }
 
   function getDefaultCsvcUrl() {
     try {
@@ -588,8 +626,9 @@ document.addEventListener('DOMContentLoaded', () => {
   function normalizeAllModuleData() {
     const progMap = new Map(Object.entries(MANUAL_PROGRAM_NAMES));
     const classFullMap = new Map();
+    const classInfoMap = new Map();
 
-    // 1. Collect program full names from all available sources
+    // 1. Collect program full names and class metadata from all available sources
     if (Array.isArray(allClasses)) {
       allClasses.forEach(c => {
         const mct = (c.ma_ct || '').trim();
@@ -597,6 +636,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const ml = (c.ma_lop || '').trim().toLowerCase();
         if (mct && tct && tct !== mct) progMap.set(mct, tct);
         if (ml && tct) classFullMap.set(ml, tct);
+        if (ml) {
+          classInfoMap.set(ml, {
+            cbql: c.can_bo_ql || c.cbql || '',
+            dia_diem: c.dia_diem || '',
+            hv_thuc_te: Number(c.hv_thuc_te) || 0,
+            ten_ct_full: tct
+          });
+        }
       });
     }
 
@@ -609,15 +656,25 @@ document.addEventListener('DOMContentLoaded', () => {
         const ml = (item.ma_lop || '').trim().toLowerCase();
         if (ct && full && full !== ct) progMap.set(ct, full);
         if (ml && full && full !== ct) classFullMap.set(ml, full);
+        if (ml) {
+          const ex = classInfoMap.get(ml) || {};
+          if (!ex.cbql && item.cbql) ex.cbql = item.cbql;
+          if (!ex.dia_diem && item.dia_diem) ex.dia_diem = item.dia_diem;
+          if (!ex.hv_thuc_te && item.hv_thuc_te) ex.hv_thuc_te = Number(item.hv_thuc_te) || 0;
+          if (!ex.ten_ct_full && full) ex.ten_ct_full = full;
+          classInfoMap.set(ml, ex);
+        }
       });
     };
 
     if (typeof RAW_GV_DATA !== 'undefined') collectFromEvalList(RAW_GV_DATA);
     if (typeof RAW_PPHTDT_DATA !== 'undefined') collectFromEvalList(RAW_PPHTDT_DATA);
     if (typeof RAW_CSVC_DATA !== 'undefined') collectFromEvalList(RAW_CSVC_DATA);
+    if (typeof RAW_DGC_DATA !== 'undefined') collectFromEvalList(RAW_DGC_DATA);
     collectFromEvalList(allGvItems);
     collectFromEvalList(allPphtdtItems);
     collectFromEvalList(allCsvcItems);
+    collectFromEvalList(allDgcItems);
     collectFromEvalList(nddtNewItems);
     collectFromEvalList(nddtOldItems);
 
@@ -641,6 +698,7 @@ document.addEventListener('DOMContentLoaded', () => {
     recordDirectPresence(allPphtdtItems);
     recordDirectPresence(allCsvcItems);
     recordDirectPresence(allGvItems);
+    recordDirectPresence(allDgcItems);
 
     const normalizeFormatVal = (rawFmt, maLop) => {
       const f = (rawFmt || 'Trực tiếp').trim();
@@ -692,6 +750,39 @@ document.addEventListener('DOMContentLoaded', () => {
           item.diem_tb = Number(item.diem_tb) || 0;
           item.tong_phieu = Number(item.tong_phieu) || 0;
           item.so_tiet = Number(item.so_tiet) || 0;
+        } else if (type === 'dgc') {
+          if (!item.ngay_bd && item.ngay_bd_raw) {
+            item.ngay_bd = parseDateStrISO(item.ngay_bd_raw);
+          }
+          if (!item.ngay_kt && item.ngay_kt_raw) {
+            item.ngay_kt = parseDateStrISO(item.ngay_kt_raw);
+          }
+          item.diem_kt = Number(item.diem_kt) || 0;
+          item.diem_kn = Number(item.diem_kn) || 0;
+          item.diem_tb = Number(item.diem_tb) || 0;
+          item.tong_phieu_kt = Number(item.tong_phieu_kt) || 0;
+          item.tong_phieu_kn = Number(item.tong_phieu_kn) || 0;
+          item.tong_phieu = Number(item.tong_phieu) || Math.max(item.tong_phieu_kt, item.tong_phieu_kn) || 0;
+          item.ty_le_tich_cuc_kt = Number(item.ty_le_tich_cuc_kt) || 0;
+          item.ty_le_tich_cuc_kn = Number(item.ty_le_tich_cuc_kn) || 0;
+          item.ty_le_tich_cuc_tb = Number(item.ty_le_tich_cuc_tb) || 0;
+          item.c5_kt = Number(item.c5_kt) || 0;
+          item.c4_kt = Number(item.c4_kt) || 0;
+          item.c3_kt = Number(item.c3_kt) || 0;
+          item.c2_kt = Number(item.c2_kt) || 0;
+          item.c1_kt = Number(item.c1_kt) || 0;
+          item.c5_kn = Number(item.c5_kn) || 0;
+          item.c4_kn = Number(item.c4_kn) || 0;
+          item.c3_kn = Number(item.c3_kn) || 0;
+          item.c2_kn = Number(item.c2_kn) || 0;
+          item.c1_kn = Number(item.c1_kn) || 0;
+
+          const info = classInfoMap.get(mlLower);
+          if (info) {
+            if (!item.cbql && info.cbql) item.cbql = info.cbql;
+            if (!item.dia_diem && info.dia_diem) item.dia_diem = info.dia_diem;
+            if (!item.hv_thuc_te && info.hv_thuc_te) item.hv_thuc_te = info.hv_thuc_te;
+          }
         } else {
           if (!item.ngay_bd && item.ngay_bd_raw) {
             item.ngay_bd = parseDateStrISO(item.ngay_bd_raw);
@@ -711,6 +802,7 @@ document.addEventListener('DOMContentLoaded', () => {
     normalizeList(allPphtdtItems, 'pphtdt');
     normalizeList(allCsvcItems, 'csvc');
     normalizeList(allGvItems, 'gv');
+    normalizeList(allDgcItems, 'dgc');
   }
 
   let isSyncing = false;
@@ -847,6 +939,23 @@ document.addEventListener('DOMContentLoaded', () => {
     allCsvcItems = loadedCsvcItems || [];
     window.allCsvcItems = allCsvcItems;
 
+    // Load DGC Data (Đánh giá chung)
+    let loadedDgcItems = null;
+    try {
+      const savedDgcStr = localStorage.getItem(STORAGE_KEY_DGC_DATA);
+      if (savedDgcStr) {
+        const parsed = JSON.parse(savedDgcStr);
+        if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].ma_lop && typeof parsed[0].diem_tb === 'number') {
+          loadedDgcItems = parsed;
+        }
+      }
+    } catch (e) {}
+    if (!loadedDgcItems && typeof RAW_DGC_DATA !== 'undefined' && Array.isArray(RAW_DGC_DATA)) {
+      loadedDgcItems = RAW_DGC_DATA;
+    }
+    allDgcItems = loadedDgcItems || [];
+    window.allDgcItems = allDgcItems;
+
     // Normalize all datasets (ten_ct_full, hybrid hinh_thuc_hoc, ISO dates, numeric fields)
     normalizeAllModuleData();
     updateBookmarkBadges();
@@ -854,12 +963,14 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initialize Tab Navigation FIRST so tabs always work regardless of module state
     initTabNavigation();
 
-    // Initialize all 5 modules with isolated error boundaries
+    // Initialize all 7 modules with isolated error boundaries
     try { setupDashboard(); } catch (e) { console.error("Error in setupDashboard:", e); }
     try { setupNddtModule(); } catch (e) { console.error("Error in setupNddtModule:", e); }
     try { setupPphtdtModule(); } catch (e) { console.error("Error in setupPphtdtModule:", e); }
     try { setupCsvcModule(); } catch (e) { console.error("Error in setupCsvcModule:", e); }
     try { setupGvModule(); } catch (e) { console.error("Error in setupGvModule:", e); }
+    try { setupDgcModule(); } catch (e) { console.error("Error in setupDgcModule:", e); }
+    try { setupGeneralReportModule(); } catch (e) { console.error("Error in setupGeneralReportModule:", e); }
 
     // Background sync from Google Sheets if online
     try {
@@ -869,6 +980,7 @@ document.addEventListener('DOMContentLoaded', () => {
       syncNddtOldGoogleSheetData(getDefaultNddtOldUrl(), { silent: true });
       syncPphtdtGoogleSheetData(getDefaultPphtdtUrl(), { silent: true });
       syncCsvcGoogleSheetData(getDefaultCsvcUrl(), { silent: true });
+      syncDgcGoogleSheetData(getDefaultDgcUrl(), { silent: true });
     } catch (e) {
       console.warn("Background sheet sync skipped:", e);
     }
@@ -921,6 +1033,15 @@ document.addEventListener('DOMContentLoaded', () => {
       requestAnimationFrame(() => {
         try { if (typeof renderGvCharts === 'function') renderGvCharts(); } catch (e) { console.error("renderGvCharts error:", e); }
       });
+    } else if (targetId === 'screenDgc') {
+      activeView = 'dgc';
+      try { if (typeof applyDgcFilters === 'function') applyDgcFilters(); } catch (e) { console.error("applyDgcFilters error:", e); }
+      requestAnimationFrame(() => {
+        try { if (typeof renderDgcCharts === 'function') renderDgcCharts(); } catch (e) { console.error("renderDgcCharts error:", e); }
+      });
+    } else if (targetId === 'screenGeneralReport') {
+      activeView = 'report';
+      try { if (typeof setupGeneralReportModule === 'function') setupGeneralReportModule(); } catch (e) { console.error("setupGeneralReportModule error:", e); }
     }
   }
   window.switchScreen = switchScreen;
@@ -4686,7 +4807,8 @@ document.addEventListener('DOMContentLoaded', () => {
             pointBackgroundColor: '#0F5132',
             tension: 0.25,
             spanGaps: true,
-            order: 1
+            order: 1,
+            clip: false
           },
           {
             type: 'line',
@@ -4701,7 +4823,8 @@ document.addEventListener('DOMContentLoaded', () => {
             pointBackgroundColor: '#8C1D40',
             tension: 0.25,
             spanGaps: true,
-            order: 2
+            order: 2,
+            clip: false
           },
           {
             type: 'line',
@@ -4717,13 +4840,22 @@ document.addEventListener('DOMContentLoaded', () => {
             borderDash: [4, 4],
             tension: 0.25,
             spanGaps: true,
-            order: 3
+            order: 3,
+            clip: false
           }
         ]
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        layout: {
+          padding: {
+            top: 18,
+            right: 18,
+            left: 6,
+            bottom: 6
+          }
+        },
         interaction: {
           mode: 'index',
           intersect: false
@@ -4733,7 +4865,7 @@ document.addEventListener('DOMContentLoaded', () => {
             type: 'linear',
             position: 'left',
             min: yMin,
-            max: 4.0,
+            max: 4.15,
             title: {
               display: true,
               text: 'Điểm đánh giá (thang 4.0)',
@@ -4742,9 +4874,18 @@ document.addEventListener('DOMContentLoaded', () => {
             },
             ticks: {
               stepSize: 0.2,
+              callback: function(v) {
+                if (v > 4.0) return '';
+                return v.toFixed(1).replace('.', ',');
+              },
               font: { family: 'Plus Jakarta Sans', weight: '600', size: 10.5 }
             },
-            grid: { color: '#E2E8F0' }
+            grid: {
+              color: function(context) {
+                if (context.tick && context.tick.value > 4.0) return 'transparent';
+                return '#E2E8F0';
+              }
+            }
           },
           yClasses: {
             type: 'linear',
@@ -6707,6 +6848,6044 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   // End of GV Module
 
+
+  // ==========================================
+  // DGC (ĐÁNH GIÁ CHUNG - CUỐI KHÓA) MODULE LOGIC
+  // ==========================================
+
+  function setupDgcModule() {
+    populateDgcFilterDropdowns();
+    attachDgcEventListeners();
+    applyDgcFilters();
+  }
+
+  function populateDgcFilterDropdowns() {
+    const progSelect = document.getElementById('filterDgcProgram');
+    const fmtSelect = document.getElementById('filterDgcFormat');
+    const cbqlSelect = document.getElementById('filterDgcCbql');
+
+    if (!progSelect || !fmtSelect || !cbqlSelect) return;
+
+    // Distinct Program list
+    const progMap = new Map();
+    allDgcItems.forEach(item => {
+      const code = item.chuong_trinh || '';
+      const full = item.ten_ct_full || code;
+      if (code && !progMap.has(code)) progMap.set(code, full);
+    });
+    const sortedProgs = Array.from(progMap.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+
+    // Distinct Formats
+    const formats = [...new Set(allDgcItems.map(c => c.hinh_thuc_hoc).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+
+    // Distinct CBQL
+    const cbqls = [...new Set(allDgcItems.map(c => c.cbql).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+
+    progSelect.innerHTML = '<option value="">-- Tất cả Chương trình (' + sortedProgs.length + ') --</option>' +
+      sortedProgs.map(([code, full]) => '<option value="' + code + '">' + code + ' - ' + (full.length > 45 ? full.slice(0, 42) + '...' : full) + '</option>').join('');
+
+    fmtSelect.innerHTML = '<option value="">-- Tất cả Hình thức (' + formats.length + ') --</option>' +
+      formats.map(f => '<option value="' + f + '">' + f + '</option>').join('');
+
+    cbqlSelect.innerHTML = '<option value="">-- Tất cả Cán bộ QL (' + cbqls.length + ') --</option>' +
+      cbqls.map(q => '<option value="' + q + '">' + q + '</option>').join('');
+  }
+
+  function attachDgcEventListeners() {
+    // 1. Preset Buttons
+    document.querySelectorAll('.dgc-preset-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.dgc-preset-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        dgcState.preset = btn.dataset.dgcPreset || 'all';
+        applyDgcFilters();
+      });
+    });
+
+    // 2. Dropdown Filters
+    const progSelect = document.getElementById('filterDgcProgram');
+    if (progSelect) {
+      progSelect.addEventListener('change', (e) => {
+        dgcState.program = e.target.value;
+        applyDgcFilters();
+      });
+    }
+
+    const fmtSelect = document.getElementById('filterDgcFormat');
+    if (fmtSelect) {
+      fmtSelect.addEventListener('change', (e) => {
+        dgcState.format = e.target.value;
+        applyDgcFilters();
+      });
+    }
+
+    const cbqlSelect = document.getElementById('filterDgcCbql');
+    if (cbqlSelect) {
+      cbqlSelect.addEventListener('change', (e) => {
+        dgcState.cbql = e.target.value;
+        applyDgcFilters();
+      });
+    }
+
+    const ratingSelect = document.getElementById('filterDgcRatingLevel');
+    if (ratingSelect) {
+      ratingSelect.addEventListener('change', (e) => {
+        dgcState.ratingLevel = e.target.value;
+        applyDgcFilters();
+      });
+    }
+
+    // 3. Search Query
+    const searchInput = document.getElementById('filterDgcSearch');
+    if (searchInput) {
+      searchInput.addEventListener('input', (e) => {
+        dgcState.searchQuery = e.target.value;
+        applyDgcFilters();
+      });
+    }
+
+    // 4. Reset Filter
+    const btnReset = document.getElementById('btnResetDgcFilter');
+    if (btnReset) {
+      btnReset.addEventListener('click', () => {
+        dgcState = {
+          preset: 'all',
+          startDate: '',
+          endDate: '',
+          program: '',
+          format: '',
+          cbql: '',
+          ratingLevel: '',
+          searchQuery: ''
+        };
+        // Reset button states
+        document.querySelectorAll('.dgc-preset-btn').forEach(b => b.classList.remove('active'));
+        const defaultPreset = document.querySelector('.dgc-preset-btn[data-dgc-preset="all"]');
+        if (defaultPreset) defaultPreset.classList.add('active');
+
+        if (progSelect) progSelect.value = '';
+        if (fmtSelect) fmtSelect.value = '';
+        if (cbqlSelect) cbqlSelect.value = '';
+        if (ratingSelect) ratingSelect.value = '';
+        if (searchInput) searchInput.value = '';
+
+        dgcCompareMode = 'class';
+        dgcRankMetric = 'avg';
+        dgcTopLimit = '15';
+        const selectDgcTopLimit = document.getElementById('selectDgcTopLimit');
+        if (selectDgcTopLimit) selectDgcTopLimit.value = '15';
+        updateDgcCompareButtons();
+        updateDgcRankButtons();
+
+        applyDgcFilters();
+        if (typeof showToast === 'function') {
+          showToast('Đã đặt lại toàn bộ bộ lọc Đánh giá chung', 'info');
+        }
+      });
+    }
+
+    // 5. Comparison Chart Toggles & Slicers
+    const btnToggleClass = document.getElementById('btnDgcToggleClass');
+    const btnToggleProgram = document.getElementById('btnDgcToggleProgram');
+    if (btnToggleClass && btnToggleProgram) {
+      btnToggleClass.addEventListener('click', () => {
+        dgcCompareMode = 'class';
+        updateDgcCompareButtons();
+        renderDgcComparisonChart();
+      });
+
+      btnToggleProgram.addEventListener('click', () => {
+        dgcCompareMode = 'program';
+        updateDgcCompareButtons();
+        renderDgcComparisonChart();
+      });
+    }
+
+    // Rank metric sub-slicers (Top Điểm TB, Top Điểm KT, Top Điểm KN, Top Số phiếu)
+    const btnDgcRankAvg = document.getElementById('btnDgcRankAvg');
+    const btnDgcRankKt = document.getElementById('btnDgcRankKt');
+    const btnDgcRankKn = document.getElementById('btnDgcRankKn');
+    const btnDgcRankVotes = document.getElementById('btnDgcRankVotes');
+    const selectDgcTopLimit = document.getElementById('selectDgcTopLimit');
+
+    if (btnDgcRankAvg) {
+      btnDgcRankAvg.addEventListener('click', () => {
+        dgcRankMetric = 'avg';
+        updateDgcRankButtons();
+        renderDgcComparisonChart();
+      });
+    }
+    if (btnDgcRankKt) {
+      btnDgcRankKt.addEventListener('click', () => {
+        dgcRankMetric = 'kt';
+        updateDgcRankButtons();
+        renderDgcComparisonChart();
+      });
+    }
+    if (btnDgcRankKn) {
+      btnDgcRankKn.addEventListener('click', () => {
+        dgcRankMetric = 'kn';
+        updateDgcRankButtons();
+        renderDgcComparisonChart();
+      });
+    }
+    if (btnDgcRankVotes) {
+      btnDgcRankVotes.addEventListener('click', () => {
+        dgcRankMetric = 'votes';
+        updateDgcRankButtons();
+        renderDgcComparisonChart();
+      });
+    }
+
+    if (selectDgcTopLimit) {
+      selectDgcTopLimit.addEventListener('change', (e) => {
+        dgcTopLimit = e.target.value;
+        renderDgcComparisonChart();
+      });
+    }
+
+    // 6. Table Sorting
+    document.querySelectorAll('#dgcClassesTable th[data-dgc-sort]').forEach(th => {
+      th.addEventListener('click', () => {
+        const col = th.dataset.dgcSort;
+        if (dgcCurrentSort.column === col) {
+          dgcCurrentSort.dir = dgcCurrentSort.dir === 'asc' ? 'desc' : 'asc';
+        } else {
+          dgcCurrentSort.column = col;
+          dgcCurrentSort.dir = 'desc';
+        }
+        applyDgcFilters();
+      });
+    });
+
+    // 7. Export Buttons
+    const btnExportCsv = document.getElementById('btnExportDgcCsv');
+    if (btnExportCsv) {
+      btnExportCsv.addEventListener('click', exportDgcToCsv);
+    }
+
+    const btnExportExcel = document.getElementById('btnExportDgcExcel');
+    if (btnExportExcel) {
+      btnExportExcel.addEventListener('click', exportDgcToExcel);
+    }
+
+    // 8. Google Sheet Sync Button
+    const btnSyncDgc = document.getElementById('btnSyncDgcGoogleSheet');
+    if (btnSyncDgc) {
+      btnSyncDgc.addEventListener('click', () => {
+        syncDgcGoogleSheetData(getDefaultDgcUrl());
+      });
+    }
+  }
+
+  function updateDgcCompareButtons() {
+    const btnClass = document.getElementById('btnDgcToggleClass');
+    const btnProg = document.getElementById('btnDgcToggleProgram');
+    if (!btnClass || !btnProg) return;
+
+    if (dgcCompareMode === 'class') {
+      btnClass.classList.add('active');
+      btnClass.style.background = 'var(--brand-primary)';
+      btnClass.style.color = 'white';
+      btnProg.classList.remove('active');
+      btnProg.style.background = 'transparent';
+      btnProg.style.color = '#475569';
+    } else {
+      btnProg.classList.add('active');
+      btnProg.style.background = 'var(--brand-primary)';
+      btnProg.style.color = 'white';
+      btnClass.classList.remove('active');
+      btnClass.style.background = 'transparent';
+      btnClass.style.color = '#475569';
+    }
+  }
+
+  function updateDgcRankButtons() {
+    const btns = [
+      { id: 'btnDgcRankAvg', val: 'avg' },
+      { id: 'btnDgcRankKt', val: 'kt' },
+      { id: 'btnDgcRankKn', val: 'kn' },
+      { id: 'btnDgcRankVotes', val: 'votes' }
+    ];
+    btns.forEach(b => {
+      const elem = document.getElementById(b.id);
+      if (elem) {
+        if (dgcRankMetric === b.val) {
+          elem.classList.add('active');
+          elem.style.background = 'var(--brand-primary)';
+          elem.style.color = 'white';
+        } else {
+          elem.classList.remove('active');
+          elem.style.background = 'transparent';
+          elem.style.color = '#475569';
+        }
+      }
+    });
+  }
+
+  function applyDgcFilters() {
+    let filtered = [...allDgcItems];
+
+    // 1. Time Preset Filter
+    if (dgcState.preset && dgcState.preset !== 'all') {
+      const today = getTodayGMT7Str();
+      filtered = filtered.filter(item => {
+        const dt = item.ngay_bd || (item.ngay_bd_raw ? parseDateStrISO(item.ngay_bd_raw) : '');
+        if (!dt) return true;
+        if (dgcState.preset === 'today') return dt === today;
+        if (dgcState.preset === 'thisWeek') {
+          const cur = new Date(today);
+          const day = cur.getDay() || 7;
+          const mon = new Date(cur); mon.setDate(cur.getDate() - day + 1);
+          const sun = new Date(cur); sun.setDate(cur.getDate() - day + 7);
+          const monStr = mon.toISOString().slice(0, 10);
+          const sunStr = sun.toISOString().slice(0, 10);
+          return dt >= monStr && dt <= sunStr;
+        }
+        if (dgcState.preset === 'thisMonth') {
+          return dt.slice(0, 7) === today.slice(0, 7);
+        }
+        if (dgcState.preset === 'q1') return dt >= '2026-01-01' && dt <= '2026-03-31';
+        if (dgcState.preset === 'q2') return dt >= '2026-04-01' && dt <= '2026-06-30';
+        if (dgcState.preset === 'q3') return dt >= '2026-07-01' && dt <= '2026-09-30';
+        if (dgcState.preset === 'q4') return dt >= '2026-10-01' && dt <= '2026-12-31';
+        if (dgcState.preset === 'thisYear' || dgcState.preset === '2026') return dt.startsWith('2026');
+        return true;
+      });
+    }
+
+    // 2. Program Filter
+    if (dgcState.program) {
+      filtered = filtered.filter(item => item.chuong_trinh === dgcState.program || item.ten_ct_full === dgcState.program);
+    }
+
+    // 3. Format Filter
+    if (dgcState.format) {
+      filtered = filtered.filter(item => item.hinh_thuc_hoc === dgcState.format);
+    }
+
+    // 4. CBQL Filter
+    if (dgcState.cbql) {
+      filtered = filtered.filter(item => item.cbql === dgcState.cbql);
+    }
+
+    // 5. Rating Level Filter (on diem_tb)
+    if (dgcState.ratingLevel) {
+      filtered = filtered.filter(item => {
+        const s = item.diem_tb || 0;
+        if (dgcState.ratingLevel === 'high') return s >= 4.5;
+        if (dgcState.ratingLevel === 'good') return s >= 4.0 && s < 4.5;
+        if (dgcState.ratingLevel === 'fair') return s >= 3.0 && s < 4.0;
+        if (dgcState.ratingLevel === 'warning') return s < 3.0;
+        return true;
+      });
+    }
+
+    // 6. Search Query Filter
+    if (dgcState.searchQuery && dgcState.searchQuery.trim()) {
+      const q = dgcState.searchQuery.trim().toLowerCase();
+      filtered = filtered.filter(item => {
+        return (item.ma_lop && item.ma_lop.toLowerCase().includes(q)) ||
+               (item.chuong_trinh && item.chuong_trinh.toLowerCase().includes(q)) ||
+               (item.ten_ct_full && item.ten_ct_full.toLowerCase().includes(q)) ||
+               (item.cbql && item.cbql.toLowerCase().includes(q)) ||
+               (item.dia_diem && item.dia_diem.toLowerCase().includes(q));
+      });
+    }
+
+    // 7. Sort
+    if (dgcCurrentSort.column) {
+      const col = dgcCurrentSort.column;
+      const isAsc = dgcCurrentSort.dir === 'asc';
+      filtered.sort((a, b) => {
+        let valA = a[col];
+        let valB = b[col];
+
+        if (typeof valA === 'string') valA = valA.toLowerCase();
+        if (typeof valB === 'string') valB = valB.toLowerCase();
+
+        if (valA === undefined || valA === null) valA = '';
+        if (valB === undefined || valB === null) valB = '';
+
+        if (valA < valB) return isAsc ? -1 : 1;
+        if (valA > valB) return isAsc ? 1 : -1;
+        return 0;
+      });
+    }
+
+    filteredDgcItems = filtered;
+
+    // Update Header Sort Icons
+    document.querySelectorAll('#dgcClassesTable th[data-dgc-sort]').forEach(th => {
+      const col = th.dataset.dgcSort;
+      const icon = th.querySelector('i');
+      if (icon) {
+        if (dgcCurrentSort.column === col) {
+          icon.className = dgcCurrentSort.dir === 'asc' ? 'fa-solid fa-sort-up' : 'fa-solid fa-sort-down';
+          th.style.color = 'var(--brand-primary)';
+        } else {
+          icon.className = 'fa-solid fa-sort';
+          th.style.color = '';
+        }
+      }
+    });
+
+    // Update UI components
+    updateDgcKPIs();
+    renderDgcCharts();
+    renderDgcTable();
+    updateDgcFormatStats();
+
+    // Summary counters
+    const countSummary = document.getElementById('dgcFilterCountSummary');
+    if (countSummary) {
+      countSummary.textContent = 'Hiển thị: ' + filteredDgcItems.length + '/' + allDgcItems.length + ' lớp';
+    }
+    const tableBadge = document.getElementById('dgcTableCountBadge');
+    if (tableBadge) {
+      tableBadge.textContent = filteredDgcItems.length + ' lớp';
+    }
+  }
+
+  function updateDgcKPIs() {
+    const totalClassesElem = document.getElementById('kpiDgcTotalClasses');
+    const totalVotesElem = document.getElementById('kpiDgcTotalVotes');
+    const partRateElem = document.getElementById('kpiDgcParticipationRate');
+    const partSubtextElem = document.getElementById('kpiDgcParticipationSubtext');
+    const scoreKtElem = document.getElementById('kpiDgcScoreKt');
+    const posRateKtBadge = document.getElementById('kpiDgcPosRateKtBadge');
+    const scoreKnElem = document.getElementById('kpiDgcScoreKn');
+    const posRateKnBadge = document.getElementById('kpiDgcPosRateKnBadge');
+    const avgScoreElem = document.getElementById('kpiDgcAvgScore');
+    const ratingBadge = document.getElementById('kpiDgcRatingBadge');
+
+    if (!totalClassesElem) return;
+
+    if (filteredDgcItems.length === 0) {
+      totalClassesElem.textContent = '0';
+      if (totalVotesElem) totalVotesElem.textContent = '0';
+      if (partRateElem) partRateElem.textContent = '0.0';
+      if (partSubtextElem) partSubtextElem.textContent = '0 phiếu / 0 HV thực tế';
+      if (scoreKtElem) scoreKtElem.textContent = '0.00';
+      if (posRateKtBadge) posRateKtBadge.textContent = 'Tích cực (Mức 4-5): 0.0%';
+      if (scoreKnElem) scoreKnElem.textContent = '0.00';
+      if (posRateKnBadge) posRateKnBadge.textContent = 'Tích cực (Mức 4-5): 0.0%';
+      if (avgScoreElem) avgScoreElem.textContent = '0.00';
+      if (ratingBadge) {
+        ratingBadge.textContent = 'Chưa có dữ liệu';
+        ratingBadge.style.color = '#64748B';
+      }
+      return;
+    }
+
+    // 1. Total Distinct Classes
+    const distinctClasses = new Set(filteredDgcItems.map(i => i.ma_lop)).size;
+    totalClassesElem.textContent = distinctClasses.toLocaleString('vi-VN');
+
+    // 2. Total Votes
+    const totalVotes = filteredDgcItems.reduce((acc, cur) => acc + (cur.tong_phieu || 0), 0);
+    if (totalVotesElem) totalVotesElem.textContent = totalVotes.toLocaleString('vi-VN');
+
+    // 3. Participation Rate vs HV thực tế
+    const totalHv = filteredDgcItems.reduce((acc, cur) => acc + (cur.hv_thuc_te || 0), 0);
+    if (partRateElem) {
+      if (totalHv > 0) {
+        const rate = (totalVotes / totalHv) * 100;
+        partRateElem.textContent = rate.toFixed(1);
+        if (partSubtextElem) {
+          partSubtextElem.textContent = totalVotes.toLocaleString('vi-VN') + ' phiếu / ' + totalHv.toLocaleString('vi-VN') + ' HV thực tế';
+        }
+      } else {
+        partRateElem.textContent = '100.0';
+        if (partSubtextElem) {
+          partSubtextElem.textContent = totalVotes.toLocaleString('vi-VN') + ' phiếu khảo sát';
+        }
+      }
+    }
+
+    // 4. Score KT (Knowledge improvement)
+    let sumScoreKt = 0;
+    let sumVotesKt = 0;
+    let sumPosKt = 0;
+    filteredDgcItems.forEach(item => {
+      const v = item.tong_phieu_kt || item.tong_phieu || 0;
+      if (v > 0) {
+        sumScoreKt += (item.diem_kt || 0) * v;
+        sumVotesKt += v;
+        sumPosKt += (item.c5_kt || 0) + (item.c4_kt || 0);
+      }
+    });
+    const avgScoreKt = sumVotesKt > 0 ? (sumScoreKt / sumVotesKt) : 0;
+    const posRateKt = sumVotesKt > 0 ? (sumPosKt / sumVotesKt) * 100 : 0;
+    if (scoreKtElem) scoreKtElem.textContent = avgScoreKt.toFixed(2);
+    if (posRateKtBadge) posRateKtBadge.textContent = 'Tích cực (Mức 4-5): ' + posRateKt.toFixed(1) + '%';
+
+    // 5. Score KN (Skill improvement)
+    let sumScoreKn = 0;
+    let sumVotesKn = 0;
+    let sumPosKn = 0;
+    filteredDgcItems.forEach(item => {
+      const v = item.tong_phieu_kn || item.tong_phieu || 0;
+      if (v > 0) {
+        sumScoreKn += (item.diem_kn || 0) * v;
+        sumVotesKn += v;
+        sumPosKn += (item.c5_kn || 0) + (item.c4_kn || 0);
+      }
+    });
+    const avgScoreKn = sumVotesKn > 0 ? (sumScoreKn / sumVotesKn) : 0;
+    const posRateKn = sumVotesKn > 0 ? (sumPosKn / sumVotesKn) * 100 : 0;
+    if (scoreKnElem) scoreKnElem.textContent = avgScoreKn.toFixed(2);
+    if (posRateKnBadge) posRateKnBadge.textContent = 'Tích cực (Mức 4-5): ' + posRateKn.toFixed(1) + '%';
+
+    // 6. Overall Score (Average of KT and KN)
+    const overallScore = (avgScoreKt + avgScoreKn) / 2;
+    if (avgScoreElem) avgScoreElem.textContent = overallScore.toFixed(2);
+    if (ratingBadge) {
+      if (overallScore >= 4.5) {
+        ratingBadge.textContent = 'Xếp loại: Xuất sắc (Rất rõ rệt)';
+        ratingBadge.style.color = '#0F5132';
+      } else if (overallScore >= 4.0) {
+        ratingBadge.textContent = 'Xếp loại: Tốt (Rõ rệt)';
+        ratingBadge.style.color = '#059669';
+      } else if (overallScore >= 3.5) {
+        ratingBadge.textContent = 'Xếp loại: Khá (Đáng kể)';
+        ratingBadge.style.color = '#D97706';
+      } else if (overallScore >= 3.0) {
+        ratingBadge.textContent = 'Xếp loại: Trung bình';
+        ratingBadge.style.color = '#D97706';
+      } else {
+        ratingBadge.textContent = 'Xếp loại: Cần cải thiện';
+        ratingBadge.style.color = '#DC2626';
+      }
+    }
+  }
+
+  function renderDgcCharts() {
+    renderDgcStackedBarChart();
+    renderDgcComparisonChart();
+  }
+
+  function renderDgcStackedBarChart() {
+    const canvas = document.getElementById('dgcStackedBarChart');
+    if (!canvas) return;
+
+    if (dgcCharts.stackedBar) {
+      dgcCharts.stackedBar.destroy();
+      dgcCharts.stackedBar = null;
+    }
+
+    if (filteredDgcItems.length === 0) return;
+
+    // Aggregate counts for the 2 criteria
+    let cKt = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+    let cKn = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+
+    filteredDgcItems.forEach(item => {
+      cKt[5] += item.c5_kt || 0; cKt[4] += item.c4_kt || 0; cKt[3] += item.c3_kt || 0; cKt[2] += item.c2_kt || 0; cKt[1] += item.c1_kt || 0;
+      cKn[5] += item.c5_kn || 0; cKn[4] += item.c4_kn || 0; cKn[3] += item.c3_kn || 0; cKn[2] += item.c2_kn || 0; cKn[1] += item.c1_kn || 0;
+    });
+
+    const totKt = cKt[5] + cKt[4] + cKt[3] + cKt[2] + cKt[1];
+    const totKn = cKn[5] + cKn[4] + cKn[3] + cKn[2] + cKn[1];
+
+    const p5 = [
+      totKt ? (cKt[5] / totKt) * 100 : 0,
+      totKn ? (cKn[5] / totKn) * 100 : 0
+    ];
+    const p4 = [
+      totKt ? (cKt[4] / totKt) * 100 : 0,
+      totKn ? (cKn[4] / totKn) * 100 : 0
+    ];
+    const p3 = [
+      totKt ? (cKt[3] / totKt) * 100 : 0,
+      totKn ? (cKn[3] / totKn) * 100 : 0
+    ];
+    const p2 = [
+      totKt ? (cKt[2] / totKt) * 100 : 0,
+      totKn ? (cKn[2] / totKn) * 100 : 0
+    ];
+    const p1 = [
+      totKt ? (cKt[1] / totKt) * 100 : 0,
+      totKn ? (cKn[1] / totKn) * 100 : 0
+    ];
+
+    const ctx = canvas.getContext('2d');
+    dgcCharts.stackedBar = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: [
+          '1. Cải thiện Kiến thức',
+          '2. Cải thiện Kỹ năng'
+        ],
+        datasets: [
+          {
+            label: 'Mức 5: Rất rõ rệt',
+            data: p5.map(v => Number(v.toFixed(1))),
+            backgroundColor: '#0F5132',
+            rawVotes: [cKt[5], cKn[5]],
+            barThickness: 34
+          },
+          {
+            label: 'Mức 4: Rõ rệt',
+            data: p4.map(v => Number(v.toFixed(1))),
+            backgroundColor: '#22C55E',
+            rawVotes: [cKt[4], cKn[4]],
+            barThickness: 34
+          },
+          {
+            label: 'Mức 3: Khá',
+            data: p3.map(v => Number(v.toFixed(1))),
+            backgroundColor: '#EAB308',
+            rawVotes: [cKt[3], cKn[3]],
+            barThickness: 34
+          },
+          {
+            label: 'Mức 2: Ít',
+            data: p2.map(v => Number(v.toFixed(1))),
+            backgroundColor: '#F97316',
+            rawVotes: [cKt[2], cKn[2]],
+            barThickness: 34
+          },
+          {
+            label: 'Mức 1: Rất ít',
+            data: p1.map(v => Number(v.toFixed(1))),
+            backgroundColor: '#EF4444',
+            rawVotes: [cKt[1], cKn[1]],
+            barThickness: 34
+          }
+        ]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: 'top',
+            labels: {
+              boxWidth: 12,
+              padding: 10,
+              font: { size: 10.5, weight: '700' }
+            }
+          },
+          tooltip: {
+            callbacks: {
+              label: function(context) {
+                const ds = context.dataset;
+                const vote = ds.rawVotes ? ds.rawVotes[context.dataIndex] : 0;
+                return ds.label + ': ' + context.parsed.x + '% (' + vote.toLocaleString('vi-VN') + ' phiếu)';
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            stacked: true,
+            max: 100,
+            ticks: {
+              callback: function(v) { return v + '%'; },
+              font: { size: 10 }
+            },
+            grid: { color: '#F1F5F9' }
+          },
+          y: {
+            stacked: true,
+            ticks: {
+              font: { size: 11, weight: '700' },
+              color: '#334155'
+            },
+            grid: { display: false }
+          }
+        }
+      }
+    });
+  }
+
+  function renderDgcComparisonChart() {
+    const canvas = document.getElementById('dgcComparisonChart');
+    if (!canvas) return;
+
+    if (dgcCharts.comparison) {
+      dgcCharts.comparison.destroy();
+      dgcCharts.comparison = null;
+    }
+
+    const badgeElem = document.getElementById('dgcChartDataCountBadge');
+    if (filteredDgcItems.length === 0) {
+      if (badgeElem) badgeElem.textContent = 'Top 0 / 0 mục';
+      return;
+    }
+
+    let fullList = [];
+
+    if (dgcCompareMode === 'class') {
+      // Each class as an item
+      fullList = filteredDgcItems.map(item => {
+        return {
+          key: item.ma_lop,
+          label: item.ma_lop,
+          subLabel: item.ten_ct_full || item.chuong_trinh,
+          diem_kt: item.diem_kt || 0,
+          diem_kn: item.diem_kn || 0,
+          diem_tb: item.diem_tb || 0,
+          tong_phieu: item.tong_phieu || 0
+        };
+      });
+    } else {
+      // Group by Program
+      const map = new Map();
+      filteredDgcItems.forEach(item => {
+        const prog = item.chuong_trinh || 'Chưa rõ';
+        if (!map.has(prog)) {
+          map.set(prog, {
+            key: prog,
+            label: prog,
+            subLabel: item.ten_ct_full || prog,
+            sumKt: 0,
+            votesKt: 0,
+            sumKn: 0,
+            votesKn: 0,
+            tong_phieu: 0,
+            classCount: 0
+          });
+        }
+        const g = map.get(prog);
+        const vKt = item.tong_phieu_kt || item.tong_phieu || 0;
+        const vKn = item.tong_phieu_kn || item.tong_phieu || 0;
+        g.sumKt += (item.diem_kt || 0) * vKt;
+        g.votesKt += vKt;
+        g.sumKn += (item.diem_kn || 0) * vKn;
+        g.votesKn += vKn;
+        g.tong_phieu += item.tong_phieu || 0;
+        g.classCount += 1;
+      });
+
+      fullList = Array.from(map.values()).map(g => {
+        const dKt = g.votesKt > 0 ? g.sumKt / g.votesKt : 0;
+        const dKn = g.votesKn > 0 ? g.sumKn / g.votesKn : 0;
+        const dTb = (dKt + dKn) / 2;
+        return {
+          key: g.key,
+          label: g.label + ' (' + g.classCount + ' lớp)',
+          subLabel: g.subLabel,
+          diem_kt: Number(dKt.toFixed(2)),
+          diem_kn: Number(dKn.toFixed(2)),
+          diem_tb: Number(dTb.toFixed(2)),
+          tong_phieu: g.tong_phieu
+        };
+      });
+    }
+
+    // Sort by dgcRankMetric
+    if (dgcRankMetric === 'avg') {
+      fullList.sort((a, b) => b.diem_tb - a.diem_tb || b.tong_phieu - a.tong_phieu);
+    } else if (dgcRankMetric === 'kt') {
+      fullList.sort((a, b) => b.diem_kt - a.diem_kt || b.diem_tb - a.diem_tb);
+    } else if (dgcRankMetric === 'kn') {
+      fullList.sort((a, b) => b.diem_kn - a.diem_kn || b.diem_tb - a.diem_tb);
+    } else if (dgcRankMetric === 'votes') {
+      fullList.sort((a, b) => b.tong_phieu - a.tong_phieu || b.diem_tb - a.diem_tb);
+    }
+
+    const totalCount = fullList.length;
+    let limit = totalCount;
+    if (dgcTopLimit !== 'all') {
+      const parsedLim = parseInt(dgcTopLimit, 10);
+      if (!isNaN(parsedLim) && parsedLim > 0) limit = parsedLim;
+    }
+    const displayList = fullList.slice(0, limit);
+
+    if (badgeElem) {
+      badgeElem.textContent = 'Top ' + displayList.length + ' / ' + totalCount + ' mục';
+    }
+
+    const labels = displayList.map(item => item.label);
+    const dataKt = displayList.map(item => item.diem_kt);
+    const dataKn = displayList.map(item => item.diem_kn);
+    const dataAvg = displayList.map(item => item.diem_tb);
+    const dataVotes = displayList.map(item => item.tong_phieu);
+
+    const ctx = canvas.getContext('2d');
+    dgcCharts.comparison = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            type: 'line',
+            label: '1. Cải thiện Kiến thức',
+            data: dataKt,
+            borderColor: '#0284C7',
+            backgroundColor: '#0284C7',
+            borderWidth: 2.5,
+            pointRadius: 4,
+            pointHoverRadius: 6,
+            pointStyle: 'circle',
+            tension: 0.25,
+            yAxisID: 'y'
+          },
+          {
+            type: 'line',
+            label: '2. Cải thiện Kỹ năng',
+            data: dataKn,
+            borderColor: '#059669',
+            backgroundColor: '#059669',
+            borderWidth: 2.5,
+            pointRadius: 4,
+            pointHoverRadius: 6,
+            pointStyle: 'triangle',
+            tension: 0.25,
+            yAxisID: 'y'
+          },
+          {
+            type: 'line',
+            label: 'Điểm ĐGC TB',
+            data: dataAvg,
+            borderColor: '#8C1D40',
+            backgroundColor: '#8C1D40',
+            borderWidth: 2,
+            borderDash: [4, 4],
+            pointRadius: 3.5,
+            pointHoverRadius: 5.5,
+            pointStyle: 'rectRot',
+            tension: 0.25,
+            yAxisID: 'y'
+          },
+          {
+            type: 'bar',
+            label: 'Số phiếu khảo sát',
+            data: dataVotes,
+            backgroundColor: 'rgba(2, 132, 199, 0.2)',
+            borderColor: '#0284C7',
+            borderWidth: 1,
+            borderRadius: 4,
+            barThickness: 16,
+            yAxisID: 'y1'
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: {
+          mode: 'index',
+          intersect: false
+        },
+        plugins: {
+          legend: {
+            position: 'top',
+            labels: {
+              boxWidth: 14,
+              padding: 10,
+              font: { size: 10.5, weight: '700' }
+            }
+          },
+          tooltip: {
+            callbacks: {
+              title: function(items) {
+                if (!items || items.length === 0) return '';
+                const idx = items[0].dataIndex;
+                const it = displayList[idx];
+                return it ? (it.label + (it.subLabel ? ' - ' + it.subLabel : '')) : '';
+              },
+              label: function(context) {
+                if (context.dataset.yAxisID === 'y1') {
+                  return context.dataset.label + ': ' + context.parsed.y.toLocaleString('vi-VN') + ' phiếu';
+                }
+                return context.dataset.label + ': ' + context.parsed.y.toFixed(2) + ' / 5.0';
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            ticks: {
+              maxRotation: 45,
+              minRotation: 30,
+              font: { size: 9.5, weight: '600' },
+              color: '#334155'
+            },
+            grid: { display: false }
+          },
+          y: {
+            type: 'linear',
+            position: 'left',
+            min: 3.0,
+            max: 5.0,
+            ticks: {
+              stepSize: 0.25,
+              font: { size: 10 },
+              callback: function(v) { return v.toFixed(2); }
+            },
+            title: {
+              display: true,
+              text: 'Điểm đánh giá (1.0 - 5.0)',
+              font: { size: 10, weight: '700' },
+              color: '#64748B'
+            },
+            grid: { color: '#F1F5F9' }
+          },
+          y1: {
+            type: 'linear',
+            position: 'right',
+            min: 0,
+            grid: { display: false },
+            ticks: {
+              font: { size: 10 },
+              callback: function(v) { return v.toLocaleString('vi-VN'); }
+            },
+            title: {
+              display: true,
+              text: 'Số phiếu khảo sát',
+              font: { size: 10, weight: '700' },
+              color: '#64748B'
+            }
+          }
+        }
+      }
+    });
+  }
+
+  function updateDgcFormatStats() {
+    const container = document.getElementById('dgcFormatBreakdownStats');
+    if (!container) return;
+
+    const stats = {
+      'Trực tiếp': { classes: 0, votes: 0 },
+      'Trực tuyến': { classes: 0, votes: 0 },
+      'Trực tiếp kết hợp Trực tuyến': { classes: 0, votes: 0 }
+    };
+
+    filteredDgcItems.forEach(item => {
+      const f = item.hinh_thuc_hoc || 'Trực tiếp';
+      if (!stats[f]) stats[f] = { classes: 0, votes: 0 };
+      stats[f].classes += 1;
+      stats[f].votes += (item.tong_phieu || 0);
+    });
+
+    const totVotes = filteredDgcItems.reduce((acc, c) => acc + (c.tong_phieu || 0), 0);
+
+    const keys = ['Trực tiếp', 'Trực tuyến', 'Trực tiếp kết hợp Trực tuyến'];
+    let html = '';
+    keys.forEach(k => {
+      const d = stats[k] || { classes: 0, votes: 0 };
+      const pct = totVotes > 0 ? ((d.votes / totVotes) * 100).toFixed(1) : '0.0';
+      html += '<div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed #E2E8F0; padding-bottom: 2px;">' +
+        '<span style="color: #475569; font-weight: 600;">' + k + ':</span>' +
+        '<span style="font-weight: 700; color: #1E293B;">' + d.votes.toLocaleString('vi-VN') + ' phiếu <span style="font-size: 0.72rem; color: #64748B;">(' + pct + '% - ' + d.classes + ' lớp)</span></span>' +
+      '</div>';
+    });
+    container.innerHTML = html;
+  }
+
+  function renderDgcTable() {
+    const tbody = document.getElementById('dgcClassesTableBody');
+    if (!tbody) return;
+
+    if (filteredDgcItems.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="11" style="text-align: center; padding: 2rem; color: var(--text-muted); font-style: italic;">Không tìm thấy lớp học nào phù hợp với bộ lọc hiện tại.</td></tr>';
+      return;
+    }
+
+    let rowsHtml = '';
+    filteredDgcItems.forEach((item, idx) => {
+      const dKt = item.diem_kt ? item.diem_kt.toFixed(2) : '0.00';
+      const dKn = item.diem_kn ? item.diem_kn.toFixed(2) : '0.00';
+      const dTb = item.diem_tb ? item.diem_tb.toFixed(2) : '0.00';
+      const posRate = item.ty_le_tich_cuc_tb !== undefined ? item.ty_le_tich_cuc_tb.toFixed(1) : (item.ty_le_tich_cuc ? item.ty_le_tich_cuc.toFixed(1) : '0.0');
+
+      let fmtBadgeClass = 'badge-success';
+      if (item.hinh_thuc_hoc === 'Trực tuyến') fmtBadgeClass = 'badge-info';
+      if (item.hinh_thuc_hoc === 'Trực tiếp kết hợp Trực tuyến') fmtBadgeClass = 'badge-warning';
+
+      const dateStr = (item.ngay_bd_raw || item.ngay_bd || '') + (item.ngay_kt_raw ? ' - ' + item.ngay_kt_raw : '');
+
+      rowsHtml += '<tr>' +
+        '<td style="text-align: center; font-weight: 600; color: var(--text-muted);">' + (idx + 1) + '</td>' +
+        '<td>' +
+          '<strong style="color: var(--brand-primary); font-size: 0.85rem;">' + (item.ma_lop || '') + '</strong>' +
+          '<div style="font-size: 0.75rem; color: #64748B; margin-top: 2px;">' + (item.ten_ct_full || item.chuong_trinh || '') + '</div>' +
+        '</td>' +
+        '<td style="text-align: center;"><span class="badge ' + fmtBadgeClass + '" style="font-size: 0.72rem;">' + (item.hinh_thuc_hoc || 'Trực tiếp') + '</span></td>' +
+        '<td style="text-align: center; font-size: 0.78rem; color: #475569;">' + dateStr + '</td>' +
+        '<td style="font-size: 0.8rem; color: #334155;">' + (item.cbql || '—') + '</td>' +
+        '<td style="text-align: center; font-weight: 700;">' + (item.tong_phieu || 0).toLocaleString('vi-VN') + '</td>' +
+        '<td style="text-align: center; font-weight: 700; color: #0284C7;">' + dKt + '</td>' +
+        '<td style="text-align: center; font-weight: 700; color: #059669;">' + dKn + '</td>' +
+        '<td style="text-align: center; font-weight: 800; color: var(--brand-primary);">' + dTb + '</td>' +
+        '<td style="text-align: center;"><span style="color: #0F5132; font-weight: 700; background: #ECFDF5; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem;">' + posRate + '%</span></td>' +
+        '<td style="text-align: center;">' +
+          '<button type="button" class="btn btn-sm" onclick="window.openDgcClassModal(' + item.id + ')" style="padding: 2px 8px; font-size: 0.75rem; background: #F1F5F9; color: var(--brand-primary); border: 1px solid #CBD5E1; border-radius: 4px; font-weight: 700; cursor: pointer;" title="Xem chi tiết phân bố tự đánh giá">' +
+            '<i class="fa-solid fa-eye"></i> Xem' +
+          '</button>' +
+        '</td>' +
+      '</tr>';
+    });
+
+    tbody.innerHTML = rowsHtml;
+  }
+
+  // --- DGC DETAIL MODAL ---
+  window.openDgcClassModal = function(id) {
+    const item = allDgcItems.find(c => c.id === id);
+    if (!item) return;
+
+    const modal = document.getElementById('dgcDetailModal');
+    if (!modal) return;
+
+    const classCodeElem = document.getElementById('modalDgcClassCode');
+    const classNameElem = document.getElementById('modalDgcClassName');
+    if (classCodeElem) classCodeElem.textContent = item.ma_lop || 'Chưa rõ';
+    if (classNameElem) classNameElem.textContent = item.ten_ct_full || item.chuong_trinh || 'Chương trình đào tạo';
+
+    // Populate Info Grid
+    const infoGrid = document.getElementById('modalDgcInfoGrid');
+    if (infoGrid) {
+      const partRate = (item.hv_thuc_te > 0 && item.tong_phieu > 0)
+        ? ((item.tong_phieu / item.hv_thuc_te) * 100).toFixed(1) + '%'
+        : '100.0%';
+
+      infoGrid.innerHTML = `
+        <div class="modal-info-item">
+          <span class="modal-info-label">Chương trình đào tạo:</span>
+          <span class="modal-info-val"><strong>${item.chuong_trinh || '—'}</strong> (${item.ten_ct_full || ''})</span>
+        </div>
+        <div class="modal-info-item">
+          <span class="modal-info-label">Hình thức học:</span>
+          <span class="modal-info-val">${(typeof getReportFormatBadge === 'function') ? getReportFormatBadge(item.hinh_thuc_hoc || 'Trực tiếp') : ('<span class="badge badge-info">' + (item.hinh_thuc_hoc || 'Trực tiếp') + '</span>')}</span>
+        </div>
+        <div class="modal-info-item">
+          <span class="modal-info-label">Thời gian tổ chức:</span>
+          <span class="modal-info-val">${(item.ngay_bd_raw || item.ngay_bd || '—')} đến ${(item.ngay_kt_raw || item.ngay_kt || '—')}</span>
+        </div>
+        <div class="modal-info-item">
+          <span class="modal-info-label">Cán bộ quản lý lớp:</span>
+          <span class="modal-info-val"><strong>${item.cbql || '—'}</strong></span>
+        </div>
+        <div class="modal-info-item">
+          <span class="modal-info-label">Địa điểm tổ chức:</span>
+          <span class="modal-info-val">${item.dia_diem || 'Trường ĐTCB Agribank'}</span>
+        </div>
+        <div class="modal-info-item">
+          <span class="modal-info-label">Học viên thực tế:</span>
+          <span class="modal-info-val">${item.hv_thuc_te ? item.hv_thuc_te.toLocaleString('vi-VN') + ' học viên' : '—'}</span>
+        </div>
+        <div class="modal-info-item">
+          <span class="modal-info-label">Số phiếu phản hồi:</span>
+          <span class="modal-info-val"><strong style="color: var(--brand-primary);">${(item.tong_phieu || 0).toLocaleString('vi-VN')}</strong> phiếu</span>
+        </div>
+        <div class="modal-info-item">
+          <span class="modal-info-label">Tỷ lệ tham gia khảo sát:</span>
+          <span class="modal-info-val"><span class="badge badge-success">${partRate}</span></span>
+        </div>
+      `;
+    }
+
+    // Populate Criteria Breakdown Content
+    const critContent = document.getElementById('modalDgcCriteriaContent');
+    if (critContent) {
+      const renderCritBox = (title, icon, color, c5, c4, c3, c2, c1, score, posRate, totVotes) => {
+        const p5 = totVotes ? ((c5 / totVotes) * 100).toFixed(1) : '0.0';
+        const p4 = totVotes ? ((c4 / totVotes) * 100).toFixed(1) : '0.0';
+        const p3 = totVotes ? ((c3 / totVotes) * 100).toFixed(1) : '0.0';
+        const p2 = totVotes ? ((c2 / totVotes) * 100).toFixed(1) : '0.0';
+        const p1 = totVotes ? ((c1 / totVotes) * 100).toFixed(1) : '0.0';
+
+        return '<div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 1rem;">' +
+          '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">' +
+            '<div style="display: flex; align-items: center; gap: 0.5rem;">' +
+              '<i class="' + icon + '" style="color: ' + color + '; font-size: 1.1rem;"></i>' +
+              '<strong style="font-size: 0.95rem; color: #1E293B;">' + title + '</strong>' +
+            '</div>' +
+            '<div style="display: flex; align-items: center; gap: 0.75rem;">' +
+              '<span style="font-size: 0.8rem; font-weight: 700; color: #0F5132; background: #ECFDF5; padding: 2px 8px; border-radius: 4px;">Tích cực: ' + posRate + '%</span>' +
+              '<span style="font-size: 1.1rem; font-weight: 800; color: ' + color + ';">' + (score ? score.toFixed(2) : '0.00') + ' <span style="font-size: 0.75rem; font-weight: 600; color: #64748B;">/ 5.0</span></span>' +
+            '</div>' +
+          '</div>' +
+          // 5-level stacked bar visual
+          '<div style="height: 14px; display: flex; border-radius: 4px; overflow: hidden; background: #E2E8F0; margin-bottom: 0.75rem;">' +
+            '<div style="width: ' + p5 + '%; background: #0F5132;" title="Rất rõ rệt: ' + c5 + ' (' + p5 + '%)"></div>' +
+            '<div style="width: ' + p4 + '%; background: #22C55E;" title="Rõ rệt: ' + c4 + ' (' + p4 + '%)"></div>' +
+            '<div style="width: ' + p3 + '%; background: #EAB308;" title="Khá: ' + c3 + ' (' + p3 + '%)"></div>' +
+            '<div style="width: ' + p2 + '%; background: #F97316;" title="Ít: ' + c2 + ' (' + p2 + '%)"></div>' +
+            '<div style="width: ' + p1 + '%; background: #EF4444;" title="Rất ít: ' + c1 + ' (' + p1 + '%)"></div>' +
+          '</div>' +
+          // 5 stats pill row
+          '<div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.5rem; text-align: center; font-size: 0.75rem;">' +
+            '<div style="background: white; border: 1px solid #E2E8F0; padding: 4px; border-radius: 4px;">' +
+              '<div style="color: #0F5132; font-weight: 700;">5 - Rất rõ rệt</div>' +
+              '<div style="font-weight: 800;">' + c5 + ' <span style="font-size: 0.68rem; font-weight: 600; color: #64748B;">(' + p5 + '%)</span></div>' +
+            '</div>' +
+            '<div style="background: white; border: 1px solid #E2E8F0; padding: 4px; border-radius: 4px;">' +
+              '<div style="color: #22C55E; font-weight: 700;">4 - Rõ rệt</div>' +
+              '<div style="font-weight: 800;">' + c4 + ' <span style="font-size: 0.68rem; font-weight: 600; color: #64748B;">(' + p4 + '%)</span></div>' +
+            '</div>' +
+            '<div style="background: white; border: 1px solid #E2E8F0; padding: 4px; border-radius: 4px;">' +
+              '<div style="color: #EAB308; font-weight: 700;">3 - Khá</div>' +
+              '<div style="font-weight: 800;">' + c3 + ' <span style="font-size: 0.68rem; font-weight: 600; color: #64748B;">(' + p3 + '%)</span></div>' +
+            '</div>' +
+            '<div style="background: white; border: 1px solid #E2E8F0; padding: 4px; border-radius: 4px;">' +
+              '<div style="color: #F97316; font-weight: 700;">2 - Ít</div>' +
+              '<div style="font-weight: 800;">' + c2 + ' <span style="font-size: 0.68rem; font-weight: 600; color: #64748B;">(' + p2 + '%)</span></div>' +
+            '</div>' +
+            '<div style="background: white; border: 1px solid #E2E8F0; padding: 4px; border-radius: 4px;">' +
+              '<div style="color: #EF4444; font-weight: 700;">1 - Rất ít</div>' +
+              '<div style="font-weight: 800;">' + c1 + ' <span style="font-size: 0.68rem; font-weight: 600; color: #64748B;">(' + p1 + '%)</span></div>' +
+            '</div>' +
+          '</div>' +
+        '</div>';
+      };
+
+      critContent.innerHTML =
+        renderCritBox('Tiêu chí 1: Mức độ cải thiện kiến thức chuyên môn', 'fa-solid fa-brain', '#0284C7', item.c5_kt, item.c4_kt, item.c3_kt, item.c2_kt, item.c1_kt, item.diem_kt, item.ty_le_tich_cuc_kt, item.tong_phieu_kt) +
+        renderCritBox('Tiêu chí 2: Mức độ cải thiện kỹ năng làm việc', 'fa-solid fa-screwdriver-wrench', '#059669', item.c5_kn, item.c4_kn, item.c3_kn, item.c2_kn, item.c1_kn, item.diem_kn, item.ty_le_tich_cuc_kn, item.tong_phieu_kn);
+    }
+
+    modal.classList.add('active');
+  };
+
+  window.closeDgcModal = function(e) {
+    if (e && e.preventDefault) e.preventDefault();
+    const modal = document.getElementById('dgcDetailModal');
+    if (modal) modal.classList.remove('active');
+  };
+
+  window.closeDgcModalOnOverlay = function(e) {
+    if (e.target && e.target.id === 'dgcDetailModal') {
+      window.closeDgcModal(e);
+    }
+  };
+
+  // Export functions
+  function exportDgcToCsv() {
+    if (!filteredDgcItems || filteredDgcItems.length === 0) {
+      if (typeof showToast === 'function') showToast('Không có dữ liệu để xuất CSV', 'warning');
+      return;
+    }
+
+    const headers = [
+      'STT',
+      'Mã Lớp',
+      'Mã Chương Trình',
+      'Tên Chương Trình',
+      'Hình Thức',
+      'Ngày Bắt Đầu',
+      'Ngày Kết Thúc',
+      'Cán Bộ Quản Lý',
+      'Địa Điểm',
+      'Học Viên Thực Tế',
+      'Tổng Phiếu Khảo Sát',
+      'Điểm Cải Thiện Kiến Thức (5.0)',
+      'Tỷ Lệ Tích Cực KT (%)',
+      'Điểm Cải Thiện Kỹ Năng (5.0)',
+      'Tỷ Lệ Tích Cực KN (%)',
+      'Điểm Đánh Giá Chung TB (5.0)',
+      'Tỷ Lệ Tích Cực Chung (%)',
+      'KT Mức 5', 'KT Mức 4', 'KT Mức 3', 'KT Mức 2', 'KT Mức 1',
+      'KN Mức 5', 'KN Mức 4', 'KN Mức 3', 'KN Mức 2', 'KN Mức 1'
+    ];
+
+    const escapeCsv = (str) => {
+      const val = str === null || str === undefined ? '' : String(str);
+      if (val.includes(',') || val.includes('"') || val.includes('\n')) {
+        return '"' + val.replace(/"/g, '""') + '"';
+      }
+      return val;
+    };
+
+    const rows = filteredDgcItems.map((item, idx) => [
+      idx + 1,
+      escapeCsv(item.ma_lop),
+      escapeCsv(item.chuong_trinh),
+      escapeCsv(item.ten_ct_full),
+      escapeCsv(item.hinh_thuc_hoc),
+      escapeCsv(item.ngay_bd_raw || item.ngay_bd),
+      escapeCsv(item.ngay_kt_raw || item.ngay_kt),
+      escapeCsv(item.cbql),
+      escapeCsv(item.dia_diem),
+      item.hv_thuc_te || 0,
+      item.tong_phieu || 0,
+      item.diem_kt || 0,
+      item.ty_le_tich_cuc_kt || 0,
+      item.diem_kn || 0,
+      item.ty_le_tich_cuc_kn || 0,
+      item.diem_tb || 0,
+      item.ty_le_tich_cuc_tb || 0,
+      item.c5_kt || 0, item.c4_kt || 0, item.c3_kt || 0, item.c2_kt || 0, item.c1_kt || 0,
+      item.c5_kn || 0, item.c4_kn || 0, item.c3_kn || 0, item.c2_kn || 0, item.c1_kn || 0
+    ]);
+
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(r => r.join(','))].join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Danh_sach_Danh_gia_chung_Agribank_${getTodayGMT7Str()}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    if (typeof showToast === 'function') {
+      showToast('Đã xuất thành công file CSV Danh sách Đánh giá chung (' + filteredDgcItems.length + ' lớp)', 'success');
+    }
+  }
+
+  function exportDgcToExcel() {
+    if (!filteredDgcItems || filteredDgcItems.length === 0) {
+      if (typeof showToast === 'function') showToast('Không có dữ liệu để xuất Excel', 'warning');
+      return;
+    }
+
+    if (typeof XLSX !== 'undefined') {
+      try {
+        const dataForSheet = filteredDgcItems.map((item, idx) => ({
+          'STT': idx + 1,
+          'Mã Lớp': item.ma_lop,
+          'Mã Chương Trình': item.chuong_trinh,
+          'Tên Chương Trình': item.ten_ct_full,
+          'Hình Thức Học': item.hinh_thuc_hoc,
+          'Ngày Bắt Đầu': item.ngay_bd_raw || item.ngay_bd,
+          'Ngày Kết Thúc': item.ngay_kt_raw || item.ngay_kt,
+          'Cán Bộ Quản Lý': item.cbql,
+          'Địa Điểm': item.dia_diem,
+          'Học Viên Thực Tế': item.hv_thuc_te || 0,
+          'Tổng Phiếu Khảo Sát': item.tong_phieu || 0,
+          'Điểm Cải Thiện Kiến Thức': item.diem_kt || 0,
+          'Tỷ Lệ Tích Cực KT (%)': item.ty_le_tich_cuc_kt || 0,
+          'Điểm Cải Thiện Kỹ Năng': item.diem_kn || 0,
+          'Tỷ Lệ Tích Cực KN (%)': item.ty_le_tich_cuc_kn || 0,
+          'Điểm Đánh Giá Chung TB': item.diem_tb || 0,
+          'Tỷ Lệ Tích Cực Chung (%)': item.ty_le_tich_cuc_tb || 0,
+          'KT Mức 5': item.c5_kt || 0,
+          'KT Mức 4': item.c4_kt || 0,
+          'KT Mức 3': item.c3_kt || 0,
+          'KT Mức 2': item.c2_kt || 0,
+          'KT Mức 1': item.c1_kt || 0,
+          'KN Mức 5': item.c5_kn || 0,
+          'KN Mức 4': item.c4_kn || 0,
+          'KN Mức 3': item.c3_kn || 0,
+          'KN Mức 2': item.c2_kn || 0,
+          'KN Mức 1': item.c1_kn || 0
+        }));
+
+        const ws = XLSX.utils.json_to_sheet(dataForSheet);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "DanhGiaChung");
+        XLSX.writeFile(wb, `Bao_cao_Danh_gia_chung_Agribank_${getTodayGMT7Str()}.xlsx`);
+
+        if (typeof showToast === 'function') {
+          showToast('Đã xuất thành công báo cáo Excel Đánh giá chung (' + filteredDgcItems.length + ' lớp)', 'success');
+        }
+        return;
+      } catch (err) {
+        console.warn("SheetJS export failed, falling back to CSV:", err);
+      }
+    }
+    exportDgcToCsv();
+  }
+
+  // Google Sheet Sync for DGC
+  async function syncDgcGoogleSheetData(sheetUrl, options = {}) {
+    if (isSyncing) return;
+    isSyncing = true;
+    const isSilent = Boolean(options.silent);
+
+    const btnSync = document.getElementById('btnSyncDgcGoogleSheet');
+    if (btnSync) {
+      btnSync.disabled = true;
+      btnSync.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang đồng bộ...';
+    }
+
+    try {
+      const targetUrl = sheetUrl || getDefaultDgcUrl();
+      const csvUrl = getGoogleSheetCsvExportUrl(targetUrl);
+      const fetchUrl = `${csvUrl}${csvUrl.includes('?') ? '&' : '?'}_t=${Date.now()}`;
+
+      const res = await fetch(fetchUrl, { cache: 'no-store' });
+      if (!res.ok) throw new Error(`HTTP error ${res.status}`);
+      const csvText = await res.text();
+      const parsedData = parseDgcCsvToObjects(csvText);
+
+      if (parsedData && parsedData.length > 0) {
+        allDgcItems = parsedData;
+        window.allDgcItems = allDgcItems;
+        normalizeAllModuleData();
+        try {
+          localStorage.setItem(STORAGE_KEY_DGC_DATA, JSON.stringify(parsedData));
+        } catch (stErr) {
+          console.warn("Could not save DGC to localStorage:", stErr);
+        }
+
+        populateDgcFilterDropdowns();
+        applyDgcFilters();
+
+        if (!isSilent && typeof showToast === 'function') {
+          showToast(`Đồng bộ thành công ${allDgcItems.length} lớp học từ Sheet ĐGC!`, 'success');
+        }
+      } else {
+        throw new Error('Dữ liệu trả về rỗng hoặc không đúng định dạng');
+      }
+    } catch (err) {
+      console.error("DGC Google Sheet Sync Error:", err);
+      if (!isSilent && typeof showToast === 'function') {
+        showToast('Không thể đồng bộ Google Sheet ĐGC: ' + (err.message || 'Lỗi mạng'), 'error');
+      }
+    } finally {
+      isSyncing = false;
+      if (btnSync) {
+        btnSync.disabled = false;
+        btnSync.innerHTML = '<i class="fa-solid fa-cloud-arrow-down"></i> Đồng bộ GG Sheet';
+      }
+    }
+  }
+
+  function parseDgcCsvToObjects(csvText) {
+    const rawRows = parseCsvToRows(csvText);
+    if (!rawRows || rawRows.length < 2) return [];
+
+    let headerIdx = -1;
+    for (let i = 0; i < Math.min(rawRows.length, 5); i++) {
+      const r = rawRows[i].map(c => (c || '').toLowerCase());
+      if (r.some(c => c.includes('chương trình') || c.includes('mã lớp'))) {
+        headerIdx = i;
+        break;
+      }
+    }
+    if (headerIdx === -1) headerIdx = 0;
+
+    const dataRows = rawRows.slice(headerIdx + 1);
+    const items = [];
+
+    dataRows.forEach((row, idx) => {
+      const chuongTrinh = (row[0] || '').trim();
+      let maLop = (row[1] || '').trim();
+      if (!chuongTrinh && !maLop) return;
+
+      // Clean single space typo e.g. "MHHM/ 26-01" -> "MHHM/26-01"
+      maLop = maLop.replace(/\/ +/g, '/');
+
+      const hinhThucHoc = (row[2] || 'Trực tiếp').trim();
+      const ngayBdRaw = (row[3] || '').trim();
+      const ngayKtRaw = (row[4] || '').trim();
+
+      const c5_kt = parseInt(row[5], 10) || 0;
+      const c4_kt = parseInt(row[6], 10) || 0;
+      const c3_kt = parseInt(row[7], 10) || 0;
+      const c2_kt = parseInt(row[8], 10) || 0;
+      const c1_kt = parseInt(row[9], 10) || 0;
+
+      const c5_kn = parseInt(row[10], 10) || 0;
+      const c4_kn = parseInt(row[11], 10) || 0;
+      const c3_kn = parseInt(row[12], 10) || 0;
+      const c2_kn = parseInt(row[13], 10) || 0;
+      const c1_kn = parseInt(row[14], 10) || 0;
+
+      const tong_phieu_kt = parseInt(row[15], 10) || (c5_kt + c4_kt + c3_kt + c2_kt + c1_kt);
+      const tong_phieu_kn = parseInt(row[16], 10) || (c5_kn + c4_kn + c3_kn + c2_kn + c1_kn);
+
+      if (tong_phieu_kt === 0 && tong_phieu_kn === 0) return;
+
+      const diem_kt = tong_phieu_kt > 0 ? (5*c5_kt + 4*c4_kt + 3*c3_kt + 2*c2_kt + 1*c1_kt) / tong_phieu_kt : 0;
+      const ty_le_tich_cuc_kt = tong_phieu_kt > 0 ? ((c5_kt + c4_kt) / tong_phieu_kt) * 100 : 0;
+
+      const diem_kn = tong_phieu_kn > 0 ? (5*c5_kn + 4*c4_kn + 3*c3_kn + 2*c2_kn + 1*c1_kn) / tong_phieu_kn : 0;
+      const ty_le_tich_cuc_kn = tong_phieu_kn > 0 ? ((c5_kn + c4_kn) / tong_phieu_kn) * 100 : 0;
+
+      const tong_phieu = Math.max(tong_phieu_kt, tong_phieu_kn);
+      const diem_tb = (diem_kt + diem_kn) / 2;
+      const ty_le_tich_cuc_tb = (ty_le_tich_cuc_kt + ty_le_tich_cuc_kn) / 2;
+
+      let tenCtFull = chuongTrinh;
+      let cbql = '';
+      let diaDiem = '';
+      let hvThucTe = 0;
+
+      if (typeof allClasses !== 'undefined' && Array.isArray(allClasses)) {
+        const f = allClasses.find(x => x.ma_lop === maLop);
+        if (f) {
+          if (f.ten_ct) tenCtFull = f.ten_ct;
+          if (f.can_bo_ql || f.cbql) cbql = f.can_bo_ql || f.cbql;
+          if (f.dia_diem) diaDiem = f.dia_diem;
+          if (f.hv_thuc_te) hvThucTe = Number(f.hv_thuc_te) || 0;
+        }
+      }
+
+      items.push({
+        id: idx + 1,
+        chuong_trinh: chuongTrinh,
+        ma_lop: maLop,
+        ten_ct_full: tenCtFull,
+        hinh_thuc_hoc: hinhThucHoc,
+        ngay_bd_raw: ngayBdRaw,
+        ngay_kt_raw: ngayKtRaw,
+        ngay_bd: parseDateStrISO(ngayBdRaw),
+        ngay_kt: parseDateStrISO(ngayKtRaw),
+        c5_kt, c4_kt, c3_kt, c2_kt, c1_kt,
+        tong_phieu_kt,
+        diem_kt: Number(diem_kt.toFixed(2)),
+        ty_le_tich_cuc_kt: Number(ty_le_tich_cuc_kt.toFixed(1)),
+        c5_kn, c4_kn, c3_kn, c2_kn, c1_kn,
+        tong_phieu_kn,
+        diem_kn: Number(diem_kn.toFixed(2)),
+        ty_le_tich_cuc_kn: Number(ty_le_tich_cuc_kn.toFixed(1)),
+        tong_phieu,
+        diem_tb: Number(diem_tb.toFixed(2)),
+        ty_le_tich_cuc_tb: Number(ty_le_tich_cuc_tb.toFixed(1)),
+        cbql,
+        dia_diem: diaDiem,
+        hv_thuc_te: hvThucTe
+      });
+    });
+
+    return items;
+  }
+  // End of DGC Module
+
+// ==========================================
+// ==========================================
+  // GENERAL REPORT (BAO CAO CHUNG) MODULE LOGIC
+  // Smart Training Management Dashboard System - Agribank
+  // ==========================================
+
+  window.reportState = window.reportState || {
+    mode: 'class', // 'class' | 'program'
+    selectedClass: '',
+    selectedProgram: '',
+    previousProgram: '', // Stores program code when drilling down to a class
+    classSearch: '',
+    classFormat: '',
+    classCbql: '',
+    programSearch: '',
+    programTime: '',
+    programFormat: '',
+    compareMetric: 'all',
+    currentClassData: null,
+    currentProgramData: null,
+    pphtFormatFilter: 'all', // 'all' | 'direct' | 'hybrid'
+    nddtFormatFilter: 'all'
+  };
+  var reportState = window.reportState;
+
+  window.reportCharts = window.reportCharts || {
+    programComparison: null,
+    classAttendanceGauge: null,
+    programAttendanceGauge: null,
+    nddtStacked: null,
+    pphtStacked: null,
+    csvcLocation: null,
+    gvComparison: null,
+    dgcKtChart: null,
+    dgcKnChart: null
+  };
+  var reportCharts = window.reportCharts;
+
+  // Safe data getters with fallbacks
+  function getRepClasses() {
+    if (typeof state !== 'undefined' && Array.isArray(state.classes) && state.classes.length > 0) return state.classes;
+    if (typeof allClasses !== 'undefined' && Array.isArray(allClasses) && allClasses.length > 0) return allClasses;
+    if (typeof RAW_CLASSES_DATA !== 'undefined' && Array.isArray(RAW_CLASSES_DATA)) return RAW_CLASSES_DATA;
+    if (typeof RAW_DATA !== 'undefined' && Array.isArray(RAW_DATA)) return RAW_DATA;
+    return [];
+  }
+
+  function getRepNddt() {
+    let listNew = [];
+    if (typeof nddtNewItems !== 'undefined' && Array.isArray(nddtNewItems) && nddtNewItems.length > 0) {
+      listNew = nddtNewItems;
+    } else if (typeof RAW_NDDT_DATA !== 'undefined' && Array.isArray(RAW_NDDT_DATA)) {
+      listNew = RAW_NDDT_DATA;
+    }
+
+    let listOld = [];
+    if (typeof nddtOldItems !== 'undefined' && Array.isArray(nddtOldItems) && nddtOldItems.length > 0) {
+      listOld = nddtOldItems;
+    } else if (typeof RAW_NDDT_OLD_DATA !== 'undefined' && Array.isArray(RAW_NDDT_OLD_DATA)) {
+      listOld = RAW_NDDT_OLD_DATA;
+    }
+
+    const taggedNew = listNew.map(x => ({ ...x, _template: 'new' }));
+    const taggedOld = listOld.map(x => ({ ...x, _template: 'old' }));
+
+    return [...taggedNew, ...taggedOld];
+  }
+
+  function getRepPphtdt() {
+    if (typeof allPphtdtItems !== 'undefined' && Array.isArray(allPphtdtItems) && allPphtdtItems.length > 0) return allPphtdtItems;
+    if (typeof state !== 'undefined' && Array.isArray(state.pphtdtData) && state.pphtdtData.length > 0) return state.pphtdtData;
+    if (typeof RAW_PPHTDT_DATA !== 'undefined' && Array.isArray(RAW_PPHTDT_DATA)) return RAW_PPHTDT_DATA;
+    return [];
+  }
+
+  function getRepCsvc() {
+    if (typeof allCsvcItems !== 'undefined' && Array.isArray(allCsvcItems) && allCsvcItems.length > 0) return allCsvcItems;
+    if (typeof state !== 'undefined' && Array.isArray(state.csvcData) && state.csvcData.length > 0) return state.csvcData;
+    if (typeof RAW_CSVC_DATA !== 'undefined' && Array.isArray(RAW_CSVC_DATA)) return RAW_CSVC_DATA;
+    return [];
+  }
+
+  function getRepGv() {
+    if (typeof allGvItems !== 'undefined' && Array.isArray(allGvItems) && allGvItems.length > 0) return allGvItems;
+    if (typeof state !== 'undefined' && Array.isArray(state.gvData) && state.gvData.length > 0) return state.gvData;
+    if (typeof RAW_GV_DATA !== 'undefined' && Array.isArray(RAW_GV_DATA)) return RAW_GV_DATA;
+    return [];
+  }
+
+  function getRepDgc() {
+    if (typeof allDgcItems !== 'undefined' && Array.isArray(allDgcItems) && allDgcItems.length > 0) return allDgcItems;
+    if (typeof state !== 'undefined' && Array.isArray(state.dgcData) && state.dgcData.length > 0) return state.dgcData;
+    if (typeof RAW_DGC_DATA !== 'undefined' && Array.isArray(RAW_DGC_DATA)) return RAW_DGC_DATA;
+    return [];
+  }
+
+  // Normalization Helpers
+  function normalizeReportClassKey(str) {
+    if (!str) return '';
+    return str.replace(/[\s\-_/.,]/g, '').toUpperCase();
+  }
+
+  function normalizeReportProgramKey(str) {
+    if (!str) return '';
+    return str.replace(/[\s\-_/.,]/g, '').toUpperCase();
+  }
+
+  function normalizeContentKey(str) {
+    if (!str) return '';
+    return str.toLowerCase().replace(/[\r\n\t\s]+/g, ' ').trim();
+  }
+
+  // Date Formatting Helper: dd/mm/yyyy
+  function formatVnDate(dateVal) {
+    if (!dateVal) return '';
+    const str = String(dateVal).trim();
+    if (!str) return '';
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(str)) {
+      return str;
+    }
+    const isoMatch = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+    if (isoMatch) {
+      const y = isoMatch[1];
+      const m = isoMatch[2].padStart(2, '0');
+      const d = isoMatch[3].padStart(2, '0');
+      return `${d}/${m}/${y}`;
+    }
+    const parsed = new Date(str);
+    if (!isNaN(parsed.getTime())) {
+      const d = String(parsed.getDate()).padStart(2, '0');
+      const m = String(parsed.getMonth() + 1).padStart(2, '0');
+      const y = parsed.getFullYear();
+      return `${d}/${m}/${y}`;
+    }
+    return str;
+  }
+  window.formatVnDate = formatVnDate;
+
+  // Date Range Helper: Ngày bắt đầu - Ngày kết thúc (dd/mm/yyyy - dd/mm/yyyy)
+  function formatReportDateRange(startVal, endVal, fallback) {
+    const s = formatVnDate(startVal);
+    const e = formatVnDate(endVal);
+    if (s && e) {
+      return s + ' - ' + e;
+    }
+    if (s) {
+      return s + ' - ' + s;
+    }
+    if (e) {
+      return e + ' - ' + e;
+    }
+    return fallback !== undefined ? fallback : '—';
+  }
+  window.formatReportDateRange = formatReportDateRange;
+
+  function getCohortType(fmt) {
+    const f = (fmt || '').toLowerCase().trim();
+    if (f.includes('tuyến') || f.includes('online') || f.includes('kết hợp') || f.includes('zoom') || f.includes('polycom') || f.includes('hybrid')) {
+      return 'online';
+    }
+    return 'direct';
+  }
+  window.getCohortType = getCohortType;
+
+  // Format Helper per Project Rules:
+  // "Hiển thị theo dữ liệu gốc tại bảng dữ liệu data (hinh_thuc_hoc / hinh_thuc_dt);
+  // riêng trường hợp lớp học có cả phần trực tuyến và trực tiếp cùng mã lớp thì dòng trực tuyến
+  // được tự động suy diễn gộp tên thành 'Trực tiếp kết hợp Trực tuyến'."
+  function getDisplayFormat(item, siblingList) {
+    if (!item) return 'Trực tiếp';
+    const rawFmt = (item.hinh_thuc_hoc || item.hinh_thuc_dt || item.format || 'Trực tiếp').trim();
+    const isOnline = rawFmt.toLowerCase().includes('tuyến') || rawFmt.toLowerCase().includes('online') || rawFmt.toLowerCase().includes('polycom');
+    if (!isOnline) {
+      if (rawFmt.toLowerCase().includes('kết hợp')) return 'Trực tiếp kết hợp Trực tuyến';
+      return rawFmt || 'Trực tiếp';
+    }
+    // Check if there is a direct sibling with same class code
+    const normCode = normalizeReportClassKey(item.ma_lop);
+    const pool = siblingList || getRepClasses();
+    const hasDirectSibling = Array.isArray(pool) && pool.some(c => {
+      if (normalizeReportClassKey(c.ma_lop) !== normCode) return false;
+      const f = (c.hinh_thuc_hoc || c.hinh_thuc_dt || '').toLowerCase();
+      return f.includes('tiếp') && !f.includes('tuyến') && !f.includes('kết hợp');
+    });
+    if (hasDirectSibling) {
+      return 'Trực tiếp kết hợp Trực tuyến';
+    }
+    return rawFmt;
+  }
+
+  function getReportFormatBadge(formatOrObj) {
+    let text = '';
+    if (typeof formatOrObj === 'string') {
+      text = formatOrObj;
+    } else if (formatOrObj) {
+      text = getDisplayFormat(formatOrObj);
+    }
+    text = (text || 'Trực tiếp').trim();
+    const lower = text.toLowerCase();
+    if (lower.includes('kết hợp') || (lower.includes('tiếp') && lower.includes('tuyến')) || lower.includes('hybrid')) {
+      return '<span class="badge-format-hybrid"><i class="fa-solid fa-shapes"></i> TRỰC TIẾP KẾT HỢP TRỰC TUYẾN</span>';
+    } else if (lower.includes('tuyến') || lower.includes('online') || lower.includes('polycom') || lower.includes('zoom')) {
+      return '<span class="badge-format-online"><i class="fa-solid fa-desktop"></i> TRỰC TUYẾN</span>';
+    } else {
+      return '<span class="badge-format-direct"><i class="fa-solid fa-user-group"></i> TRỰC TIẾP</span>';
+    }
+  }
+  window.getReportFormatBadge = getReportFormatBadge;
+
+  // Lecturer Teaching Hours Deduplication Helper:
+  // Key: Class Code + Lecturer Name + Content Key
+  function getLecturerDeduplicatedHours(gvList) {
+    if (!Array.isArray(gvList) || gvList.length === 0) return 0;
+    const seen = new Map();
+    gvList.forEach(g => {
+      if (!g) return;
+      const ml = (g.ma_lop || '').trim().toUpperCase();
+      const gv = (g.ma_gv || g.ten_gv || g.name || '').trim().toLowerCase();
+      const content = normalizeContentKey(g.noi_dung_giang || g.mon || '');
+      const key = ml + '__' + gv + '__' + (content || 'default');
+      const hours = Number(g.so_tiet || g.hours) || 0;
+      if (!seen.has(key)) {
+        seen.set(key, hours);
+      }
+    });
+    let total = 0;
+    seen.forEach(h => total += h);
+    return total;
+  }
+
+  // Get distinct classes list for dropdown (Merged by class code, no duplicates)
+  function getAllReportClassList() {
+    const primary = getRepClasses();
+    const map = new Map();
+
+    const registerClass = (item) => {
+      if (!item || !item.ma_lop) return;
+      const ml = item.ma_lop.trim();
+      const normKey = normalizeReportClassKey(ml);
+      if (!normKey) return;
+
+      const rawFmt = (item.hinh_thuc_hoc || item.hinh_thuc_dt || 'Trực tiếp').trim();
+      const cType = getCohortType(rawFmt);
+      const hvKh = Number(item.so_hv_kh || item.hv_kh) || 0;
+      const hvTt = Number(item.hv_thuc_te) || 0;
+
+      if (!map.has(normKey)) {
+        map.set(normKey, {
+          uniqueKey: ml,
+          ma_lop: ml,
+          ma_ct: item.ma_ct || ml.split('/')[0] || '',
+          ten_ct: item.ten_ct || item.ten_lop || ml,
+          rawFormat: rawFmt,
+          hinh_thuc_hoc: rawFmt,
+          hasDirect: cType === 'direct',
+          hasOnline: cType === 'online',
+          cbql: item.cbql || item.can_bo_ql || '',
+          ngay_bd: item.ngay_bd || '',
+          ngay_kt: item.ngay_kt || '',
+          dia_diem: item.dia_diem || '',
+          so_hv_kh: hvKh,
+          hv_thuc_te: hvTt
+        });
+      } else {
+        const ex = map.get(normKey);
+        if (cType === 'direct') ex.hasDirect = true;
+        if (cType === 'online') ex.hasOnline = true;
+        ex.so_hv_kh += hvKh;
+        ex.hv_thuc_te += hvTt;
+        if (item.dia_diem && !ex.dia_diem.includes(item.dia_diem)) {
+          ex.dia_diem = ex.dia_diem ? (ex.dia_diem + ' • ' + item.dia_diem) : item.dia_diem;
+        }
+        if (!ex.cbql && (item.cbql || item.can_bo_ql)) {
+          ex.cbql = item.cbql || item.can_bo_ql;
+        }
+        if (!ex.ten_ct && (item.ten_ct || item.ten_lop)) {
+          ex.ten_ct = item.ten_ct || item.ten_lop;
+        }
+      }
+    };
+
+    if (Array.isArray(primary)) {
+      primary.forEach(c => {
+        if (c.is_class !== false && c.ma_lop) registerClass(c);
+      });
+    }
+
+    // Also scan evaluation sheets for classes that might be missing in class sheet
+    const scanEval = (list) => {
+      if (!Array.isArray(list)) return;
+      list.forEach(i => {
+        if (i && i.ma_lop && i.ma_lop.includes('/')) {
+          const norm = normalizeReportClassKey(i.ma_lop);
+          if (!map.has(norm)) {
+            registerClass({
+              ma_lop: i.ma_lop,
+              ma_ct: i.chuong_trinh || i.ma_ct || i.ma_lop.split('/')[0],
+              ten_ct: i.ten_ct_full || i.ten_ct || i.ma_lop,
+              hinh_thuc_hoc: i.hinh_thuc_hoc || 'Trực tiếp',
+              cbql: i.cbql || '',
+              ngay_bd: i.ngay_bd || '',
+              ngay_kt: i.ngay_kt || '',
+              dia_diem: i.dia_diem || '',
+              hv_thuc_te: Number(i.tong_phieu || i.so_phieu) || 0
+            });
+          } else {
+            const ex = map.get(norm);
+            const rawFmt = (i.hinh_thuc_hoc || '').trim();
+            const cType = getCohortType(rawFmt);
+            if (cType === 'direct') ex.hasDirect = true;
+            if (cType === 'online') ex.hasOnline = true;
+          }
+        }
+      });
+    };
+    scanEval(getRepPphtdt());
+    scanEval(getRepNddt());
+    if (typeof RAW_NDDT_OLD_DATA !== 'undefined' && Array.isArray(RAW_NDDT_OLD_DATA)) scanEval(RAW_NDDT_OLD_DATA);
+    scanEval(getRepCsvc());
+    scanEval(getRepGv());
+    scanEval(getRepDgc());
+
+    // Resolve unified format according to project rule:
+    // If a class has both direct and online cohorts, format is 'Trực tiếp kết hợp Trực tuyến'
+    const allItems = Array.from(map.values());
+    allItems.forEach(item => {
+      if (item.hasDirect && item.hasOnline) {
+        item.hinh_thuc_hoc = 'Trực tiếp kết hợp Trực tuyến';
+      } else if (item.hasOnline) {
+        item.hinh_thuc_hoc = 'Trực tuyến';
+      } else {
+        item.hinh_thuc_hoc = 'Trực tiếp';
+      }
+    });
+
+    return allItems.sort((a, b) => a.ma_lop.localeCompare(b.ma_lop));
+  }
+
+  // Get distinct programs list for dropdown
+  function getAllReportProgramList() {
+    const progMap = new Map();
+
+    const register = (code, full) => {
+      const c = (code || '').trim();
+      const f = (full || '').trim();
+      if (!c) return;
+      const normKey = normalizeReportProgramKey(c);
+      if (!progMap.has(normKey)) {
+        progMap.set(normKey, { code: c, name: f || c });
+      } else {
+        const ex = progMap.get(normKey);
+        if (f && f !== ex.name && (!ex.name || ex.name === ex.code)) {
+          ex.name = f;
+        }
+      }
+    };
+
+    const clsList = getRepClasses();
+    if (Array.isArray(clsList)) {
+      clsList.forEach(c => {
+        const code = c.ma_ct || c.chuong_trinh;
+        const name = c.ten_ct;
+        if (code) register(code, name);
+      });
+    }
+
+    const checkList = (list) => {
+      if (!Array.isArray(list)) return;
+      list.forEach(i => {
+        if (i && (i.chuong_trinh || i.ma_ct)) {
+          register(i.chuong_trinh || i.ma_ct, i.ten_ct_full || i.ten_ct);
+        }
+      });
+    };
+    checkList(getRepNddt());
+    if (typeof RAW_NDDT_OLD_DATA !== 'undefined' && Array.isArray(RAW_NDDT_OLD_DATA)) checkList(RAW_NDDT_OLD_DATA);
+    checkList(getRepPphtdt());
+    checkList(getRepCsvc());
+    checkList(getRepGv());
+    checkList(getRepDgc());
+
+    return Array.from(progMap.values()).sort((a, b) => a.code.localeCompare(b.code));
+  }
+
+  // Helper to normalize class code spacing (e.g. 'QHTĐV/26-03 HP1' -> 'QHTĐV/26-03-HP1')
+  function normalizeClassCode(c) {
+    if (!c) return '';
+    return c.toString().trim().replace(/\s*-\s*/g, '-').replace(/\s+/g, '-');
+  }
+
+  // Helper to normalize lecturer key for strict deduplication
+  function normalizeLecturerKey(name) {
+    if (!name) return '';
+    let clean = name.toString().trim().toLowerCase();
+    // Strip common academic/honorific titles (TS., ThS., PGS.TS., GS., etc.)
+    clean = clean.replace(/^(pgs\.?\s*ts\.?|gs\.?\s*ts\.?|ths\.?|ts\.?|pgs\.?|gs\.?)\s+/i, '');
+    return clean.replace(/\s+/g, ' ').trim();
+  }
+
+  // Helper to find all classes belonging to a program
+  function findClassesForProgram(programCode) {
+    const norm = normalizeReportProgramKey(programCode);
+    const classMap = new Map();
+
+    // 1. From class sheet (primary truth)
+    const rawClasses = getRepClasses();
+    const officialClassMap = new Map();
+    const officialCanonicalMap = new Map();
+    if (Array.isArray(rawClasses)) {
+      rawClasses.forEach(c => {
+        if (!c.ma_lop) return;
+        const normClass = normalizeClassCode(c.ma_lop);
+        const progKey = normalizeReportProgramKey(c.ma_ct || c.ma_chuong_trinh || c.ma_lop.split('/')[0]);
+        officialClassMap.set(normClass, progKey);
+        officialCanonicalMap.set(normClass, c.ma_lop.trim());
+
+        if (progKey === norm && c.ma_lop.trim()) {
+          const ml = c.ma_lop.trim();
+          const rawFmt = (c.hinh_thuc_hoc || c.hinh_thuc_dt || 'Trực tiếp').trim();
+          const cType = getCohortType(rawFmt);
+          const k = normClass + '__' + cType;
+          if (!classMap.has(k)) {
+            classMap.set(k, {
+              ma_lop: ml,
+              ma_ct: c.ma_ct || programCode,
+              ten_ct: c.ten_ct || '',
+              hinh_thuc_hoc: rawFmt,
+              ngay_bd: c.ngay_bd || '',
+              ngay_kt: c.ngay_kt || '',
+              dia_diem: c.dia_diem || '',
+              cbql: c.cbql || c.can_bo_ql || '',
+              hv_kh: Number(c.so_hv_kh || c.hv_kh) || 0,
+              hv_thuc_te: Number(c.hv_thuc_te) || 0
+            });
+          }
+        }
+      });
+    }
+
+    // 2. From evaluation sheets (PPHT, NDDT, CSVC, DGC)
+    const scanEval = (list) => {
+      if (!Array.isArray(list)) return;
+      list.forEach(i => {
+        if (!i || !i.ma_lop || !i.ma_lop.trim()) return;
+        const normClass = normalizeClassCode(i.ma_lop);
+        let assignedProg = officialClassMap.get(normClass);
+        if (!assignedProg) {
+          assignedProg = normalizeReportProgramKey(normClass.split('/')[0]);
+        }
+        // ONLY include if assignedProg strictly matches this program
+        if (assignedProg === norm) {
+          const canonicalCode = officialCanonicalMap.get(normClass) || normClass;
+          const rawFmt = (i.hinh_thuc_hoc || 'Trực tiếp').trim();
+          const cType = getCohortType(rawFmt);
+          const k = normClass + '__' + cType;
+          if (!classMap.has(k)) {
+            classMap.set(k, {
+              ma_lop: canonicalCode,
+              ma_ct: programCode,
+              ten_ct: i.ten_ct_full || i.ten_ct || '',
+              hinh_thuc_hoc: rawFmt,
+              ngay_bd: i.ngay_bd || i.ngay_bd_raw || '',
+              ngay_kt: i.ngay_kt || i.ngay_kt_raw || '',
+              dia_diem: i.dia_diem || '',
+              cbql: i.cbql || '',
+              hv_kh: 0,
+              hv_thuc_te: Number(i.tong_phieu || i.so_phieu) || 0
+            });
+          } else {
+            const ex = classMap.get(k);
+            if (!ex.cbql && i.cbql) ex.cbql = i.cbql;
+            if (!ex.dia_diem && i.dia_diem) ex.dia_diem = i.dia_diem;
+            if (!ex.ngay_bd && (i.ngay_bd || i.ngay_bd_raw)) ex.ngay_bd = i.ngay_bd || i.ngay_bd_raw;
+            if (!ex.ngay_kt && (i.ngay_kt || i.ngay_kt_raw)) ex.ngay_kt = i.ngay_kt || i.ngay_kt_raw;
+          }
+        }
+      });
+    };
+    scanEval(getRepPphtdt());
+    scanEval(getRepNddt());
+    if (typeof RAW_NDDT_OLD_DATA !== 'undefined' && Array.isArray(RAW_NDDT_OLD_DATA)) scanEval(RAW_NDDT_OLD_DATA);
+    scanEval(getRepCsvc());
+    scanEval(getRepDgc());
+
+    return Array.from(classMap.values());
+  }
+
+
+
+  // --- HELPER TO AGGREGATE NDDT ITEMS ---
+  function aggregateNddtList(items, label) {
+    if (!Array.isArray(items) || items.length === 0) return null;
+    let c1_4 = 0, c1_3 = 0, c1_2 = 0, c1_1 = 0, c1_n = 0;
+    let c2_4 = 0, c2_3 = 0, c2_2 = 0, c2_1 = 0, c2_n = 0;
+    let c3_4 = 0, c3_3 = 0, c3_2 = 0, c3_1 = 0, c3_n = 0;
+    let totalVotes = 0;
+    let oldCount = 0;
+    let newCount = 0;
+
+    items.forEach(n => {
+      const v = Number(n.tong_phieu || n.so_phieu) || 0;
+      totalVotes += v;
+      if (n._template === 'old') {
+        oldCount += (v || 1);
+      } else {
+        newCount += (v || 1);
+      }
+
+      const n4_1 = Number(n.c1_4) || 0, n3_1 = Number(n.c1_3) || 0, n2_1 = Number(n.c1_2) || 0, n1_1 = Number(n.c1_1) || 0;
+      c1_4 += n4_1; c1_3 += n3_1; c1_2 += n2_1; c1_1 += n1_1;
+      c1_n += Number(n.c1_n) || (n4_1 + n3_1 + n2_1 + n1_1);
+
+      const n4_2 = Number(n.c2_4) || 0, n3_2 = Number(n.c2_3) || 0, n2_2 = Number(n.c2_2) || 0, n1_2 = Number(n.c2_1) || 0;
+      c2_4 += n4_2; c2_3 += n3_2; c2_2 += n2_2; c2_1 += n1_2;
+      c2_n += Number(n.c2_n) || (n4_2 + n3_2 + n2_2 + n1_2);
+
+      const n4_3 = Number(n.c3_4) || 0, n3_3 = Number(n.c3_3) || 0, n2_3 = Number(n.c3_2) || 0, n1_3 = Number(n.c3_1) || 0;
+      c3_4 += n4_3; c3_3 += n3_3; c3_2 += n2_3; c3_1 += n1_3;
+      c3_n += Number(n.c3_n) || (n4_3 + n3_3 + n2_3 + n1_3);
+    });
+
+    const isOld = oldCount > newCount;
+    const c1Name = isOld ? '1. Đáp ứng mong muốn' : '1. Phù hợp vị trí CV';
+    const c2Name = isOld ? '2. Liên quan công việc' : '2. Thực tiễn';
+    const c3Name = isOld ? '3. Ứng dụng thực tế' : '3. Áp dụng kiến thức';
+
+    const c1_score = c1_n > 0 ? Number(((c1_4 * 4 + c1_3 * 3 + c1_2 * 2 + c1_1) / c1_n).toFixed(2)) : 0;
+    const c1_pos = c1_n > 0 ? Number((((c1_4 + c1_3) / c1_n) * 100).toFixed(1)) : 0;
+    const c2_score = c2_n > 0 ? Number(((c2_4 * 4 + c2_3 * 3 + c2_2 * 2 + c2_1) / c2_n).toFixed(2)) : 0;
+    const c2_pos = c2_n > 0 ? Number((((c2_4 + c2_3) / c2_n) * 100).toFixed(1)) : 0;
+    const c3_score = c3_n > 0 ? Number(((c3_4 * 4 + c3_3 * 3 + c3_2 * 2 + c3_1) / c3_n).toFixed(2)) : 0;
+    const c3_pos = c3_n > 0 ? Number((((c3_4 + c3_3) / c3_n) * 100).toFixed(1)) : 0;
+
+    const totCriteria = c1_n + c2_n + c3_n;
+    const sumN4 = c1_4 + c2_4 + c3_4;
+    const sumN3 = c1_3 + c2_3 + c3_3;
+    const sumN2 = c1_2 + c2_2 + c3_2;
+    const sumN1 = c1_1 + c2_1 + c3_1;
+
+    const overallScore = totCriteria > 0 ? Number(((sumN4 * 4 + sumN3 * 3 + sumN2 * 2 + sumN1) / totCriteria).toFixed(2)) : 0;
+    const overallPos = totCriteria > 0 ? Number((((sumN4 + sumN3) / totCriteria) * 100).toFixed(1)) : 0;
+    const maxVotes = totalVotes || Math.max(c1_n, c2_n, c3_n);
+
+    return {
+      label: label || '',
+      template: isOld ? 'old' : 'new',
+      isOldTemplate: isOld,
+      votes: maxVotes,
+      score: overallScore,
+      posRate: overallPos,
+      c1: { name: c1Name, rawName: isOld ? 'Đáp ứng mong muốn' : 'Phù hợp vị trí CV', score: c1_score, posRate: c1_pos, n4: c1_4, n3: c1_3, n2: c1_2, n1: c1_1, total: c1_n },
+      c2: { name: c2Name, rawName: isOld ? 'Liên quan công việc' : 'Thực tiễn', score: c2_score, posRate: c2_pos, n4: c2_4, n3: c2_3, n2: c2_2, n1: c2_1, total: c2_n },
+      c3: { name: c3Name, rawName: isOld ? 'Ứng dụng thực tế' : 'Áp dụng kiến thức', score: c3_score, posRate: c3_pos, n4: c3_4, n3: c3_3, n2: c3_2, n1: c3_1, total: c3_n },
+      subtotal: {
+        n4: sumN4, n3: sumN3, n2: sumN2, n1: sumN1, total: totCriteria, score: overallScore, posRate: overallPos
+      }
+    };
+  }
+
+  // --- HELPER TO AGGREGATE LECTURER ITEMS WITH COHORT SPLIT & STRICT DEDUPLICATION ---
+  function aggregateLecturerList(matches, isProgram) {
+    if (!Array.isArray(matches) || matches.length === 0) {
+      return {
+        lecturers: [],
+        totalHours: 0,
+        totalVotes: 0,
+        avgKtcm: 0,
+        avgKnsp: 0,
+        avgTdtp: 0,
+        avgTb: 0
+      };
+    }
+
+    const gvDedupMap = new Map();
+    matches.forEach(g => {
+      if (!g) return;
+      const rawName = (g.ten_gv || g.name || 'Chưa rõ').trim();
+      const gvKey = (typeof normalizeLecturerKey === 'function') 
+        ? normalizeLecturerKey(rawName) 
+        : rawName.toLowerCase().replace(/^(pgs\.?\s*ts\.?|gs\.?\s*ts\.?|ths\.?|ts\.?|pgs\.?|gs\.?)\s+/i, '').replace(/\s+/g, ' ').trim();
+      if (!gvKey) return;
+
+      const normMl = normalizeReportClassKey(g.ma_lop || '');
+      const normContent = normalizeContentKey(g.noi_dung_giang || g.mon || '');
+      const unitKey = isProgram ? (normMl + '__' + (normContent || 'chung')) : (normContent || 'chung');
+      const hours = Number(g.so_tiet) || 0;
+      const vKtcm = Number(g.tong_phieu_ktcm) || Number(g.tong_phieu) || 0;
+      const vKnsp = Number(g.tong_phieu_knsp) || Number(g.tong_phieu) || 0;
+      const vTdtp = Number(g.tong_phieu_tdtp) || Number(g.tong_phieu) || 0;
+      const vTb = Number(g.tong_phieu) || Math.max(vKtcm, vKnsp, vTdtp);
+
+      if (!gvDedupMap.has(gvKey)) {
+        const teachingUnits = new Map();
+        if (hours > 0 || unitKey) teachingUnits.set(unitKey, hours);
+
+        const classes = new Set();
+        if (g.ma_lop) classes.add(normalizeClassCode(g.ma_lop));
+
+        const contents = new Set();
+        if (g.noi_dung_giang && g.noi_dung_giang.trim()) contents.add(g.noi_dung_giang.trim());
+        else if (g.mon && g.mon.trim()) contents.add(g.mon.trim());
+
+        const formats = new Set();
+        if (g.hinh_thuc_hoc) formats.add(g.hinh_thuc_hoc);
+
+        gvDedupMap.set(gvKey, {
+          name: rawName,
+          ten_gv: rawName,
+          donVi: (g.don_vi || g.donVi || '').trim(),
+          don_vi: (g.don_vi || g.donVi || '').trim(),
+          teachingUnits: teachingUnits,
+          classes: classes,
+          contents: contents,
+          formats: formats,
+          votesKtcm: vKtcm,
+          votesKnsp: vKnsp,
+          votesTdtp: vTdtp,
+          totalVotes: vTb,
+          weightedKtcm: (Number(g.diem_ktcm) || 0) * vKtcm,
+          weightedKnsp: (Number(g.diem_knsp) || 0) * vKnsp,
+          weightedTdtp: (Number(g.diem_tdtp) || 0) * vTdtp,
+          weightedTb: (Number(g.diem_tb) || 0) * vTb
+        });
+      } else {
+        const ex = gvDedupMap.get(gvKey);
+        if (rawName.length > ex.name.length || (!ex.name.includes('.') && rawName.includes('.'))) {
+          ex.name = rawName;
+          ex.ten_gv = rawName;
+        }
+        const curUnit = (g.don_vi || g.donVi || '').trim();
+        if (curUnit && (!ex.donVi || ex.donVi === 'Chưa rõ' || (ex.donVi === 'Trường ĐTCB' && curUnit !== 'Trường ĐTCB'))) {
+          ex.donVi = curUnit;
+          ex.don_vi = curUnit;
+        }
+        if (g.ma_lop) ex.classes.add(normalizeClassCode(g.ma_lop));
+        if (g.noi_dung_giang && g.noi_dung_giang.trim()) ex.contents.add(g.noi_dung_giang.trim());
+        else if (g.mon && g.mon.trim()) ex.contents.add(g.mon.trim());
+        if (g.hinh_thuc_hoc) ex.formats.add(g.hinh_thuc_hoc);
+
+        if (!ex.teachingUnits.has(unitKey)) {
+          ex.teachingUnits.set(unitKey, hours);
+        } else {
+          const curH = ex.teachingUnits.get(unitKey);
+          if (hours > curH) ex.teachingUnits.set(unitKey, hours);
+        }
+
+        ex.votesKtcm += vKtcm;
+        ex.votesKnsp += vKnsp;
+        ex.votesTdtp += vTdtp;
+        ex.totalVotes += vTb;
+        ex.weightedKtcm += (Number(g.diem_ktcm) || 0) * vKtcm;
+        ex.weightedKnsp += (Number(g.diem_knsp) || 0) * vKnsp;
+        ex.weightedTdtp += (Number(g.diem_tdtp) || 0) * vTdtp;
+        ex.weightedTb += (Number(g.diem_tb) || 0) * vTb;
+      }
+    });
+
+    const lecturers = Array.from(gvDedupMap.values()).map(g => {
+      let totHours = 0;
+      g.teachingUnits.forEach(h => { totHours += h; });
+
+      const sKtcm = g.votesKtcm > 0 ? Number((g.weightedKtcm / g.votesKtcm).toFixed(2)) : 0;
+      const sKnsp = g.votesKnsp > 0 ? Number((g.weightedKnsp / g.votesKnsp).toFixed(2)) : 0;
+      const sTdtp = g.votesTdtp > 0 ? Number((g.weightedTdtp / g.votesTdtp).toFixed(2)) : 0;
+      let sTb = 0;
+      if (sKtcm > 0 && sKnsp > 0 && sTdtp > 0) {
+        sTb = Number(((sKtcm + sKnsp + sTdtp) / 3).toFixed(2));
+      } else if (g.totalVotes > 0) {
+        sTb = Number((g.weightedTb / g.totalVotes).toFixed(2));
+      }
+
+      const hasDirect = g.formats.has('Trực tiếp') || g.formats.has('trực tiếp');
+      const hasOnline = g.formats.has('Trực tuyến') || g.formats.has('Trực tiếp kết hợp Trực tuyến') || g.formats.has('polycom');
+      const format = (hasDirect && hasOnline) ? 'Trực tiếp kết hợp Trực tuyến' : (Array.from(g.formats)[0] || 'Trực tiếp');
+
+      return {
+        name: g.name,
+        ten_gv: g.name,
+        donVi: g.donVi || 'Trường ĐTCB',
+        don_vi: g.donVi || 'Trường ĐTCB',
+        noi_dung_giang: Array.from(g.contents).join('; ') || 'Toàn khóa',
+        totalHours: totHours,
+        so_tiet: totHours,
+        classesCount: g.classes.size || 1,
+        totalVotes: g.totalVotes,
+        tong_phieu: g.totalVotes,
+        diem_ktcm: sKtcm,
+        diem_knsp: sKnsp,
+        diem_tdtp: sTdtp,
+        diem_tb: sTb,
+        format: format
+      };
+    }).sort((a, b) => (b.diem_tb - a.diem_tb) || (b.totalVotes - a.totalVotes) || (b.totalHours - a.totalHours));
+
+    let totCohortHours = 0;
+    const cohortTeachingUnits = new Map();
+    matches.forEach(g => {
+      const rawName = (g.ten_gv || g.name || 'Chưa rõ').trim();
+      const gvKey = (typeof normalizeLecturerKey === 'function') ? normalizeLecturerKey(rawName) : rawName.toLowerCase();
+      const normMl = normalizeReportClassKey(g.ma_lop || '');
+      const normContent = normalizeContentKey(g.noi_dung_giang || g.mon || '');
+      const unitKey = gvKey + '__' + (isProgram ? (normMl + '__' + normContent) : normContent);
+      const hours = Number(g.so_tiet) || 0;
+      if (!cohortTeachingUnits.has(unitKey)) {
+        cohortTeachingUnits.set(unitKey, hours);
+      } else {
+        cohortTeachingUnits.set(unitKey, Math.max(cohortTeachingUnits.get(unitKey), hours));
+      }
+    });
+    cohortTeachingUnits.forEach(h => { totCohortHours += h; });
+
+    const totCohortVotes = lecturers.reduce((sum, g) => sum + g.totalVotes, 0);
+    const sumWeightedKtcm = lecturers.reduce((sum, g) => sum + g.diem_ktcm * g.totalVotes, 0);
+    const sumWeightedKnsp = lecturers.reduce((sum, g) => sum + g.diem_knsp * g.totalVotes, 0);
+    const sumWeightedTdtp = lecturers.reduce((sum, g) => sum + g.diem_tdtp * g.totalVotes, 0);
+
+    const avgKtcm = totCohortVotes > 0 ? Number((sumWeightedKtcm / totCohortVotes).toFixed(2)) : 0;
+    const avgKnsp = totCohortVotes > 0 ? Number((sumWeightedKnsp / totCohortVotes).toFixed(2)) : 0;
+    const avgTdtp = totCohortVotes > 0 ? Number((sumWeightedTdtp / totCohortVotes).toFixed(2)) : 0;
+    let avgTb = 0;
+    if (avgKtcm > 0 && avgKnsp > 0 && avgTdtp > 0) {
+      avgTb = Number(((avgKtcm + avgKnsp + avgTdtp) / 3).toFixed(2));
+    } else if (totCohortVotes > 0) {
+      const sumWeightedTb = lecturers.reduce((sum, g) => sum + g.diem_tb * g.totalVotes, 0);
+      avgTb = Number((sumWeightedTb / totCohortVotes).toFixed(2));
+    }
+
+    return {
+      lecturers: lecturers,
+      totalHours: totCohortHours,
+      totalVotes: totCohortVotes,
+      avgKtcm: avgKtcm,
+      avgKnsp: avgKnsp,
+      avgTdtp: avgTdtp,
+      avgTb: avgTb
+    };
+  }
+
+  // --- CORE AGGREGATOR 1: DETAILED CLASS REPORT ---
+  function getDetailedClassReport(keyOrCode) {
+    if (!keyOrCode) return null;
+    const primaryList = getRepClasses();
+
+    let rawCode = keyOrCode;
+    if (keyOrCode.includes('::')) {
+      rawCode = keyOrCode.split('::')[0];
+    }
+    const normKey = normalizeReportClassKey(rawCode);
+
+    const matchingPrimary = (Array.isArray(primaryList) ? primaryList : []).filter(c => normalizeReportClassKey(c.ma_lop) === normKey);
+    const baseClass = matchingPrimary[0] || {};
+    const canonicalCode = baseClass.ma_lop || rawCode.trim();
+
+    const repPpht = getRepPphtdt();
+    const repNddt = getRepNddt();
+    const repCsvc = getRepCsvc();
+    const repGv = getRepGv();
+    const repDgc = getRepDgc();
+
+    const pphtMatches = (Array.isArray(repPpht) ? repPpht : []).filter(p => p && normalizeReportClassKey(p.ma_lop) === normKey);
+    const rawNddtList = Array.isArray(repNddt) ? repNddt : [];
+    const classNddtRaw = rawNddtList.filter(n => n && normalizeReportClassKey(n.ma_lop) === normKey);
+    const seenCohortNddt = new Set();
+    const nddtMatches = [];
+    classNddtRaw.filter(n => n._template === 'new').forEach(n => {
+      const cType = (typeof getCohortType === 'function') ? getCohortType(n.hinh_thuc_hoc) : (n.hinh_thuc_hoc || '');
+      const k = normalizeReportClassKey(n.ma_lop) + '__' + cType;
+      if (!seenCohortNddt.has(k)) {
+        seenCohortNddt.add(k);
+        nddtMatches.push(n);
+      }
+    });
+    classNddtRaw.filter(n => n._template === 'old').forEach(n => {
+      const cType = (typeof getCohortType === 'function') ? getCohortType(n.hinh_thuc_hoc) : (n.hinh_thuc_hoc || '');
+      const k = normalizeReportClassKey(n.ma_lop) + '__' + cType;
+      if (!seenCohortNddt.has(k)) {
+        seenCohortNddt.add(k);
+        nddtMatches.push(n);
+      }
+    });
+    const csvcMatches = (Array.isArray(repCsvc) ? repCsvc : []).filter(c => c && normalizeReportClassKey(c.ma_lop) === normKey);
+    const gvMatches = (Array.isArray(repGv) ? repGv : []).filter(g => g && normalizeReportClassKey(g.ma_lop) === normKey);
+    const dgcMatches = (Array.isArray(repDgc) ? repDgc : []).filter(d => d && normalizeReportClassKey(d.ma_lop) === normKey);
+
+    // Formats detection
+    const formatsFound = new Set();
+    matchingPrimary.forEach(c => c.hinh_thuc_hoc && formatsFound.add(c.hinh_thuc_hoc));
+    pphtMatches.forEach(p => p.hinh_thuc_hoc && formatsFound.add(p.hinh_thuc_hoc));
+    nddtMatches.forEach(n => n.hinh_thuc_hoc && formatsFound.add(n.hinh_thuc_hoc));
+    csvcMatches.forEach(c => c.hinh_thuc_hoc && formatsFound.add(c.hinh_thuc_hoc));
+    gvMatches.forEach(g => g.hinh_thuc_hoc && formatsFound.add(g.hinh_thuc_hoc));
+    dgcMatches.forEach(d => d.hinh_thuc_hoc && formatsFound.add(d.hinh_thuc_hoc));
+
+    const hasDirect = Array.from(formatsFound).some(f => getCohortType(f) === 'direct');
+    const hasOnline = Array.from(formatsFound).some(f => getCohortType(f) === 'online');
+    const isMultiFormat = hasDirect && hasOnline;
+
+    let finalFormat = 'Trực tiếp';
+    if (isMultiFormat) {
+      finalFormat = 'Trực tiếp kết hợp Trực tuyến';
+    } else if (hasOnline) {
+      finalFormat = 'Trực tuyến';
+    }
+
+    // Student counts and locations by cohort
+    let directHvKh = 0, onlineHvKh = 0;
+    let directHvTt = 0, onlineHvTt = 0;
+    let directLocation = '', onlineLocation = '';
+    const seenClsKeys = new Set();
+
+    matchingPrimary.forEach(c => {
+      const fKey = (c.hinh_thuc_hoc || c.hinh_thuc_dt || '').trim();
+      const cType = getCohortType(fKey);
+      const k = c.ma_lop + '__' + cType;
+      if (!seenClsKeys.has(k)) {
+        seenClsKeys.add(k);
+        const kh = Number(c.so_hv_kh || c.hv_kh) || 0;
+        const tt = Number(c.hv_thuc_te) || 0;
+        if (cType === 'direct') {
+          directHvKh += kh;
+          directHvTt += tt;
+          if (c.dia_diem) directLocation = c.dia_diem;
+        } else {
+          onlineHvKh += kh;
+          onlineHvTt += tt;
+          if (c.dia_diem) onlineLocation = c.dia_diem;
+        }
+      }
+    });
+
+    let hvKhTotal = directHvKh + onlineHvKh;
+    let hvThucTeTotal = directHvTt + onlineHvTt;
+    if (hvThucTeTotal === 0 && baseClass.hv_thuc_te) hvThucTeTotal = Number(baseClass.hv_thuc_te) || 0;
+    if (hvKhTotal === 0 && baseClass.hv_kh) hvKhTotal = Number(baseClass.hv_kh) || 0;
+
+    let combinedLocation = '';
+    if (directLocation && onlineLocation && directLocation !== onlineLocation) {
+      combinedLocation = directLocation + ' • ' + onlineLocation;
+    } else {
+      combinedLocation = directLocation || onlineLocation || baseClass.dia_diem || 'Trường ĐT&BDNV';
+    }
+
+    // 1. NDDT Handling
+    let nddtData = null;
+    const directNddtItems = nddtMatches.filter(n => getCohortType(n.hinh_thuc_hoc) === 'direct');
+    const onlineNddtItems = nddtMatches.filter(n => getCohortType(n.hinh_thuc_hoc) === 'online');
+    const nddtDirect = aggregateNddtList(directNddtItems, 'Trực tiếp');
+    const nddtOnline = aggregateNddtList(onlineNddtItems, 'Trực tiếp kết hợp Trực tuyến');
+    const nddtOverall = aggregateNddtList(nddtMatches, 'Toàn lớp');
+
+    if (nddtOverall) {
+      if (isMultiFormat && nddtDirect && nddtOnline) {
+        nddtData = {
+          ...nddtOverall,
+          isMultiFormat: true,
+          direct: nddtDirect,
+          online: nddtOnline,
+          overall: nddtOverall
+        };
+      } else {
+        nddtData = {
+          ...(nddtDirect || nddtOnline || nddtOverall),
+          isMultiFormat: false
+        };
+      }
+    }
+
+    // 2. PPHTDT Handling
+    let pphtData = null;
+    if (pphtMatches.length > 0) {
+      function buildPphtCohort(p) {
+        if (!p) return null;
+        const v = p.tong_phieu || 0;
+        const n4_1 = p.c1_4 || 0, n3_1 = p.c1_3 || 0, n2_1 = p.c1_2 || 0, n1_1 = p.c1_1 || 0;
+        const n4_2 = p.c2_4 || 0, n3_2 = p.c2_3 || 0, n2_2 = p.c2_2 || 0, n1_2 = p.c2_1 || 0;
+        return {
+          score: p.diem_tb || 0,
+          votes: v,
+          posRate: p.ty_le_tich_cuc || 0,
+          c1: { score: p.c1_score || 0, posRate: p.c1_pos || 0, n4: n4_1, n3: n3_1, n2: n2_1, n1: n1_1, total: p.c1_n || v },
+          c2: { score: p.c2_score || 0, posRate: p.c2_pos || 0, n4: n4_2, n3: n3_2, n2: n2_2, n1: n1_2, total: p.c2_n || v },
+          subtotal: {
+            score: p.diem_tb || 0,
+            posRate: p.ty_le_tich_cuc || 0,
+            total: (p.c1_n || v) + (p.c2_n || v),
+            n4: n4_1 + n4_2, n3: n3_1 + n3_2, n2: n2_1 + n2_2, n1: n1_1 + n1_2
+          }
+        };
+      }
+
+      const directPphtItems = pphtMatches.filter(p => getCohortType(p.hinh_thuc_hoc) === 'direct');
+      const onlinePphtItems = pphtMatches.filter(p => getCohortType(p.hinh_thuc_hoc) === 'online');
+
+      const pDirect = directPphtItems[0] ? buildPphtCohort(directPphtItems[0]) : null;
+      const pHybrid = onlinePphtItems[0] ? buildPphtCohort(onlinePphtItems[0]) : null;
+
+      if (isMultiFormat && pDirect && pHybrid) {
+        const totalVotes = pDirect.votes + pHybrid.votes;
+        const weightedScore = totalVotes > 0 ? Number(((pDirect.score * pDirect.votes + pHybrid.score * pHybrid.votes) / totalVotes).toFixed(2)) : 0;
+        const weightedPos = totalVotes > 0 ? Number(((pDirect.posRate * pDirect.votes + pHybrid.posRate * pHybrid.votes) / totalVotes).toFixed(1)) : 0;
+
+        pphtData = {
+          votes: totalVotes,
+          score: weightedScore,
+          posRate: weightedPos,
+          isMultiFormat: true,
+          formats: {
+            'Trực tiếp': pDirect,
+            'Trực tiếp kết hợp Trực tuyến': pHybrid
+          }
+        };
+      } else if (pDirect) {
+        pphtData = { ...pDirect, isMultiFormat: false, formats: { 'Trực tiếp': pDirect } };
+      } else if (pHybrid) {
+        pphtData = { ...pHybrid, isMultiFormat: false, formats: { 'Trực tiếp kết hợp Trực tuyến': pHybrid } };
+      } else {
+        const singleP = buildPphtCohort(pphtMatches[0]);
+        const fmtKey = getCohortType(pphtMatches[0].hinh_thuc_hoc) === 'online' ? 'Trực tiếp kết hợp Trực tuyến' : 'Trực tiếp';
+        pphtData = { ...singleP, isMultiFormat: false, formats: { [fmtKey]: singleP } };
+      }
+    }
+
+    // 3. CSVC Handling
+    let csvcData = null;
+    if (csvcMatches.length > 0) {
+      function buildCsvcCohort(c) {
+        if (!c) return null;
+        const n4_1 = Number(c.cttc_4 ?? c.c1_4 ?? (c.c1 && c.c1.n4)) || 0;
+        const n3_1 = Number(c.cttc_3 ?? c.c1_3 ?? (c.c1 && c.c1.n3)) || 0;
+        const n2_1 = Number(c.cttc_2 ?? c.c1_2 ?? (c.c1 && c.c1.n2)) || 0;
+        const n1_1 = Number(c.cttc_1 ?? c.c1_1 ?? (c.c1 && c.c1.n1)) || 0;
+        const t1 = n4_1 + n3_1 + n2_1 + n1_1;
+        const c1_n = Number(c.cttc_tot ?? c.c1_n ?? (c.c1 && c.c1.total)) || t1;
+
+        const n4_2 = Number(c.csvc_4 ?? c.c2_4 ?? (c.c2 && c.c2.n4)) || 0;
+        const n3_2 = Number(c.csvc_3 ?? c.c2_3 ?? (c.c2 && c.c2.n3)) || 0;
+        const n2_2 = Number(c.csvc_2 ?? c.c2_2 ?? (c.c2 && c.c2.n2)) || 0;
+        const n1_2 = Number(c.csvc_1 ?? c.c2_1 ?? (c.c2 && c.c2.n1)) || 0;
+        const t2 = n4_2 + n3_2 + n2_2 + n1_2;
+        const c2_n = Number(c.csvc_tot ?? c.c2_n ?? (c.c2 && c.c2.total)) || t2;
+
+        const n4_3 = Number(c.hc_4 ?? c.c3_4 ?? (c.c3 && c.c3.n4)) || 0;
+        const n3_3 = Number(c.hc_3 ?? c.c3_3 ?? (c.c3 && c.c3.n3)) || 0;
+        const n2_3 = Number(c.hc_2 ?? c.c3_2 ?? (c.c3 && c.c3.n2)) || 0;
+        const n1_3 = Number(c.hc_1 ?? c.c3_1 ?? (c.c3 && c.c3.n1)) || 0;
+        const t3 = n4_3 + n3_3 + n2_3 + n1_3;
+        const c3_n = Number(c.hc_tot ?? c.c3_n ?? (c.c3 && c.c3.total)) || t3;
+
+        const c1_score = c1_n > 0 ? Number(((n4_1 * 4 + n3_1 * 3 + n2_1 * 2 + n1_1) / c1_n).toFixed(2)) : (Number(c.cttc_score ?? c.c1_score ?? (c.c1 && c.c1.score)) || 0);
+        const c1_pos = c1_n > 0 ? Number((((n4_1 + n3_1) / c1_n) * 100).toFixed(1)) : (Number(c.cttc_pos ?? c.c1_pos ?? (c.c1 && c.c1.posRate)) || 0);
+        const c2_score = c2_n > 0 ? Number(((n4_2 * 4 + n3_2 * 3 + n2_2 * 2 + n1_2) / c2_n).toFixed(2)) : (Number(c.csvc_score ?? c.c2_score ?? (c.c2 && c.c2.score)) || 0);
+        const c2_pos = c2_n > 0 ? Number((((n4_2 + n3_2) / c2_n) * 100).toFixed(1)) : (Number(c.csvc_pos ?? c.c2_pos ?? (c.c2 && c.c2.posRate)) || 0);
+        const c3_score = c3_n > 0 ? Number(((n4_3 * 4 + n3_3 * 3 + n2_3 * 2 + n1_3) / c3_n).toFixed(2)) : (Number(c.hc_score ?? c.c3_score ?? (c.c3 && c.c3.score)) || 0);
+        const c3_pos = c3_n > 0 ? Number((((n4_3 + n3_3) / c3_n) * 100).toFixed(1)) : (Number(c.hc_pos ?? c.c3_pos ?? (c.c3 && c.c3.posRate)) || 0);
+
+        const totCriteria = c1_n + c2_n + c3_n;
+        const overallScore = totCriteria > 0 ? Number((((n4_1 * 4 + n3_1 * 3 + n2_1 * 2 + n1_1) + (n4_2 * 4 + n3_2 * 3 + n2_2 * 2 + n1_2) + (n4_3 * 4 + n3_3 * 3 + n2_3 * 2 + n1_3)) / totCriteria).toFixed(2)) : (c.diem_tb || 0);
+        const overallPos = totCriteria > 0 ? Number((((n4_1 + n3_1 + n4_2 + n3_2 + n4_3 + n3_3) / totCriteria) * 100).toFixed(1)) : (c.ty_le_tich_cuc || 0);
+        const votes = Number(c.so_phieu || c.tong_phieu) || Math.max(c1_n, c2_n, c3_n);
+
+        return {
+          votes: votes,
+          score: overallScore,
+          posRate: overallPos,
+          dia_diem: c.dia_diem || '',
+          c1: { name: '1. Công tác tổ chức lớp học', score: c1_score, posRate: c1_pos, n4: n4_1, n3: n3_1, n2: n2_1, n1: n1_1, total: c1_n },
+          c2: { name: '2. Cơ sở vật chất & thiết bị phòng học', score: c2_score, posRate: c2_pos, n4: n4_2, n3: n3_2, n2: n2_2, n1: n1_2, total: c2_n },
+          c3: { name: '3. Công tác hậu cần (phục vụ ăn, nghỉ, nước uống)', score: c3_score, posRate: c3_pos, n4: n4_3, n3: n3_3, n2: n2_3, n1: n1_3, total: c3_n }
+        };
+      }
+
+      const directCsvcItems = csvcMatches.filter(c => getCohortType(c.hinh_thuc_hoc) === 'direct');
+      const onlineCsvcItems = csvcMatches.filter(c => getCohortType(c.hinh_thuc_hoc) === 'online');
+
+      const csvcDirect = directCsvcItems[0] ? buildCsvcCohort(directCsvcItems[0]) : null;
+      const csvcOnline = onlineCsvcItems[0] ? buildCsvcCohort(onlineCsvcItems[0]) : null;
+
+      if (isMultiFormat && csvcDirect && csvcOnline) {
+        const totVotes = csvcDirect.votes + csvcOnline.votes;
+        const wScore = totVotes > 0 ? Number(((csvcDirect.score * csvcDirect.votes + csvcOnline.score * csvcOnline.votes) / totVotes).toFixed(2)) : 0;
+        const wPos = totVotes > 0 ? Number(((csvcDirect.posRate * csvcDirect.votes + csvcOnline.posRate * csvcOnline.votes) / totVotes).toFixed(1)) : 0;
+
+        const mergeCrit = (crit1, crit2) => {
+          const n4 = crit1.n4 + crit2.n4;
+          const n3 = crit1.n3 + crit2.n3;
+          const n2 = crit1.n2 + crit2.n2;
+          const n1 = crit1.n1 + crit2.n1;
+          const tot = crit1.total + crit2.total;
+          return {
+            name: crit1.name,
+            n4, n3, n2, n1, total: tot,
+            score: tot > 0 ? Number(((n4 * 4 + n3 * 3 + n2 * 2 + n1) / tot).toFixed(2)) : 0,
+            posRate: tot > 0 ? Number((((n4 + n3) / tot) * 100).toFixed(1)) : 0
+          };
+        };
+
+        const overallCsvc = {
+          votes: totVotes,
+          score: wScore,
+          posRate: wPos,
+          dia_diem: combinedLocation,
+          c1: mergeCrit(csvcDirect.c1, csvcOnline.c1),
+          c2: mergeCrit(csvcDirect.c2, csvcOnline.c2),
+          c3: mergeCrit(csvcDirect.c3, csvcOnline.c3)
+        };
+
+        csvcData = {
+          ...overallCsvc,
+          isMultiFormat: true,
+          direct: csvcDirect,
+          online: csvcOnline,
+          overall: overallCsvc
+        };
+      } else if (csvcDirect) {
+        csvcData = { ...csvcDirect, isMultiFormat: false };
+      } else if (csvcOnline) {
+        csvcData = { ...csvcOnline, isMultiFormat: false };
+      } else {
+        csvcData = buildCsvcCohort(csvcMatches[0]);
+      }
+    }
+
+    // 4. GV Handling with Cohort Breakdown (Direct, Hybrid, Overall)
+    const directGvMatches = gvMatches.filter(g => (typeof getCohortType === 'function' ? getCohortType(g.hinh_thuc_hoc) : 'direct') === 'direct');
+    const hybridGvMatches = gvMatches.filter(g => (typeof getCohortType === 'function' ? getCohortType(g.hinh_thuc_hoc) : 'direct') === 'online');
+
+    const directCohort = aggregateLecturerList(directGvMatches, false);
+    const hybridCohort = aggregateLecturerList(hybridGvMatches, false);
+    const overallCohort = aggregateLecturerList(gvMatches, false);
+
+    const gvData = {
+      hasDirect: directCohort.lecturers.length > 0,
+      hasHybrid: hybridCohort.lecturers.length > 0,
+      isMultiFormat: directCohort.lecturers.length > 0 && hybridCohort.lecturers.length > 0,
+      direct: directCohort,
+      hybrid: hybridCohort,
+      overall: overallCohort,
+      lecturers: overallCohort.lecturers
+    };
+    const gvList = overallCohort.lecturers;
+
+    // 5. DGC Handling
+    let dgcData = null;
+    if (dgcMatches.length > 0) {
+      let kt_5 = 0, kt_4 = 0, kt_3 = 0, kt_2 = 0, kt_1 = 0, kt_n = 0;
+      let kn_5 = 0, kn_4 = 0, kn_3 = 0, kn_2 = 0, kn_1 = 0, kn_n = 0;
+      let totalDgcVotes = 0;
+      let allComments = [];
+
+      dgcMatches.forEach(d => {
+        const n5_kt = Number(d.c5_kt ?? d.kt_5) || 0;
+        const n4_kt = Number(d.c4_kt ?? d.kt_4) || 0;
+        const n3_kt = Number(d.c3_kt ?? d.kt_3) || 0;
+        const n2_kt = Number(d.c2_kt ?? d.kt_2) || 0;
+        const n1_kt = Number(d.c1_kt ?? d.kt_1) || 0;
+        kt_5 += n5_kt; kt_4 += n4_kt; kt_3 += n3_kt; kt_2 += n2_kt; kt_1 += n1_kt;
+        kt_n += Number(d.tong_phieu_kt ?? d.kt_n) || (n5_kt + n4_kt + n3_kt + n2_kt + n1_kt);
+
+        const n5_kn = Number(d.c5_kn ?? d.kn_5) || 0;
+        const n4_kn = Number(d.c4_kn ?? d.kn_4) || 0;
+        const n3_kn = Number(d.c3_kn ?? d.kn_3) || 0;
+        const n2_kn = Number(d.c2_kn ?? d.kn_2) || 0;
+        const n1_kn = Number(d.c1_kn ?? d.kn_1) || 0;
+        kn_5 += n5_kn; kn_4 += n4_kn; kn_3 += n3_kn; kn_2 += n2_kn; kn_1 += n1_kn;
+        kn_n += Number(d.tong_phieu_kn ?? d.kn_n) || (n5_kn + n4_kn + n3_kn + n2_kn + n1_kn);
+
+        totalDgcVotes += Number(d.tong_phieu || d.so_phieu) || Math.max(kt_n, kn_n);
+
+        if (Array.isArray(d.comments)) {
+          allComments = allComments.concat(d.comments);
+        } else if (d.y_kien_dong_gop || d.comments) {
+          allComments.push(d.y_kien_dong_gop || d.comments);
+        }
+      });
+
+      const kt_score = kt_n > 0 ? Number(((kt_5 * 5 + kt_4 * 4 + kt_3 * 3 + kt_2 * 2 + kt_1) / kt_n).toFixed(2)) : 0;
+      const kt_pos = kt_n > 0 ? Number((((kt_5 + kt_4) / kt_n) * 100).toFixed(1)) : 0;
+      const kn_score = kn_n > 0 ? Number(((kn_5 * 5 + kn_4 * 4 + kn_3 * 3 + kn_2 * 2 + kn_1) / kn_n).toFixed(2)) : 0;
+      const kn_pos = kn_n > 0 ? Number((((kn_5 + kn_4) / kn_n) * 100).toFixed(1)) : 0;
+
+      const totN = kt_n + kn_n;
+      const overallScore = totN > 0 ? Number((((kt_5 * 5 + kt_4 * 4 + kt_3 * 3 + kt_2 * 2 + kt_1) + (kn_5 * 5 + kn_4 * 4 + kn_3 * 3 + kn_2 * 2 + kn_1)) / totN).toFixed(2)) : 0;
+      const overallPos = totN > 0 ? Number((((kt_5 + kt_4 + kn_5 + kn_4) / totN) * 100).toFixed(1)) : 0;
+
+      dgcData = {
+        votes: totalDgcVotes || Math.max(kt_n, kn_n),
+        score: overallScore,
+        posRate: overallPos,
+        kt: { name: 'Khả năng áp dụng kiến thức vào thực tế công việc', score: kt_score, posRate: kt_pos, n5: kt_5, n4: kt_4, n3: kt_3, n2: kt_2, n1: kt_1, total: kt_n },
+        kn: { name: 'Khả năng vận dụng kỹ năng nghiệp vụ được đào tạo', score: kn_score, posRate: kn_pos, n5: kn_5, n4: kn_4, n3: kn_3, n2: kn_2, n1: kn_1, total: kn_n },
+        comments: allComments
+      };
+    }
+
+    // Total survey votes for this class
+    const votesFromPpht = pphtData ? (pphtData.votes || pphtData.tong_phieu || 0) : 0;
+    const votesFromNddt = nddtData ? (nddtData.votes || nddtData.tong_phieu || 0) : 0;
+    const votes = votesFromPpht > 0 ? votesFromPpht : (votesFromNddt > 0 ? votesFromNddt : (baseClass.hv_thuc_te || 0));
+    const responseRate = hvThucTeTotal > 0 ? Math.min(100, Number(((votes / hvThucTeTotal) * 100).toFixed(1))) : 0;
+
+    return {
+      classCode: canonicalCode,
+      programCode: baseClass.ma_ct || canonicalCode.split('/')[0] || '',
+      className: baseClass.ten_ct || baseClass.ten_lop || canonicalCode,
+      format: finalFormat,
+      isMultiFormat: isMultiFormat,
+      startDate: baseClass.ngay_bd || (matchingPrimary[0] ? matchingPrimary[0].ngay_bd : ''),
+      endDate: baseClass.ngay_kt || (matchingPrimary[0] ? matchingPrimary[0].ngay_kt : ''),
+      location: combinedLocation,
+      directLocation: directLocation,
+      onlineLocation: onlineLocation,
+      cbql: baseClass.cbql || baseClass.can_bo_ql || (matchingPrimary[0] ? matchingPrimary[0].can_bo_ql : ''),
+      hvKh: hvKhTotal,
+      directHvKh: directHvKh,
+      onlineHvKh: onlineHvKh,
+      hvThucTe: hvThucTeTotal,
+      directHvTt: directHvTt,
+      onlineHvTt: onlineHvTt,
+      votes: votes,
+      responseRate: responseRate,
+      nddt: nddtData,
+      ppht: pphtData,
+      csvc: csvcData,
+      gv: gvData,
+      gvList: gvList,
+      dgc: dgcData
+    };
+  }
+
+  // --- CORE AGGREGATOR 2: DETAILED PROGRAM REPORT ---
+  function getDetailedProgramReport(programCode) {
+    if (!programCode) return null;
+    const normProg = normalizeReportProgramKey(programCode);
+
+    const programClassesRaw = findClassesForProgram(programCode);
+    if (programClassesRaw.length === 0) return null;
+
+    const canonicalCode = programClassesRaw[0].ma_ct || programCode.trim();
+    const programName = programClassesRaw[0].ten_ct || canonicalCode;
+
+    // Distinct count of classes by ma_lop
+    const distinctClassCodes = Array.from(new Set(programClassesRaw.map(c => (c.ma_lop || '').trim().toUpperCase()))).filter(Boolean);
+    const totalClassesCount = distinctClassCodes.length;
+
+    // Student counts
+    let totalHvKh = 0;
+    let totalHvThucTe = 0;
+    const processedClsKeys = new Set();
+    programClassesRaw.forEach(c => {
+      const normMl = normalizeReportClassKey(c.ma_lop);
+      const cType = (typeof getCohortType === 'function') ? getCohortType(c.hinh_thuc_hoc || c.hinh_thuc_dt) : (c.hinh_thuc_hoc || '');
+      const k = normMl + '__' + cType;
+      if (!processedClsKeys.has(k)) {
+        processedClsKeys.add(k);
+        totalHvKh += Number(c.hv_kh) || 0;
+        totalHvThucTe += Number(c.hv_thuc_te) || 0;
+      }
+    });
+
+    const normClassSet = new Set(distinctClassCodes.map(c => normalizeReportClassKey(c)));
+
+    const pphtMatches = getRepPphtdt().filter(p => normClassSet.has(normalizeReportClassKey(p.ma_lop)));
+    
+    // Deduplicate NDDT items between new and old format sheets (prefer new)
+    const seenNddtKeys = new Set();
+    const nddtMatches = [];
+    const repNddtAll = getRepNddt();
+    repNddtAll.filter(n => n && n._template === 'new' && normClassSet.has(normalizeReportClassKey(n.ma_lop))).forEach(n => {
+      const cType = (typeof getCohortType === 'function') ? getCohortType(n.hinh_thuc_hoc) : (n.hinh_thuc_hoc || '');
+      const k = normalizeReportClassKey(n.ma_lop) + '__' + cType;
+      if (!seenNddtKeys.has(k)) {
+        seenNddtKeys.add(k);
+        nddtMatches.push(n);
+      }
+    });
+    repNddtAll.filter(n => n && n._template === 'old' && normClassSet.has(normalizeReportClassKey(n.ma_lop))).forEach(n => {
+      const cType = (typeof getCohortType === 'function') ? getCohortType(n.hinh_thuc_hoc) : (n.hinh_thuc_hoc || '');
+      const k = normalizeReportClassKey(n.ma_lop) + '__' + cType;
+      if (!seenNddtKeys.has(k)) {
+        seenNddtKeys.add(k);
+        nddtMatches.push(n);
+      }
+    });
+    const csvcMatches = getRepCsvc().filter(c => normClassSet.has(normalizeReportClassKey(c.ma_lop)));
+    const gvMatches = getRepGv().filter(g => normClassSet.has(normalizeReportClassKey(g.ma_lop)));
+    const dgcMatches = getRepDgc().filter(d => normClassSet.has(normalizeReportClassKey(d.ma_lop)));
+
+    // Total votes & response rate
+    const votesFromNddt = nddtMatches.reduce((acc, n) => acc + (n.tong_phieu || 0), 0);
+    const votesFromPpht = pphtMatches.reduce((acc, p) => acc + (p.tong_phieu || 0), 0);
+    const totalVotes = votesFromNddt > 0 ? votesFromNddt : (votesFromPpht > 0 ? votesFromPpht : totalHvThucTe);
+    const responseRate = totalHvThucTe > 0 ? Math.min(100, Number(((totalVotes / totalHvThucTe) * 100).toFixed(1))) : 0;
+
+    // Build classes list for Table 1 and Table 2 (guaranteeing exactly 1 row per cohort)
+    const classItems = [];
+    const seenCohortKeys = new Set();
+
+    programClassesRaw.forEach(c => {
+      const ml = (c.ma_lop || '').trim();
+      const normMl = normalizeReportClassKey(ml);
+      const rawFmt = (c.hinh_thuc_hoc || 'Trực tiếp').trim();
+      const cType = (typeof getCohortType === 'function') ? getCohortType(rawFmt) : (rawFmt.includes('tuyến') ? 'online' : 'direct');
+      const isDirect = cType === 'direct';
+      const isOnline = cType === 'online';
+
+      const cohortKey = normMl + '__' + cType;
+      if (seenCohortKeys.has(cohortKey)) return;
+      seenCohortKeys.add(cohortKey);
+
+      // Rule: if class has both direct and online sibling, online row gets labeled "Trực tiếp kết hợp Trực tuyến"
+      const siblings = programClassesRaw.filter(x => normalizeReportClassKey(x.ma_lop) === normMl);
+      const hasDirectSibling = siblings.some(x => {
+        const ct = (typeof getCohortType === 'function') ? getCohortType(x.hinh_thuc_hoc) : 'direct';
+        return ct === 'direct';
+      });
+      let displayFmt = rawFmt;
+      if (isOnline && hasDirectSibling) {
+        displayFmt = 'Trực tiếp kết hợp Trực tuyến';
+      }
+
+      // Match evaluation items for this specific cohort/format
+      const classPpht = pphtMatches.filter(p => normalizeReportClassKey(p.ma_lop) === normMl).find(p => {
+        return (typeof getCohortType === 'function') ? getCohortType(p.hinh_thuc_hoc) === cType : true;
+      });
+
+      const classNddt = nddtMatches.filter(n => normalizeReportClassKey(n.ma_lop) === normMl).find(n => {
+        return (typeof getCohortType === 'function') ? getCohortType(n.hinh_thuc_hoc) === cType : true;
+      }) || nddtMatches.find(n => normalizeReportClassKey(n.ma_lop) === normMl);
+
+      const classCsvc = csvcMatches.filter(cs => normalizeReportClassKey(cs.ma_lop) === normMl).find(cs => {
+        return (typeof getCohortType === 'function') ? getCohortType(cs.hinh_thuc_hoc) === cType : true;
+      }) || csvcMatches.find(cs => normalizeReportClassKey(cs.ma_lop) === normMl);
+
+      const classGv = gvMatches.filter(g => {
+        if (normalizeReportClassKey(g.ma_lop) !== normMl) return false;
+        return (typeof getCohortType === 'function') ? getCohortType(g.hinh_thuc_hoc) === cType : true;
+      });
+
+      const classDgc = dgcMatches.find(d => normalizeReportClassKey(d.ma_lop) === normMl);
+
+      const v = (classPpht && classPpht.tong_phieu) || (classNddt && classNddt.tong_phieu) || (classCsvc && (classCsvc.tong_phieu || classCsvc.so_phieu)) || 0;
+      const hvTt = Number(c.hv_thuc_te) || 0;
+      const rRate = hvTt > 0 ? Number(((v / hvTt) * 100).toFixed(1)) : (v > 0 ? 100 : 0);
+
+      classItems.push({
+        classCode: ml,
+        uniqueKey: ml + '::' + rawFmt,
+        format: displayFmt,
+        rawFormat: rawFmt,
+        startDate: c.ngay_bd || '',
+        endDate: c.ngay_kt || '',
+        location: c.dia_diem || '',
+        cbql: c.cbql || '',
+        hvKh: Number(c.hv_kh) || 0,
+        hvThucTe: hvTt,
+        votes: v,
+        responseRate: rRate,
+        nddt: classNddt,
+        ppht: classPpht,
+        csvc: classCsvc,
+        gvList: classGv,
+        dgc: classDgc
+      });
+    });
+
+    // Sort classes: numerically by class code, direct first then online
+    classItems.sort((a, b) => {
+      const cmp = a.classCode.localeCompare(b.classCode, undefined, { numeric: true, sensitivity: 'base' });
+      if (cmp !== 0) return cmp;
+      const aType = (typeof getCohortType === 'function') ? getCohortType(a.rawFormat) : 'direct';
+      const bType = (typeof getCohortType === 'function') ? getCohortType(b.rawFormat) : 'direct';
+      if (aType === 'direct' && bType !== 'direct') return -1;
+      if (aType !== 'direct' && bType === 'direct') return 1;
+      return 0;
+    });
+
+    // 1. Section I (NDDT) Aggregation for Program (Multi-format supported)
+    let nddtProgram = null;
+    if (nddtMatches.length > 0) {
+      const directNddtRows = nddtMatches.filter(n => getCohortType(n.hinh_thuc_hoc) === 'direct');
+      const onlineNddtRows = nddtMatches.filter(n => getCohortType(n.hinh_thuc_hoc) === 'online');
+
+      const directNddt = aggregateNddtList(directNddtRows, 'Trực tiếp');
+      const onlineNddt = aggregateNddtList(onlineNddtRows, 'Trực tiếp kết hợp Trực tuyến');
+      const overallNddt = aggregateNddtList(nddtMatches, 'Toàn chương trình');
+
+      if (directNddt && onlineNddt) {
+        nddtProgram = {
+          ...overallNddt,
+          isMultiFormat: true,
+          direct: directNddt,
+          online: onlineNddt,
+          overall: overallNddt
+        };
+      } else {
+        nddtProgram = {
+          ...(directNddt || onlineNddt || overallNddt),
+          isMultiFormat: false
+        };
+      }
+    }
+
+    // 2. Section II (PPHTDT) Multi-format Aggregation for Program
+    const directPphtRows = pphtMatches.filter(p => getCohortType(p.hinh_thuc_hoc) === 'direct');
+    const hybridPphtRows = pphtMatches.filter(p => getCohortType(p.hinh_thuc_hoc) === 'online');
+
+    function aggregatePphtList(list) {
+      if (!list || list.length === 0) return null;
+      let c1_4 = 0, c1_3 = 0, c1_2 = 0, c1_1 = 0, c1_n = 0;
+      let c2_4 = 0, c2_3 = 0, c2_2 = 0, c2_1 = 0, c2_n = 0;
+
+      list.forEach(item => {
+        c1_4 += Number(item.c1_4) || 0;
+        c1_3 += Number(item.c1_3) || 0;
+        c1_2 += Number(item.c1_2) || 0;
+        c1_1 += Number(item.c1_1) || 0;
+        c1_n += Number(item.c1_n) || (Number(item.c1_4) || 0) + (Number(item.c1_3) || 0) + (Number(item.c1_2) || 0) + (Number(item.c1_1) || 0);
+
+        c2_4 += Number(item.c2_4) || 0;
+        c2_3 += Number(item.c2_3) || 0;
+        c2_2 += Number(item.c2_2) || 0;
+        c2_1 += Number(item.c2_1) || 0;
+        c2_n += Number(item.c2_n) || (Number(item.c2_4) || 0) + (Number(item.c2_3) || 0) + (Number(item.c2_2) || 0) + (Number(item.c2_1) || 0);
+      });
+
+      const c1_score = c1_n > 0 ? Number(((c1_4 * 4 + c1_3 * 3 + c1_2 * 2 + c1_1 * 1) / c1_n).toFixed(2)) : 0;
+      const c1_pos = c1_n > 0 ? Number((((c1_4 + c1_3) / c1_n) * 100).toFixed(1)) : 0;
+
+      const c2_score = c2_n > 0 ? Number(((c2_4 * 4 + c2_3 * 3 + c2_2 * 2 + c2_1 * 1) / c2_n).toFixed(2)) : 0;
+      const c2_pos = c2_n > 0 ? Number((((c2_4 + c2_3) / c2_n) * 100).toFixed(1)) : 0;
+
+      const totalVotes = c1_n + c2_n;
+      const subtotalScore = totalVotes > 0 ? Number((((c1_4 * 4 + c1_3 * 3 + c1_2 * 2 + c1_1 * 1) + (c2_4 * 4 + c2_3 * 3 + c2_2 * 2 + c2_1 * 1)) / totalVotes).toFixed(2)) : 0;
+      const subtotalPos = totalVotes > 0 ? Number((((c1_4 + c1_3 + c2_4 + c2_3) / totalVotes) * 100).toFixed(1)) : 0;
+
+      return {
+        c1: { score: c1_score, posRate: c1_pos, n4: c1_4, n3: c1_3, n2: c1_2, n1: c1_1, total: c1_n },
+        c2: { score: c2_score, posRate: c2_pos, n4: c2_4, n3: c2_3, n2: c2_2, n1: c2_1, total: c2_n },
+        subtotal: { score: subtotalScore, posRate: subtotalPos, total: totalVotes, n4: c1_4 + c2_4, n3: c1_3 + c2_3, n2: c1_2 + c2_2, n1: c1_1 + c2_1 }
+      };
+    }
+
+    const directAgg = aggregatePphtList(directPphtRows);
+    const hybridAgg = aggregatePphtList(hybridPphtRows);
+
+    let overallPpht = null;
+    if (directAgg || hybridAgg) {
+      const allRows = [...directPphtRows, ...hybridPphtRows];
+      overallPpht = aggregatePphtList(allRows);
+    }
+
+    // 3. Section III (CSVC) Aggregation & Location Analysis for Program
+    let csvcProgram = null;
+    const locationMap = new Map();
+
+    if (csvcMatches.length > 0) {
+      let c1_4 = 0, c1_3 = 0, c1_2 = 0, c1_1 = 0, c1_n = 0;
+      let c2_4 = 0, c2_3 = 0, c2_2 = 0, c2_1 = 0, c2_n = 0;
+      let c3_4 = 0, c3_3 = 0, c3_2 = 0, c3_1 = 0, c3_n = 0;
+      let totVotes = 0;
+
+      csvcMatches.forEach(c => {
+        const n4_1 = Number(c.cttc_4 ?? c.c1_4 ?? (c.c1 && c.c1.n4)) || 0;
+        const n3_1 = Number(c.cttc_3 ?? c.c1_3 ?? (c.c1 && c.c1.n3)) || 0;
+        const n2_1 = Number(c.cttc_2 ?? c.c1_2 ?? (c.c1 && c.c1.n2)) || 0;
+        const n1_1 = Number(c.cttc_1 ?? c.c1_1 ?? (c.c1 && c.c1.n1)) || 0;
+        const t1 = n4_1 + n3_1 + n2_1 + n1_1;
+        const pts1 = 4 * n4_1 + 3 * n3_1 + 2 * n2_1 + 1 * n1_1;
+        const rowC1Tot = Number(c.cttc_tot ?? c.c1_n ?? (c.c1 && c.c1.total)) || t1;
+        const rowC1Score = typeof c.cttc_score === 'number' ? c.cttc_score : (typeof c.c1_score === 'number' ? c.c1_score : (c.c1 && typeof c.c1.score === 'number' ? c.c1.score : null));
+
+        c1_4 += n4_1; c1_3 += n3_1; c1_2 += n2_1; c1_1 += n1_1;
+        c1_n += rowC1Tot;
+
+        const n4_2 = Number(c.csvc_4 ?? c.c2_4 ?? (c.c2 && c.c2.n4)) || 0;
+        const n3_2 = Number(c.csvc_3 ?? c.c2_3 ?? (c.c2 && c.c2.n3)) || 0;
+        const n2_2 = Number(c.csvc_2 ?? c.c2_2 ?? (c.c2 && c.c2.n2)) || 0;
+        const n1_2 = Number(c.csvc_1 ?? c.c2_1 ?? (c.c2 && c.c2.n1)) || 0;
+        const t2 = n4_2 + n3_2 + n2_2 + n1_2;
+        const pts2 = 4 * n4_2 + 3 * n3_2 + 2 * n2_2 + 1 * n1_2;
+        const rowC2Tot = Number(c.csvc_tot ?? c.c2_n ?? (c.c2 && c.c2.total)) || t2;
+        const rowC2Score = typeof c.csvc_score === 'number' ? c.csvc_score : (typeof c.c2_score === 'number' ? c.c2_score : (c.c2 && typeof c.c2.score === 'number' ? c.c2.score : null));
+
+        c2_4 += n4_2; c2_3 += n3_2; c2_2 += n2_2; c2_1 += n1_2;
+        c2_n += rowC2Tot;
+
+        const n4_3 = Number(c.hc_4 ?? c.c3_4 ?? (c.c3 && c.c3.n4)) || 0;
+        const n3_3 = Number(c.hc_3 ?? c.c3_3 ?? (c.c3 && c.c3.n3)) || 0;
+        const n2_3 = Number(c.hc_2 ?? c.c3_2 ?? (c.c3 && c.c3.n2)) || 0;
+        const n1_3 = Number(c.hc_1 ?? c.c3_1 ?? (c.c3 && c.c3.n1)) || 0;
+        const t3 = n4_3 + n3_3 + n2_3 + n1_3;
+        const pts3 = 4 * n4_3 + 3 * n3_3 + 2 * n2_3 + 1 * n1_3;
+        const rowC3Tot = Number(c.hc_tot ?? c.c3_n ?? (c.c3 && c.c3.total)) || t3;
+        const rowC3Score = typeof c.hc_score === 'number' ? c.hc_score : (typeof c.c3_score === 'number' ? c.c3_score : (c.c3 && typeof c.c3.score === 'number' ? c.c3.score : null));
+
+        c3_4 += n4_3; c3_3 += n3_3; c3_2 += n2_3; c3_1 += n1_3;
+        c3_n += rowC3Tot;
+
+        const v = Number(c.so_phieu || c.tong_phieu) || Math.max(rowC1Tot, rowC2Tot, rowC3Tot);
+        totVotes += v;
+
+        // Group by location for multi-axis location chart
+        const loc = (c.dia_diem || 'Chưa rõ').trim();
+        if (!locationMap.has(loc)) {
+          locationMap.set(loc, {
+            name: loc,
+            full_name: loc,
+            classes: new Set(),
+            classesCount: 0,
+            formats: new Set(),
+            votes: 0,
+            weightedScore: 0,
+            c1_pts: 0, c1_votes: 0,
+            c2_pts: 0, c2_votes: 0,
+            c3_pts: 0, c3_votes: 0
+          });
+        }
+        const locObj = locationMap.get(loc);
+        locObj.classes.add(c.ma_lop);
+        locObj.classesCount = locObj.classes.size;
+        locObj.votes += v;
+
+        const rowFmt = (c.hinh_thuc_hoc || c.hinh_thuc_dt || c.format || '').trim();
+        if (rowFmt) {
+          locObj.formats.add(rowFmt);
+        } else {
+          const normMl = normalizeReportClassKey(c.ma_lop);
+          const prim = matchingPrimary.find(p => normalizeReportClassKey(p.ma_lop) === normMl);
+          if (prim) {
+            const pFmt = (prim.hinh_thuc_hoc || prim.hinh_thuc_dt || '').trim();
+            if (pFmt) locObj.formats.add(pFmt);
+          }
+        }
+
+        if (t1 > 0) {
+          locObj.c1_votes += t1;
+          locObj.c1_pts += pts1;
+        } else if (rowC1Score !== null && v > 0) {
+          locObj.c1_votes += v;
+          locObj.c1_pts += rowC1Score * v;
+        }
+
+        if (t2 > 0) {
+          locObj.c2_votes += t2;
+          locObj.c2_pts += pts2;
+        } else if (rowC2Score !== null && v > 0) {
+          locObj.c2_votes += v;
+          locObj.c2_pts += rowC2Score * v;
+        }
+
+        if (t3 > 0) {
+          locObj.c3_votes += t3;
+          locObj.c3_pts += pts3;
+        } else if (rowC3Score !== null && v > 0) {
+          locObj.c3_votes += v;
+          locObj.c3_pts += rowC3Score * v;
+        }
+
+        const rowScore = Number(c.diem_tb) || (v > 0 && (pts1 + pts2 + pts3) > 0 ? ((pts1 + pts2 + pts3) / (t1 + t2 + t3 || 1)) : 3.8);
+        locObj.weightedScore += rowScore * v;
+      });
+
+      const c1_score = c1_n > 0 ? Number(((c1_4 * 4 + c1_3 * 3 + c1_2 * 2 + c1_1) / c1_n).toFixed(2)) : 0;
+      const c1_pos = c1_n > 0 ? Number((((c1_4 + c1_3) / c1_n) * 100).toFixed(1)) : 0;
+      const c2_score = c2_n > 0 ? Number(((c2_4 * 4 + c2_3 * 3 + c2_2 * 2 + c2_1) / c2_n).toFixed(2)) : 0;
+      const c2_pos = c2_n > 0 ? Number((((c2_4 + c2_3) / c2_n) * 100).toFixed(1)) : 0;
+      const c3_score = c3_n > 0 ? Number(((c3_4 * 4 + c3_3 * 3 + c3_2 * 2 + c3_1) / c3_n).toFixed(2)) : 0;
+      const c3_pos = c3_n > 0 ? Number((((c3_4 + c3_3) / c3_n) * 100).toFixed(1)) : 0;
+
+      const totCriteria = c1_n + c2_n + c3_n;
+      const overallScore = totCriteria > 0 ? Number((((c1_4 * 4 + c1_3 * 3 + c1_2 * 2 + c1_1) + (c2_4 * 4 + c2_3 * 3 + c2_2 * 2 + c2_1) + (c3_4 * 4 + c3_3 * 3 + c3_2 * 2 + c3_1)) / totCriteria).toFixed(2)) : 0;
+      const overallPos = totCriteria > 0 ? Number((((c1_4 + c1_3 + c2_4 + c2_3 + c3_4 + c3_3) / totCriteria) * 100).toFixed(1)) : 0;
+
+      const locList = Array.from(locationMap.values()).map(l => {
+        const s1 = l.c1_votes > 0 ? Number((l.c1_pts / l.c1_votes).toFixed(2)) : null;
+        const s2 = l.c2_votes > 0 ? Number((l.c2_pts / l.c2_votes).toFixed(2)) : null;
+        const s3 = l.c3_votes > 0 ? Number((l.c3_pts / l.c3_votes).toFixed(2)) : null;
+        const totPts = l.c1_pts + l.c2_pts + l.c3_pts;
+        const totV = l.c1_votes + l.c2_votes + l.c3_votes;
+        const sOverall = totV > 0 ? Number((totPts / totV).toFixed(2)) : (l.votes > 0 ? Number((l.weightedScore / l.votes).toFixed(2)) : 0);
+
+        let locFormat = 'Trực tiếp';
+        if (l.formats && l.formats.size > 0) {
+          const fArr = Array.from(l.formats);
+          const hasDirect = fArr.some(fmt => {
+            const low = fmt.toLowerCase();
+            return low.includes('tiếp') && !low.includes('tuyến') && !low.includes('kết hợp');
+          });
+          const hasHybrid = fArr.some(fmt => {
+            const low = fmt.toLowerCase();
+            return low.includes('kết hợp') || (low.includes('tiếp') && low.includes('tuyến')) || low.includes('hybrid');
+          });
+          const hasOnline = fArr.some(fmt => {
+            const low = fmt.toLowerCase();
+            return (low.includes('tuyến') || low.includes('online') || low.includes('polycom') || low.includes('zoom')) && !hasHybrid;
+          });
+
+          if (hasHybrid || (hasDirect && hasOnline)) {
+            locFormat = 'Trực tiếp kết hợp Trực tuyến';
+          } else if (hasOnline) {
+            locFormat = 'Trực tuyến';
+          } else {
+            locFormat = 'Trực tiếp';
+          }
+        }
+
+        return {
+          name: l.name,
+          full_name: l.full_name || l.name,
+          classes: l.classes.size,
+          classesCount: l.classes.size,
+          format: locFormat,
+          votes: l.votes,
+          score: sOverall,
+          scoreOverall: sOverall,
+          score1: s1,
+          score2: s2,
+          score3: s3
+        };
+      }).sort((a, b) => (b.votes - a.votes) || (b.score - a.score));
+
+      csvcProgram = {
+        votes: totVotes || Math.max(c1_n, c2_n, c3_n),
+        score: overallScore,
+        posRate: overallPos,
+        locations: locList,
+        c1: { name: '1. Công tác tổ chức lớp học', score: c1_score, posRate: c1_pos, n4: c1_4, n3: c1_3, n2: c1_2, n1: c1_1, total: c1_n },
+        c2: { name: '2. Cơ sở vật chất & thiết bị phòng học', score: c2_score, posRate: c2_pos, n4: c2_4, n3: c2_3, n2: c2_2, n1: c2_1, total: c2_n },
+        c3: { name: '3. Công tác hậu cần (phục vụ ăn, nghỉ, nước uống)', score: c3_score, posRate: c3_pos, n4: c3_4, n3: c3_3, n2: c3_2, n1: c3_1, total: c3_n }
+      };
+    }
+
+    // 4. Section IV (GV) Lecturer Aggregation with Cohort Breakdown (Direct, Hybrid, Overall)
+    const directGvMatches = gvMatches.filter(g => (typeof getCohortType === 'function' ? getCohortType(g.hinh_thuc_hoc) : 'direct') === 'direct');
+    const hybridGvMatches = gvMatches.filter(g => (typeof getCohortType === 'function' ? getCohortType(g.hinh_thuc_hoc) : 'direct') === 'online');
+
+    const directCohort = aggregateLecturerList(directGvMatches, true);
+    const hybridCohort = aggregateLecturerList(hybridGvMatches, true);
+    const overallCohort = aggregateLecturerList(gvMatches, true);
+
+    const gvProgramData = {
+      hasDirect: directCohort.lecturers.length > 0,
+      hasHybrid: hybridCohort.lecturers.length > 0,
+      isMultiFormat: directCohort.lecturers.length > 0 && hybridCohort.lecturers.length > 0,
+      direct: directCohort,
+      hybrid: hybridCohort,
+      overall: overallCohort,
+      lecturers: overallCohort.lecturers
+    };
+    const lecturers = overallCohort.lecturers;
+
+    // 5. Section V (DGC) Overall Evaluation & Comments Aggregation for Program
+    let dgcProgram = null;
+    if (dgcMatches.length > 0) {
+      let kt_5 = 0, kt_4 = 0, kt_3 = 0, kt_2 = 0, kt_1 = 0, kt_n = 0;
+      let kn_5 = 0, kn_4 = 0, kn_3 = 0, kn_2 = 0, kn_1 = 0, kn_n = 0;
+      let totalDgcVotes = 0;
+      let allComments = [];
+
+      dgcMatches.forEach(d => {
+        const n5_kt = Number(d.c5_kt ?? d.kt_5) || 0;
+        const n4_kt = Number(d.c4_kt ?? d.kt_4) || 0;
+        const n3_kt = Number(d.c3_kt ?? d.kt_3) || 0;
+        const n2_kt = Number(d.c2_kt ?? d.kt_2) || 0;
+        const n1_kt = Number(d.c1_kt ?? d.kt_1) || 0;
+        kt_5 += n5_kt; kt_4 += n4_kt; kt_3 += n3_kt; kt_2 += n2_kt; kt_1 += n1_kt;
+        kt_n += Number(d.tong_phieu_kt ?? d.kt_n) || (n5_kt + n4_kt + n3_kt + n2_kt + n1_kt);
+
+        const n5_kn = Number(d.c5_kn ?? d.kn_5) || 0;
+        const n4_kn = Number(d.c4_kn ?? d.kn_4) || 0;
+        const n3_kn = Number(d.c3_kn ?? d.kn_3) || 0;
+        const n2_kn = Number(d.c2_kn ?? d.kn_2) || 0;
+        const n1_kn = Number(d.c1_kn ?? d.kn_1) || 0;
+        kn_5 += n5_kn; kn_4 += n4_kn; kn_3 += n3_kn; kn_2 += n2_kn; kn_1 += n1_kn;
+        kn_n += Number(d.tong_phieu_kn ?? d.kn_n) || (n5_kn + n4_kn + n3_kn + n2_kn + n1_kn);
+
+        totalDgcVotes += Number(d.tong_phieu || d.so_phieu) || Math.max(kt_n, kn_n);
+
+        if (Array.isArray(d.comments)) {
+          allComments = allComments.concat(d.comments);
+        } else if (d.y_kien_dong_gop || d.comments) {
+          allComments.push(d.y_kien_dong_gop || d.comments);
+        }
+      });
+
+      const kt_score = kt_n > 0 ? Number(((kt_5 * 5 + kt_4 * 4 + kt_3 * 3 + kt_2 * 2 + kt_1) / kt_n).toFixed(2)) : 0;
+      const kt_pos = kt_n > 0 ? Number((((kt_5 + kt_4) / kt_n) * 100).toFixed(1)) : 0;
+      const kn_score = kn_n > 0 ? Number(((kn_5 * 5 + kn_4 * 4 + kn_3 * 3 + kn_2 * 2 + kn_1) / kn_n).toFixed(2)) : 0;
+      const kn_pos = kn_n > 0 ? Number((((kn_5 + kn_4) / kn_n) * 100).toFixed(1)) : 0;
+
+      const totN = kt_n + kn_n;
+      const overallScore = totN > 0 ? Number((((kt_5 * 5 + kt_4 * 4 + kt_3 * 3 + kt_2 * 2 + kt_1) + (kn_5 * 5 + kn_4 * 4 + kn_3 * 3 + kn_2 * 2 + kn_1)) / totN).toFixed(2)) : 0;
+      const overallPos = totN > 0 ? Number((((kt_5 + kt_4 + kn_5 + kn_4) / totN) * 100).toFixed(1)) : 0;
+
+      dgcProgram = {
+        votes: totalDgcVotes || Math.max(kt_n, kn_n),
+        score: overallScore,
+        posRate: overallPos,
+        kt: { name: 'Khả năng áp dụng kiến thức vào thực tế công việc', score: kt_score, posRate: kt_pos, n5: kt_5, n4: kt_4, n3: kt_3, n2: kt_2, n1: kt_1, total: kt_n },
+        kn: { name: 'Khả năng vận dụng kỹ năng nghiệp vụ được đào tạo', score: kn_score, posRate: kn_pos, n5: kn_5, n4: kn_4, n3: kn_3, n2: kn_2, n1: kn_1, total: kn_n },
+        comments: allComments
+      };
+    }
+
+    return {
+      programCode: canonicalCode,
+      programName: programName,
+      classesCount: totalClassesCount,
+      classes: classItems,
+      hvKh: totalHvKh,
+      hvThucTe: totalHvThucTe,
+      votes: totalVotes,
+      responseRate: responseRate,
+      nddt: nddtProgram,
+      pphtDirect: directAgg,
+      pphtHybrid: hybridAgg,
+      pphtOverall: overallPpht,
+      csvc: csvcProgram,
+      gv: gvProgramData,
+      lecturers: lecturers,
+      dgc: dgcProgram
+    };
+  }
+
+
+
+  // --- UI RENDERER 1: EXECUTIVE OVERVIEW & KPI GRID ---
+  function renderExecutiveOverview(containerElem, data, isProgram) {
+    if (!containerElem || !data) return;
+
+    const badgeElem = document.getElementById('reportTargetTypeBadge');
+    const titleElem = document.getElementById('reportTargetTitle');
+    const pillsElem = document.getElementById('reportActionPills');
+    const metaElem = document.getElementById('reportMetadataGrid');
+    const kpiElem = document.getElementById('reportKpiGrid');
+
+    if (badgeElem) {
+      badgeElem.innerHTML = isProgram 
+        ? '<i class="fa-solid fa-graduation-cap"></i> BÁO CÁO CHƯƠNG TRÌNH ĐÀO TẠO'
+        : '<i class="fa-solid fa-chalkboard-user"></i> BÁO CÁO LỚP HỌC';
+    }
+
+    if (titleElem) {
+      const codeStr = isProgram ? data.programCode : data.classCode;
+      const nameStr = isProgram ? data.programName : data.className;
+      titleElem.innerHTML = '<span style="color: var(--brand-primary); font-weight: 800;">' + codeStr + '</span> — ' + (nameStr || codeStr);
+    }
+
+    // Action pills & Return button
+    if (pillsElem) {
+      let pillsHtml = '';
+      if (!isProgram && reportState.previousProgram) {
+        pillsHtml += '<button type="button" id="btnBackToProgramReport" class="btn btn-sm" onclick="returnToProgramReport()" style="background: var(--brand-primary); color: white; font-weight: 700; border-radius: 6px; padding: 0.4rem 0.85rem; display: inline-flex; align-items: center; gap: 0.4rem; cursor: pointer; border: none; box-shadow: 0 2px 4px rgba(140,29,64,0.2);">' +
+          '<i class="fa-solid fa-arrow-left"></i> Quay lại Báo cáo Chương trình [' + reportState.previousProgram + ']' +
+          '</button>';
+      }
+      pillsElem.innerHTML = pillsHtml;
+    }
+
+    // Metadata Grid
+    if (metaElem) {
+      let metaHtml = '';
+      if (isProgram) {
+        metaHtml = 
+          '<div class="meta-item">' +
+            '<span class="meta-label">Tên chương trình đào tạo:</span>' +
+            '<span class="meta-val" style="font-weight: 700; color: #1E293B;">' + (data.programName || data.programCode) + '</span>' +
+          '</div>' +
+          '<div class="meta-item">' +
+            '<span class="meta-label">Mã chương trình:</span>' +
+            '<span class="meta-val" style="font-weight: 800; color: var(--brand-primary);">' + data.programCode + '</span>' +
+          '</div>' +
+          '<div class="meta-item">' +
+            '<span class="meta-label">Quy mô tổ chức:</span>' +
+            '<span class="meta-val" style="font-weight: 600;">' + data.classesCount + ' lớp học (' + data.classes.filter(c => c.votes > 0).length + ' lớp có khảo sát)</span>' +
+          '</div>' +
+          '<div class="meta-item">' +
+            '<span class="meta-label">Thời gian tổng hợp:</span>' +
+            '<span class="meta-val">Năm kế hoạch 2026</span>' +
+          '</div>';
+      } else {
+        const fmtBadge = getReportFormatBadge(data.format);
+        metaHtml = 
+          '<div class="meta-item">' +
+            '<span class="meta-label">Lớp học:</span>' +
+            '<span class="meta-val" style="font-weight: 800; color: var(--brand-primary);">' + data.classCode + '</span>' +
+          '</div>' +
+          '<div class="meta-item">' +
+            '<span class="meta-label">Chương trình:</span>' +
+            '<span class="meta-val" style="font-weight: 700;">' + (data.className || data.programCode) + '</span>' +
+          '</div>' +
+          '<div class="meta-item">' +
+            '<span class="meta-label">Hình thức đào tạo:</span>' +
+            '<span class="meta-val">' + fmtBadge + '</span>' +
+          '</div>' +
+          '<div class="meta-item">' +
+            '<span class="meta-label">Thời gian tổ chức:</span>' +
+            '<span class="meta-val">' + (typeof formatReportDateRange === 'function' ? formatReportDateRange(data.startDate, data.endDate, 'Theo kế hoạch 2026') : (data.startDate ? (data.startDate + (data.endDate ? ' - ' + data.endDate : '')) : 'Theo kế hoạch 2026')) + '</span>' +
+          '</div>' +
+          '<div class="meta-item">' +
+            '<span class="meta-label">Địa điểm:</span>' +
+            '<span class="meta-val">' + (data.location || 'Trường ĐT&BDNV') + '</span>' +
+          '</div>' +
+          '<div class="meta-item">' +
+            '<span class="meta-label">Cán bộ quản lý:</span>' +
+            '<span class="meta-val">' + (data.cbql || 'Ban Quản lý Đào tạo') + '</span>' +
+          '</div>';
+      }
+      metaElem.innerHTML = metaHtml;
+    }
+
+    // KPI Grid (5 Executive KPI Cards with Visual Gauges)
+    if (kpiElem) {
+      let kpiHtml = '';
+      const formatNumber = (num) => {
+        if (!num && num !== 0) return '0';
+        return Number(num).toLocaleString('vi-VN');
+      };
+
+      const renderGaugeKpiHtml = (percentVal, displayStr, subtitleStr, theme) => {
+        const pNum = typeof percentVal === 'number' ? percentVal : parseFloat(percentVal) || 0;
+        const clamped = Math.min(100, Math.max(0, pNum));
+        const dashOffset = (113.1 * (1 - clamped / 100)).toFixed(1);
+        let strokeColor = '#059669';
+        if (theme === 'purple') {
+          strokeColor = clamped >= 80 ? '#7E22CE' : (clamped >= 50 ? '#A855F7' : '#EF4444');
+        } else {
+          strokeColor = pNum >= 100 ? '#059669' : (pNum >= 80 ? '#10B981' : (pNum >= 50 ? '#F59E0B' : '#EF4444'));
+        }
+
+        return '<div style="display: flex; flex-direction: column; align-items: center; justify-content: center; margin: 0.15rem 0;">' +
+          '<div style="position: relative; width: 92px; height: 48px;">' +
+            '<svg viewBox="0 0 96 52" style="width: 92px; height: 48px; overflow: visible;">' +
+              '<path d="M 12 48 A 36 36 0 0 1 84 48" fill="none" stroke="#E2E8F0" stroke-width="7" stroke-linecap="round" />' +
+              '<path d="M 12 48 A 36 36 0 0 1 84 48" fill="none" stroke="' + strokeColor + '" stroke-width="7" stroke-linecap="round" stroke-dasharray="113.1" stroke-dashoffset="' + dashOffset + '" />' +
+              '<text x="48" y="44" text-anchor="middle" font-family=\"\'Plus Jakarta Sans\', sans-serif\" font-size=\"14.5\" font-weight=\"800\" fill=\"#1E293B\">' + displayStr + '</text>' +
+            '</svg>' +
+          '</div>' +
+        '</div>' +
+        '<div style="font-size: 0.72rem; color: #64748B; margin-top: 0.25rem; text-align: center; white-space: nowrap;">' + subtitleStr + '</div>';
+      };
+
+      if (isProgram) {
+        // Program KPIs (5 Cards)
+        const distinctClasses = data.classesCount;
+        const hvKh = data.hvKh || 0;
+        const hvTt = data.hvThucTe || 0;
+        const attRate = hvKh > 0 ? ((hvTt / hvKh) * 100).toFixed(1) : (hvTt > 0 ? '100.0' : '0.0');
+        const respRate = Number(data.responseRate || 0).toFixed(1);
+
+        kpiHtml = 
+          '<div class="report-kpi-grid" style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.85rem;">' +
+            // KPI 1: TỔNG SỐ LỚP HỌC (Strict Distinct Count)
+            '<div class="kpi-card" style="border-left: 3px solid var(--brand-primary); padding: 0.85rem; display: flex; flex-direction: column; justify-content: space-between; min-height: 118px;">' +
+              '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">' +
+                '<span style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">TỔNG SỐ LỚP HỌC</span>' +
+                '<div style="width: 28px; height: 28px; border-radius: 50%; background: #FFF1F2; display: flex; align-items: center; justify-content: center; color: var(--brand-primary);"><i class="fa-solid fa-chalkboard"></i></div>' +
+              '</div>' +
+              '<div style="font-size: 1.65rem; font-weight: 800; color: #1E293B; line-height: 1.1; margin: 0.25rem 0;">' + distinctClasses + '</div>' +
+              '<div style="font-size: 0.72rem; color: #64748B;">' + data.classes.filter(c => c.votes > 0).length + ' lớp có khảo sát</div>' +
+            '</div>' +
+
+            // KPI 2: HỌC VIÊN KẾ HOẠCH
+            '<div class="kpi-card" style="border-left: 3px solid #8C1D40; padding: 0.85rem; display: flex; flex-direction: column; justify-content: space-between; min-height: 118px;">' +
+              '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">' +
+                '<span style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">HỌC VIÊN KẾ HOẠCH</span>' +
+                '<div style="width: 28px; height: 28px; border-radius: 50%; background: #FFF1F2; display: flex; align-items: center; justify-content: center; color: #8C1D40;"><i class="fa-solid fa-users"></i></div>' +
+              '</div>' +
+              '<div style="font-size: 1.65rem; font-weight: 800; color: #1E293B; line-height: 1.1; margin: 0.25rem 0;">' + formatNumber(hvKh) + '</div>' +
+              '<div style="font-size: 0.72rem; color: #64748B;">Chỉ tiêu toàn chương trình</div>' +
+            '</div>' +
+
+            // KPI 3: HỌC VIÊN THỰC TẾ
+            '<div class="kpi-card" style="border-left: 3px solid #0284C7; padding: 0.85rem; display: flex; flex-direction: column; justify-content: space-between; min-height: 118px;">' +
+              '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">' +
+                '<span style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">HỌC VIÊN THỰC TẾ</span>' +
+                '<div style="width: 28px; height: 28px; border-radius: 50%; background: #E0F2FE; display: flex; align-items: center; justify-content: center; color: #0284C7;"><i class="fa-solid fa-user-check"></i></div>' +
+              '</div>' +
+              '<div style="font-size: 1.65rem; font-weight: 800; color: #0284C7; line-height: 1.1; margin: 0.25rem 0;">' + formatNumber(hvTt) + '</div>' +
+              '<div style="font-size: 0.72rem; color: #64748B;">' + (data.isMultiFormat ? ('Trực tiếp: ' + formatNumber(data.directHvTt) + ' • Trực tuyến: ' + formatNumber(data.onlineHvTt)) : 'Học viên tham gia thực tế') + '</div>' +
+            '</div>' +
+
+            // KPI 4: TỶ LỆ THAM DỰ THEO KẾ HOẠCH (Visual Gauge)
+            '<div class="kpi-card" style="border-left: 3px solid #059669; padding: 0.85rem; display: flex; flex-direction: column; justify-content: space-between; min-height: 118px;">' +
+              '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">' +
+                '<span style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">TỶ LỆ THAM DỰ THEO KH</span>' +
+                '<div style="width: 28px; height: 28px; border-radius: 50%; background: #D1FAE5; display: flex; align-items: center; justify-content: center; color: #059669;"><i class="fa-solid fa-gauge-high"></i></div>' +
+              '</div>' +
+              renderGaugeKpiHtml(parseFloat(attRate), attRate + '%', 'Thực tế / Kế hoạch', 'green') +
+            '</div>' +
+
+            // KPI 5: TỶ LỆ PHẢN HỒI (Visual Gauge)
+            '<div class="kpi-card" style="border-left: 3px solid #7E22CE; padding: 0.85rem; display: flex; flex-direction: column; justify-content: space-between; min-height: 118px;">' +
+              '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">' +
+                '<span style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">TỶ LỆ PHẢN HỒI</span>' +
+                '<div style="width: 28px; height: 28px; border-radius: 50%; background: #F3E8FF; display: flex; align-items: center; justify-content: center; color: #7E22CE;"><i class="fa-solid fa-square-poll-vertical"></i></div>' +
+              '</div>' +
+              renderGaugeKpiHtml(parseFloat(respRate), respRate + '%', formatNumber(data.votes) + ' phiếu khảo sát hợp lệ', 'purple') +
+            '</div>' +
+          '</div>';
+
+      } else {
+        // Class KPIs (5 Cards)
+        const hvKh = data.hvKh || 0;
+        const hvTt = data.hvThucTe || 0;
+        const attRate = hvKh > 0 ? ((hvTt / hvKh) * 100).toFixed(1) : (hvTt > 0 ? '100.0' : '0.0');
+        const respRate = Number(data.responseRate || 0).toFixed(1);
+
+        kpiHtml = 
+          '<div class="report-kpi-grid" style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.85rem;">' +
+            // KPI 1: HÌNH THỨC ĐÀO TẠO
+            '<div class="kpi-card" style="border-left: 3px solid var(--brand-primary); padding: 0.85rem; display: flex; flex-direction: column; justify-content: space-between; min-height: 118px;">' +
+              '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">' +
+                '<span style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">HÌNH THỨC ĐÀO TẠO</span>' +
+                '<div style="width: 28px; height: 28px; border-radius: 50%; background: #FFF1F2; display: flex; align-items: center; justify-content: center; color: var(--brand-primary);"><i class="fa-solid fa-chalkboard-user"></i></div>' +
+              '</div>' +
+              '<div style="margin: 0.25rem 0;">' + getReportFormatBadge(data.format) + '</div>' +
+              '<div style="font-size: 0.72rem; color: #64748B;">Quy cách lớp học</div>' +
+            '</div>' +
+
+            // KPI 2: HỌC VIÊN KẾ HOẠCH
+            '<div class="kpi-card" style="border-left: 3px solid #8C1D40; padding: 0.85rem; display: flex; flex-direction: column; justify-content: space-between; min-height: 118px;">' +
+              '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">' +
+                '<span style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">HỌC VIÊN KẾ HOẠCH</span>' +
+                '<div style="width: 28px; height: 28px; border-radius: 50%; background: #FFF1F2; display: flex; align-items: center; justify-content: center; color: #8C1D40;"><i class="fa-solid fa-users"></i></div>' +
+              '</div>' +
+              '<div style="font-size: 1.65rem; font-weight: 800; color: #1E293B; line-height: 1.1; margin: 0.25rem 0;">' + formatNumber(hvKh) + '</div>' +
+              '<div style="font-size: 0.72rem; color: #64748B;">' + (data.isMultiFormat ? ('Trực tiếp: ' + formatNumber(data.directHvKh) + ' • Trực tuyến: ' + formatNumber(data.onlineHvKh)) : 'Chỉ tiêu giao') + '</div>' +
+            '</div>' +
+
+            // KPI 3: HỌC VIÊN THỰC TẾ
+            '<div class="kpi-card" style="border-left: 3px solid #0284C7; padding: 0.85rem; display: flex; flex-direction: column; justify-content: space-between; min-height: 118px;">' +
+              '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">' +
+                '<span style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">HỌC VIÊN THỰC TẾ</span>' +
+                '<div style="width: 28px; height: 28px; border-radius: 50%; background: #E0F2FE; display: flex; align-items: center; justify-content: center; color: #0284C7;"><i class="fa-solid fa-user-check"></i></div>' +
+              '</div>' +
+              '<div style="font-size: 1.65rem; font-weight: 800; color: #0284C7; line-height: 1.1; margin: 0.25rem 0;">' + formatNumber(hvTt) + '</div>' +
+              '<div style="font-size: 0.72rem; color: #64748B;">Học viên tham gia thực tế</div>' +
+            '</div>' +
+
+            // KPI 4: TỶ LỆ THAM DỰ (Visual Gauge)
+            '<div class="kpi-card" style="border-left: 3px solid #059669; padding: 0.85rem; display: flex; flex-direction: column; justify-content: space-between; min-height: 118px;">' +
+              '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">' +
+                '<span style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">TỶ LỆ THAM DỰ</span>' +
+                '<div style="width: 28px; height: 28px; border-radius: 50%; background: #D1FAE5; display: flex; align-items: center; justify-content: center; color: #059669;"><i class="fa-solid fa-gauge-high"></i></div>' +
+              '</div>' +
+              renderGaugeKpiHtml(parseFloat(attRate), attRate + '%', 'Thực tế / Kế hoạch', 'green') +
+            '</div>' +
+
+            // KPI 5: TỶ LỆ PHẢN HỒI (Visual Gauge)
+            '<div class="kpi-card" style="border-left: 3px solid #7E22CE; padding: 0.85rem; display: flex; flex-direction: column; justify-content: space-between; min-height: 118px;">' +
+              '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">' +
+                '<span style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">TỶ LỆ PHẢN HỒI</span>' +
+                '<div style="width: 28px; height: 28px; border-radius: 50%; background: #F3E8FF; display: flex; align-items: center; justify-content: center; color: #7E22CE;"><i class="fa-solid fa-square-poll-vertical"></i></div>' +
+              '</div>' +
+              renderGaugeKpiHtml(parseFloat(respRate), respRate + '%', formatNumber(data.votes) + ' phiếu khảo sát hợp lệ', 'purple') +
+            '</div>' +
+          '</div>';
+      }
+      kpiElem.innerHTML = kpiHtml;
+    }
+  }
+
+  // --- UI RENDERER 2: PROGRAM COMPARISON SECTION (TABLE 1 & TABLE 2) ---
+  function renderProgramComparisonSection(sectionElem, programData) {
+    if (!sectionElem) return;
+    if (reportState.mode !== 'program' || !programData) {
+      sectionElem.style.display = 'none';
+      return;
+    }
+    sectionElem.style.display = 'block';
+
+    const t1Body = document.getElementById('reportProgramComparisonTableBody');
+    const t2Body = document.getElementById('reportProgramClassesTableBody');
+
+    // Helper to render score cell with Gradient Fill bar
+    function renderGradientScoreCell(scoreStr, ceiling, gradColors, textColor) {
+      if (scoreStr === '—' || !scoreStr) {
+        return '<td style="text-align: center; color: #94A3B8; font-style: italic; font-size: 0.8rem;">—</td>';
+      }
+      const sNum = parseFloat(scoreStr);
+      if (isNaN(sNum) || sNum <= 0) {
+        return '<td style="text-align: center; color: #94A3B8; font-style: italic; font-size: 0.8rem;">—</td>';
+      }
+      const pct = Math.min(100, Math.max(0, (sNum / ceiling) * 100)).toFixed(1);
+      return '<td style="padding: 0.45rem 0.65rem; min-width: 95px;">' +
+        '<div style="display: flex; justify-content: space-between; align-items: baseline; font-size: 0.8rem; margin-bottom: 0.25rem;">' +
+          '<strong style="color: ' + textColor + ';">' + sNum.toFixed(2) + '</strong>' +
+          '<span style="font-size: 0.68rem; color: #64748B;">/' + ceiling.toFixed(1) + '</span>' +
+        '</div>' +
+        '<div style="height: 6px; background: #E2E8F0; border-radius: 3px; overflow: hidden;" title="' + sNum.toFixed(2) + ' / ' + ceiling.toFixed(1) + ' (' + pct + '%)">' +
+          '<div style="width: ' + pct + '%; height: 100%; border-radius: 3px; background: ' + gradColors + '; transition: width 0.3s;"></div>' +
+        '</div>' +
+      '</td>';
+    }
+
+    // Helper to render mini gauge for Table 2 (Zero overlap, perfectly visible)
+    function renderMiniGaugeCell(attNum, attDisplay) {
+      const clamped = Math.min(100, Math.max(0, attNum));
+      const dashOffset = (81.68 * (1 - clamped / 100)).toFixed(1);
+      const color = attNum >= 100 ? '#059669' : (attNum >= 80 ? '#10B981' : (attNum >= 50 ? '#F59E0B' : '#EF4444'));
+      return '<td style="text-align: center; padding: 0.35rem 0.4rem; min-width: 75px;">' +
+        '<div style="display: inline-flex; align-items: center; justify-content: center;">' +
+          '<svg viewBox="0 0 68 36" style="width: 64px; height: 34px; overflow: visible;">' +
+            '<path d="M 8 32 A 26 26 0 0 1 60 32" fill="none" stroke="#E2E8F0" stroke-width="4.2" stroke-linecap="round" />' +
+            '<path d="M 8 32 A 26 26 0 0 1 60 32" fill="none" stroke="' + color + '" stroke-width="4.2" stroke-linecap="round" stroke-dasharray="81.68" stroke-dashoffset="' + dashOffset + '" />' +
+            '<text x="34" y="30" text-anchor="middle" font-family=\"\'Plus Jakarta Sans\', sans-serif\" font-size=\"9.5\" font-weight=\"800\" fill=\"#1E293B\">' + attDisplay + '</text>' +
+          '</svg>' +
+        '</div>' +
+      '</td>';
+    }
+
+    // Table 1: Cross-Class 5-Module Score Comparison with Gradient Fill Bars
+    if (t1Body) {
+      if (!programData.classes || programData.classes.length === 0) {
+        t1Body.innerHTML = '<tr><td colspan="10" style="text-align: center; color: var(--text-muted); font-style: italic; padding: 1.5rem;">Không có dữ liệu lớp học</td></tr>';
+      } else {
+        let t1Html = '';
+        programData.classes.forEach((c, idx) => {
+          const nddtScore = c.nddt ? (Number(c.nddt.score || c.nddt.diem_tb || 0).toFixed(2)) : '—';
+          const pphtScore = c.ppht ? (Number(c.ppht.score || c.ppht.diem_tb || 0).toFixed(2)) : '—';
+          const csvcScore = c.csvc ? (Number(c.csvc.score || c.csvc.diem_tb || 0).toFixed(2)) : '—';
+          const gvScore = (c.gvList && c.gvList.length > 0) 
+            ? (c.gvList.reduce((acc, g) => acc + (g.diem_tb || 0), 0) / c.gvList.length).toFixed(2)
+            : '—';
+          const dgcScore = c.dgc ? (Number(c.dgc.score || c.dgc.diem_tb || 0).toFixed(2)) : '—';
+
+          const timeRangeStr = (typeof formatReportDateRange === 'function') 
+            ? formatReportDateRange(c.startDate, c.endDate) 
+            : (c.startDate || '—');
+
+          t1Html += 
+            '<tr>' +
+              '<td style="text-align: center; color: #64748B;">' + (idx + 1) + '</td>' +
+              '<td style="font-weight: 700; color: var(--brand-primary);">' + c.classCode + '</td>' +
+              '<td style="text-align: center;">' + getReportFormatBadge(c.format) + '</td>' +
+              '<td style="text-align: center; font-size: 0.8rem; color: #475569; white-space: nowrap;">' + timeRangeStr + '</td>' +
+              '<td style="text-align: center; font-weight: 700; color: #1E293B;">' + (c.votes || 0) + '</td>' +
+              renderGradientScoreCell(nddtScore, 4.0, 'linear-gradient(90deg, #059669, #10B981)', '#0F5132') +
+              renderGradientScoreCell(pphtScore, 4.0, 'linear-gradient(90deg, #0284C7, #38BDF8)', '#0369A1') +
+              renderGradientScoreCell(csvcScore, 4.0, 'linear-gradient(90deg, #D97706, #F59E0B)', '#B45309') +
+              renderGradientScoreCell(gvScore, 5.0, 'linear-gradient(90deg, #8C1D40, #BE123C)', '#8C1D40') +
+              renderGradientScoreCell(dgcScore, 5.0, 'linear-gradient(90deg, #7E22CE, #A855F7)', '#6B21A8') +
+            '</tr>';
+        });
+        t1Body.innerHTML = t1Html;
+      }
+    }
+
+    // Table 2: Detailed Class List with Visual Gauge for TỶ LỆ THAM DỰ and Drill-down Button
+    if (t2Body) {
+      if (!programData.classes || programData.classes.length === 0) {
+        t2Body.innerHTML = '<tr><td colspan="11" style="text-align: center; color: var(--text-muted); font-style: italic; padding: 1.5rem;">Không có dữ liệu lớp học</td></tr>';
+      } else {
+        let t2Html = '';
+        programData.classes.forEach((c, idx) => {
+          const rRate = c.responseRate > 0 ? (c.responseRate.toFixed(1) + '%') : '0.0%';
+          const timeRangeStr = (typeof formatReportDateRange === 'function') 
+            ? formatReportDateRange(c.startDate, c.endDate, 'Năm 2026') 
+            : (c.startDate ? (c.startDate + (c.endDate ? ' - ' + c.endDate : '')) : 'Năm 2026');
+          const attNum = c.hvKh > 0 ? ((c.hvThucTe / c.hvKh) * 100) : (c.hvThucTe > 0 ? 100 : 0);
+          const attDisplay = attNum.toFixed(1) + '%';
+
+          t2Html += 
+            '<tr>' +
+              '<td style="text-align: center; color: #64748B;">' + (idx + 1) + '</td>' +
+              '<td style="font-weight: 800; color: #1E293B;">' + c.classCode + '</td>' +
+              '<td style="text-align: center;">' + getReportFormatBadge(c.format) + '</td>' +
+              '<td style="text-align: center; font-size: 0.8rem; color: #475569; white-space: nowrap;">' + timeRangeStr + '</td>' +
+              '<td>' + (c.location || 'Trường ĐT&BDNV') + '</td>' +
+              '<td>' + (c.cbql || '—') + '</td>' +
+              '<td style="text-align: center; font-weight: 700; color: #64748B;">' + (c.hvKh || 0) + '</td>' +
+              '<td style="text-align: center; font-weight: 700; color: #0284C7;">' + (c.hvThucTe || 0) + '</td>' +
+              renderMiniGaugeCell(attNum, attDisplay) +
+              '<td style="text-align: center; font-weight: 700; color: #059669;">' + rRate + '</td>' +
+              '<td style="text-align: center;" class="no-print">' +
+                '<button type="button" class="btn btn-sm" onclick="reportDrillDownToClass(\'' + c.classCode + '\', \'' + (c.rawFormat || c.format) + '\')" style="background: #FFF1F2; color: var(--brand-primary); border: 1px solid #FECDD3; font-weight: 700; border-radius: 4px; padding: 0.25rem 0.6rem; cursor: pointer; transition: all 0.2s;">' +
+                  '<i class="fa-solid fa-arrow-right"></i> Xem lớp' +
+                '</button>' +
+              '</td>' +
+            '</tr>';
+        });
+        t2Body.innerHTML = t2Html;
+      }
+    }
+  }
+  window.renderProgramComparisonSection = renderProgramComparisonSection;
+
+  // Drill-down and Return Navigation Handlers
+  function reportDrillDownToClass(classCode, format) {
+    if (!classCode) return;
+    reportState.previousProgram = reportState.selectedProgram;
+    reportState.mode = 'class';
+    reportState.selectedClass = classCode;
+
+    // Switch buttons UI
+    const btnClass = document.getElementById('btnReportModeClass');
+    const btnProgram = document.getElementById('btnReportModeProgram');
+    if (btnClass && btnProgram) {
+      btnClass.classList.add('active');
+      btnProgram.classList.remove('active');
+    }
+    const selClass = (document.getElementById('reportClassSelectorArea') || document.getElementById('selectorReportClass'));
+    const selProgram = (document.getElementById('reportProgramSelectorArea') || document.getElementById('selectorReportProgram'));
+    if (selClass) selClass.style.display = 'block';
+    if (selProgram) selProgram.style.display = 'none';
+
+    // Update select dropdown
+    const classSelect = document.getElementById('selectReportClass');
+    if (classSelect) {
+      const matchOpt = Array.from(classSelect.options).find(o => o.value === classCode || o.value.startsWith(classCode));
+      if (matchOpt) classSelect.value = matchOpt.value;
+    }
+
+    loadClassReport(classCode);
+  }
+  window.reportDrillDownToClass = reportDrillDownToClass;
+
+  function returnToProgramReport() {
+    if (!reportState.previousProgram) return;
+    const progCode = reportState.previousProgram;
+    reportState.previousProgram = '';
+    reportState.mode = 'program';
+    reportState.selectedProgram = progCode;
+
+    // Switch buttons UI
+    const btnClass = document.getElementById('btnReportModeClass');
+    const btnProgram = document.getElementById('btnReportModeProgram');
+    if (btnClass && btnProgram) {
+      btnProgram.classList.add('active');
+      btnClass.classList.remove('active');
+    }
+    const selClass = (document.getElementById('reportClassSelectorArea') || document.getElementById('selectorReportClass'));
+    const selProgram = (document.getElementById('reportProgramSelectorArea') || document.getElementById('selectorReportProgram'));
+    if (selClass) selClass.style.display = 'none';
+    if (selProgram) selProgram.style.display = 'block';
+
+    const progSelect = document.getElementById('selectReportProgram');
+    if (progSelect) {
+      progSelect.value = progCode;
+    }
+
+    loadProgramReport(progCode);
+  }
+  window.returnToProgramReport = returnToProgramReport;
+
+
+
+  // --- UI RENDERER 3: SECTION I - EXECUTIVE NDDT (NỘI DUNG ĐÀO TẠO) ---
+  function renderExecutiveNddtSection(containerElem, nddtData, options) {
+    if (!containerElem) return;
+    const isProgram = options && options.isProgram;
+    const title = (options && options.title) || (isProgram ? 'I. TỔNG HỢP ĐÁNH GIÁ NỘI DUNG ĐÀO TẠO (TOÀN CHƯƠNG TRÌNH)' : 'I. TỔNG HỢP ĐÁNH GIÁ NỘI DUNG ĐÀO TẠO');
+
+    const hasData = nddtData && ((isProgram && (nddtData.votes || 0) > 0) || (!isProgram && ((nddtData.votes || nddtData.tong_phieu || 0) > 0)));
+
+    if (!hasData) {
+      containerElem.innerHTML = 
+        '<div style="border-bottom: 1px solid #E2E8F0; padding-bottom: 0.65rem; margin-bottom: 0.85rem;">' +
+          '<h3 style="margin: 0; font-size: 1.05rem; font-weight: 800; color: var(--brand-primary); display: flex; align-items: center; gap: 0.5rem;">' +
+            '<i class="fa-solid fa-book-open"></i> ' + title +
+          '</h3>' +
+        '</div>' +
+        '<div style="padding: 1.5rem; background: #F8FAFC; border: 1px dashed #CBD5E1; border-radius: 8px; text-align: center; color: var(--text-muted); font-style: italic;">' +
+          '<i class="fa-solid fa-circle-exclamation" style="margin-right: 0.4rem; color: #94A3B8;"></i> ' +
+          'Chưa có dữ liệu đánh giá nội dung đào tạo' +
+        '</div>';
+      return;
+    }
+
+    containerElem._nddtData = nddtData;
+    const isMulti = !!nddtData.isMultiFormat;
+
+    // Normalizing criteria data
+    const activeItem = nddtData.overall || nddtData;
+    let overallScore = Number(activeItem.score || activeItem.diem_tb || 0);
+    let posRate = Number(activeItem.posRate || activeItem.ty_le_tich_cuc || 0);
+    let totalVotes = Number(activeItem.votes || activeItem.tong_phieu || 0);
+
+    const isOld = activeItem.template === 'old' || activeItem.isOldTemplate || nddtData.template === 'old';
+    const c1DefName = isOld ? '1. Đáp ứng mong muốn' : '1. Phù hợp vị trí CV';
+    const c2DefName = isOld ? '2. Liên quan công việc' : '2. Thực tiễn';
+    const c3DefName = isOld ? '3. Ứng dụng thực tế' : '3. Áp dụng kiến thức';
+
+    const c1 = activeItem.c1 ? { ...activeItem.c1, name: activeItem.c1.name || c1DefName } : { name: c1DefName, score: 0, posRate: 0, n4: 0, n3: 0, n2: 0, n1: 0, total: totalVotes };
+    const c2 = activeItem.c2 ? { ...activeItem.c2, name: activeItem.c2.name || c2DefName } : { name: c2DefName, score: 0, posRate: 0, n4: 0, n3: 0, n2: 0, n1: 0, total: totalVotes };
+    const c3 = activeItem.c3 ? { ...activeItem.c3, name: activeItem.c3.name || c3DefName } : { name: c3DefName, score: 0, posRate: 0, n4: 0, n3: 0, n2: 0, n1: 0, total: totalVotes };
+
+    c1.name = activeItem.c1 && activeItem.c1.name ? activeItem.c1.name : c1DefName;
+    c2.name = activeItem.c2 && activeItem.c2.name ? activeItem.c2.name : c2DefName;
+    c3.name = activeItem.c3 && activeItem.c3.name ? activeItem.c3.name : c3DefName;
+
+    const criteriaList = [c1, c2, c3];
+
+    // Find best and attention criteria
+    let highestCrit = criteriaList[0];
+    let lowestCrit = criteriaList[0];
+    criteriaList.forEach(c => {
+      if (c.score > highestCrit.score) highestCrit = c;
+      if (c.score < lowestCrit.score) lowestCrit = c;
+    });
+
+    let ratingText = 'Đánh giá Xuất sắc';
+    if (overallScore < 3.0) ratingText = 'Đánh giá Cần cải thiện';
+    else if (overallScore < 3.5) ratingText = 'Đánh giá Đạt yêu cầu';
+    else if (overallScore < 3.7) ratingText = 'Đánh giá Tốt';
+
+    // Header with Slicer Filter (if multi-format)
+    let headerSlicerHtml = '';
+    if (isMulti) {
+      headerSlicerHtml = 
+        '<div class="report-slicer-group" style="display: flex; gap: 0.35rem; align-items: center; background: #F8FAFC; padding: 0.2rem 0.4rem; border-radius: 6px; border: 1px solid #E2E8F0;">' +
+          '<span style="font-size: 0.72rem; font-weight: 700; color: #64748B; margin-right: 0.2rem;"><i class="fa-solid fa-filter"></i> Lọc hình thức:</span>' +
+          '<button type="button" class="btn-slicer active" data-filter="all" onclick="filterReportNddtFormat(this, \'all\')">Tất cả</button>' +
+          '<button type="button" class="btn-slicer" data-filter="direct" onclick="filterReportNddtFormat(this, \'direct\')">Trực tiếp</button>' +
+          '<button type="button" class="btn-slicer" data-filter="online" onclick="filterReportNddtFormat(this, \'online\')">Trực tiếp kết hợp Trực tuyến</button>' +
+        '</div>';
+    }
+
+    // Build Executive Layout: Tầng 1 (KPI) + Tầng 2 (Stacked Chart) + Tầng 3 (Collapsible Table)
+    let sectionHtml = 
+      '<div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #E2E8F0; padding-bottom: 0.65rem; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">' +
+        '<div>' +
+          '<h3 style="margin: 0; font-size: 1.05rem; font-weight: 800; color: var(--brand-primary); display: flex; align-items: center; gap: 0.5rem;">' +
+            '<i class="fa-solid fa-book-open"></i> ' + title +
+          '</h3>' +
+          '<div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.15rem; display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;">' +
+            'Đánh giá đa chiều 3 tiêu chí cốt lõi • Thang điểm chuẩn hóa 4.00' +
+            (isOld 
+              ? '<span style="font-size: 0.68rem; font-weight: 700; color: #9A3412; background: #FFEDD5; border: 1px solid #FED7AA; border-radius: 4px; padding: 0.05rem 0.45rem;">Mẫu cũ</span>' 
+              : '<span style="font-size: 0.68rem; font-weight: 700; color: #166534; background: #DCFCE7; border: 1px solid #BBF7D0; border-radius: 4px; padding: 0.05rem 0.45rem;">Mẫu mới</span>') +
+          '</div>' +
+        '</div>' +
+        '<div style="display: flex; align-items: center; gap: 0.6rem;">' +
+          headerSlicerHtml +
+          '<div style="font-size: 0.8rem; font-weight: 700; color: #64748B; background: #F1F5F9; padding: 0.25rem 0.65rem; border-radius: 6px;">' +
+            'Thang điểm: 4.00' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+
+      // TẦNG 1: EXECUTIVE KPI SUMMARY & STORYTELLING CALLOUT
+      '<div style="margin-bottom: 1.15rem;">' +
+        '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.85rem; margin-bottom: 0.85rem;">' +
+          // KPI 1: Điểm trung bình chung
+          '<div style="background: white; border: 1px solid #E2E8F0; border-left: 4px solid var(--brand-primary); border-radius: 8px; padding: 0.85rem 1rem;">' +
+            '<div style="display: flex; justify-content: space-between; align-items: center;">' +
+              '<span style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">ĐIỂM TRUNG BÌNH CHUNG</span>' +
+              '<div style="width: 26px; height: 26px; border-radius: 50%; background: #FFF1F2; display: flex; align-items: center; justify-content: center; color: var(--brand-primary);"><i class="fa-solid fa-award"></i></div>' +
+            '</div>' +
+            '<div id="nddtKpiScore" style="font-size: 1.7rem; font-weight: 800; color: var(--brand-primary); line-height: 1.2; margin-top: 0.25rem;">' +
+              overallScore.toFixed(2) + ' <span style="font-size: 0.85rem; font-weight: 600; color: #64748B;">/ 4.00</span>' +
+            '</div>' +
+            '<div id="nddtKpiRating" style="font-size: 0.75rem; font-weight: 600; color: #15803D; margin-top: 0.25rem; display: flex; align-items: center; gap: 0.3rem;">' +
+              '<i class="fa-solid fa-circle-check"></i> ' + ratingText +
+            '</div>' +
+          '</div>' +
+
+          // KPI 2: Tỷ lệ đánh giá tích cực
+          '<div style="background: white; border: 1px solid #E2E8F0; border-left: 4px solid #15803D; border-radius: 8px; padding: 0.85rem 1rem;">' +
+            '<div style="display: flex; justify-content: space-between; align-items: center;">' +
+              '<span style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">TỶ LỆ TÍCH CỰC (TỐT + KHÁ)</span>' +
+              '<div style="width: 26px; height: 26px; border-radius: 50%; background: #DCFCE7; display: flex; align-items: center; justify-content: center; color: #15803D;"><i class="fa-solid fa-thumbs-up"></i></div>' +
+            '</div>' +
+            '<div id="nddtKpiPosRate" style="font-size: 1.7rem; font-weight: 800; color: #15803D; line-height: 1.2; margin-top: 0.25rem;">' +
+              posRate.toFixed(1) + '%' +
+            '</div>' +
+            '<div id="nddtKpiPosDetail" style="font-size: 0.75rem; color: #64748B; margin-top: 0.25rem;">' +
+              (c1.n4 + c1.n3 + c2.n4 + c2.n3 + c3.n4 + c3.n3) + ' / ' + (c1.total + c2.total + c3.total) + ' lượt đánh giá tích cực' +
+            '</div>' +
+          '</div>' +
+
+          // KPI 3: Tổng lượt đánh giá hợp lệ
+          '<div style="background: white; border: 1px solid #E2E8F0; border-left: 4px solid #0284C7; border-radius: 8px; padding: 0.85rem 1rem;">' +
+            '<div style="display: flex; justify-content: space-between; align-items: center;">' +
+              '<span style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">TỔNG LƯỢT ĐÁNH GIÁ HỢP LỆ</span>' +
+              '<div style="width: 26px; height: 26px; border-radius: 50%; background: #E0F2FE; display: flex; align-items: center; justify-content: center; color: #0284C7;"><i class="fa-solid fa-square-poll-horizontal"></i></div>' +
+            '</div>' +
+            '<div id="nddtKpiVotes" style="font-size: 1.7rem; font-weight: 800; color: #0284C7; line-height: 1.2; margin-top: 0.25rem;">' +
+              totalVotes.toLocaleString('vi-VN') + ' <span style="font-size: 0.85rem; font-weight: 600; color: #64748B;">phiếu</span>' +
+            '</div>' +
+            '<div id="nddtKpiVotesDetail" style="font-size: 0.75rem; color: #64748B; margin-top: 0.25rem;">' +
+              (isProgram ? (options.evaluatedClassesCount || '') + ' lớp tham gia đánh giá' : '100% phản hồi được kiểm định') +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+
+        // Storytelling callout pill
+        '<div id="nddtStorytellingCallout" style="display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 0.6rem 0.9rem; font-size: 0.8rem;">' +
+          '<div style="display: flex; align-items: center; gap: 0.4rem; color: #15803D; font-weight: 700;">' +
+            '<i class="fa-solid fa-arrow-trend-up"></i> Tiêu chí cao nhất: ' +
+            '<span style="color: #1E293B; font-weight: 600;">' + highestCrit.name + ' (' + highestCrit.score.toFixed(2) + '/4.00)</span>' +
+          '</div>' +
+          '<div style="width: 1px; height: 16px; background: #CBD5E1;" class="no-mobile"></div>' +
+          '<div style="display: flex; align-items: center; gap: 0.4rem; color: #B45309; font-weight: 700;">' +
+            '<i class="fa-solid fa-triangle-exclamation"></i> Cần quan tâm: ' +
+            '<span style="color: #1E293B; font-weight: 600;">' + lowestCrit.name + ' (' + lowestCrit.score.toFixed(2) + '/4.00)</span>' +
+          '</div>' +
+          '<div style="margin-left: auto; font-size: 0.75rem; color: #64748B; font-style: italic;">' +
+            '<i class="fa-solid fa-hand-pointer"></i> Di chuột hoặc nhấp vào biểu đồ/chú giải để tương tác phân tích' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+
+      // TẦNG 2: 100% HORIZONTAL STACKED BAR CHART
+      '<div style="background: white; border: 1px solid #E2E8F0; border-radius: 8px; padding: 1.15rem; margin-bottom: 1.15rem;">' +
+        '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.85rem; flex-wrap: wrap; gap: 0.5rem;">' +
+          '<div style="font-size: 0.88rem; font-weight: 800; color: #1E293B; display: flex; align-items: center; gap: 0.4rem;">' +
+            '<i class="fa-solid fa-chart-column" style="color: var(--brand-primary);"></i> PHÂN BỐ TỶ LỆ 4 MỨC ĐÁNH GIÁ THEO TIÊU CHÍ (100%)' +
+          '</div>' +
+          '<div style="display: flex; gap: 0.75rem; align-items: center; font-size: 0.75rem; font-weight: 700;">' +
+            '<span style="display: inline-flex; align-items: center; gap: 0.3rem;"><span style="width: 12px; height: 12px; border-radius: 3px; background: #137333;"></span> Tốt</span>' +
+            '<span style="display: inline-flex; align-items: center; gap: 0.3rem;"><span style="width: 12px; height: 12px; border-radius: 3px; background: #34A853;"></span> Khá</span>' +
+            '<span style="display: inline-flex; align-items: center; gap: 0.3rem;"><span style="width: 12px; height: 12px; border-radius: 3px; background: #F59E0B;"></span> Bình thường</span>' +
+            '<span style="display: inline-flex; align-items: center; gap: 0.3rem;"><span style="width: 12px; height: 12px; border-radius: 3px; background: #EF4444;"></span> Hạn chế</span>' +
+          '</div>' +
+        '</div>' +
+        '<div style="height: 220px; position: relative;">' +
+          '<canvas id="reportNddtStackedBarChart"></canvas>' +
+        '</div>' +
+      '</div>' +
+
+      // TẦNG 3: BẢNG CHI TIẾT TỔNG HỢP
+      '<div style="background: white; border: 1px solid #E2E8F0; border-radius: 8px; overflow: hidden;">' +
+        '<div style="padding: 0.75rem 1rem; background: #F8FAFC; display: flex; justify-content: space-between; align-items: center; cursor: pointer; border-bottom: 1px solid #E2E8F0;" onclick="toggleNddtTableDetails()">' +
+          '<div style="font-size: 0.85rem; font-weight: 800; color: #1E293B; display: flex; align-items: center; gap: 0.4rem;">' +
+            '<i class="fa-solid fa-table-list" style="color: var(--brand-primary);"></i> BẢNG DỮ LIỆU CHI TIẾT SỐ LƯỢNG VÀ TỶ LỆ ĐÁNH GIÁ NỘI DUNG' +
+          '</div>' +
+          '<div style="font-size: 0.78rem; font-weight: 700; color: var(--brand-primary); display: flex; align-items: center; gap: 0.3rem;" id="nddtTableToggleText">' +
+            '<i class="fa-solid fa-chevron-up" id="nddtTableToggleIcon"></i> Thu gọn' +
+          '</div>' +
+        '</div>' +
+        '<div id="reportNddtTableContainer" class="table-container" style="padding: 0; margin: 0; display: block;">' +
+          '<table class="data-table" style="margin: 0; font-size: 0.82rem;">' +
+            '<thead>' +
+              '<tr>' +
+                '<th style="width: 5%; text-align: center;">STT</th>' +
+                '<th style="width: 32%; text-align: left;">TIÊU CHÍ ĐÁNH GIÁ</th>' +
+                '<th style="width: 11%; text-align: center;" style="color: #137333;">TỐT (4)</th>' +
+                '<th style="width: 11%; text-align: center;" style="color: #34A853;">KHÁ (3)</th>' +
+                '<th style="width: 11%; text-align: center;" style="color: #F59E0B;">BÌNH THƯỜNG (2)</th>' +
+                '<th style="width: 11%; text-align: center;" style="color: #EF4444;">HẠN CHẾ (1)</th>' +
+                '<th style="width: 9%; text-align: center;">TỔNG SỐ</th>' +
+                '<th style="width: 10%; text-align: center;">ĐIỂM TB (4.0)</th>' +
+              '</tr>' +
+            '</thead>' +
+            '<tbody>';
+
+    let tableRowsHtml = '';
+
+    // Helper to generate 3 criteria rows for a cohort
+    function buildCohortCriteriaRows(cohort, colorTheme) {
+      if (!cohort) return '';
+      const cohortIsOld = cohort.template === 'old' || cohort.isOldTemplate || isOld;
+      const c1N = cohort.c1 && cohort.c1.name ? cohort.c1.name : (cohortIsOld ? '1. Đáp ứng mong muốn' : '1. Phù hợp vị trí CV');
+      const c2N = cohort.c2 && cohort.c2.name ? cohort.c2.name : (cohortIsOld ? '2. Liên quan công việc' : '2. Thực tiễn');
+      const c3N = cohort.c3 && cohort.c3.name ? cohort.c3.name : (cohortIsOld ? '3. Ứng dụng thực tế' : '3. Áp dụng kiến thức');
+      const list = [
+        { ...(cohort.c1 || {}), name: c1N },
+        { ...(cohort.c2 || {}), name: c2N },
+        { ...(cohort.c3 || {}), name: c3N }
+      ];
+      return list.map((c, i) => {
+        const tot = c.total || (c.n4 + c.n3 + c.n2 + c.n1) || 1;
+        const r4 = ((c.n4 / tot) * 100).toFixed(1);
+        const r3 = ((c.n3 / tot) * 100).toFixed(1);
+        const r2 = ((c.n2 / tot) * 100).toFixed(1);
+        const r1 = ((c.n1 / tot) * 100).toFixed(1);
+
+        return '<tr>' +
+          '<td style="text-align: center; color: #64748B;">' + (i + 1) + '</td>' +
+          '<td style="font-weight: 600; color: #1E293B;">' + c.name + '</td>' +
+          '<td style="text-align: center;"><strong style="color: #137333;">' + r4 + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + (c.n4 || 0) + ')</span></td>' +
+          '<td style="text-align: center;"><strong style="color: #34A853;">' + r3 + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + (c.n3 || 0) + ')</span></td>' +
+          '<td style="text-align: center;"><strong style="color: #F59E0B;">' + r2 + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + (c.n2 || 0) + ')</span></td>' +
+          '<td style="text-align: center;"><strong style="color: #EF4444;">' + r1 + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + (c.n1 || 0) + ')</span></td>' +
+          '<td style="text-align: center; font-weight: 700;">' + tot + '</td>' +
+          '<td style="text-align: center; font-weight: 800; color: ' + colorTheme + ';">' + Number(c.score || 0).toFixed(2) + '</td>' +
+        '</tr>';
+      }).join('');
+    }
+
+    if (isMulti && nddtData.direct && nddtData.online) {
+      // MULTI-FORMAT MODE: SECTION A + SECTION B + GRAND AVERAGE
+      const dir = nddtData.direct;
+      const onl = nddtData.online;
+      const ovr = nddtData.overall || activeItem;
+      const subDir = dir.subtotal || { n4: dir.c1.n4+dir.c2.n4+dir.c3.n4, n3: dir.c1.n3+dir.c2.n3+dir.c3.n3, n2: dir.c1.n2+dir.c2.n2+dir.c3.n2, n1: dir.c1.n1+dir.c2.n1+dir.c3.n1, total: dir.c1.total+dir.c2.total+dir.c3.total, score: dir.score };
+      const subOnl = onl.subtotal || { n4: onl.c1.n4+onl.c2.n4+onl.c3.n4, n3: onl.c1.n3+onl.c2.n3+onl.c3.n3, n2: onl.c1.n2+onl.c2.n2+onl.c3.n2, n1: onl.c1.n1+onl.c2.n1+onl.c3.n1, total: onl.c1.total+onl.c2.total+onl.c3.total, score: onl.score };
+      const subOvr = ovr.subtotal || { n4: subDir.n4 + subOnl.n4, n3: subDir.n3 + subOnl.n3, n2: subDir.n2 + subOnl.n2, n1: subDir.n1 + subOnl.n1, total: subDir.total + subOnl.total, score: ovr.score };
+
+      tableRowsHtml += 
+        // Group Header A
+        '<tr style="background: #F1F5F9; font-weight: 800; color: #1E293B;">' +
+          '<td colspan="8" style="padding: 0.55rem 0.85rem;"><i class="fa-solid fa-user-group" style="color: #137333; margin-right: 0.35rem;"></i> A. HÌNH THỨC TRỰC TIẾP</td>' +
+        '</tr>' +
+        buildCohortCriteriaRows(dir, '#137333') +
+        // Subtotal Direct Row
+        '<tr style="background: #F8FAFC; font-weight: 800; border-top: 1px solid #CBD5E1; border-bottom: 2px solid #CBD5E1;">' +
+          '<td></td>' +
+          '<td style="color: #137333;">Cộng hình thức Trực tiếp</td>' +
+          '<td style="text-align: center; color: #137333;"><strong>' + (subDir.total > 0 ? (((subDir.n4) / subDir.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (subDir.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + subDir.n4 + ')</span>' : '') + '</td>' +
+          '<td style="text-align: center; color: #34A853;"><strong>' + (subDir.total > 0 ? (((subDir.n3) / subDir.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (subDir.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + subDir.n3 + ')</span>' : '') + '</td>' +
+          '<td style="text-align: center; color: #F59E0B;"><strong>' + (subDir.total > 0 ? (((subDir.n2) / subDir.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (subDir.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + subDir.n2 + ')</span>' : '') + '</td>' +
+          '<td style="text-align: center; color: #EF4444;"><strong>' + (subDir.total > 0 ? (((subDir.n1) / subDir.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (subDir.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + subDir.n1 + ')</span>' : '') + '</td>' +
+          '<td style="text-align: center; font-weight: 800;">' + subDir.total + '</td>' +
+          '<td style="text-align: center; font-weight: 800; color: #137333; font-size: 0.95rem;">' + subDir.score.toFixed(2) + '</td>' +
+        '</tr>' +
+
+        // Group Header B
+        '<tr style="background: #F1F5F9; font-weight: 800; color: #1E293B;">' +
+          '<td colspan="8" style="padding: 0.55rem 0.85rem;"><i class="fa-solid fa-shapes" style="color: #7E22CE; margin-right: 0.35rem;"></i> B. HÌNH THỨC TRỰC TIẾP KẾT HỢP TRỰC TUYẾN</td>' +
+        '</tr>' +
+        buildCohortCriteriaRows(onl, '#7E22CE') +
+        // Subtotal Online Row
+        '<tr style="background: #F8FAFC; font-weight: 800; border-top: 1px solid #CBD5E1; border-bottom: 2px solid #CBD5E1;">' +
+          '<td></td>' +
+          '<td style="color: #7E22CE;">Cộng hình thức Trực tiếp kết hợp Trực tuyến</td>' +
+          '<td style="text-align: center; color: #137333;"><strong>' + (subOnl.total > 0 ? (((subOnl.n4) / subOnl.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (subOnl.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + subOnl.n4 + ')</span>' : '') + '</td>' +
+          '<td style="text-align: center; color: #34A853;"><strong>' + (subOnl.total > 0 ? (((subOnl.n3) / subOnl.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (subOnl.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + subOnl.n3 + ')</span>' : '') + '</td>' +
+          '<td style="text-align: center; color: #F59E0B;"><strong>' + (subOnl.total > 0 ? (((subOnl.n2) / subOnl.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (subOnl.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + subOnl.n2 + ')</span>' : '') + '</td>' +
+          '<td style="text-align: center; color: #EF4444;"><strong>' + (subOnl.total > 0 ? (((subOnl.n1) / subOnl.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (subOnl.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + subOnl.n1 + ')</span>' : '') + '</td>' +
+          '<td style="text-align: center; font-weight: 800;">' + subOnl.total + '</td>' +
+          '<td style="text-align: center; font-weight: 800; color: #7E22CE; font-size: 0.95rem;">' + subOnl.score.toFixed(2) + '</td>' +
+        '</tr>' +
+
+        // GRAND AVERAGE ROW
+        '<tr style="background: #FFF1F2; font-weight: 800; border-top: 2px solid var(--brand-primary);">' +
+          '<td></td>' +
+          '<td style="color: var(--brand-primary); text-transform: uppercase;">ĐIỂM TRUNG BÌNH CHUNG NỘI DUNG ĐÀO TẠO</td>' +
+          '<td style="text-align: center; color: #137333;"><strong>' + (subOvr.total > 0 ? (((subOvr.n4) / subOvr.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (subOvr.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + subOvr.n4 + ')</span>' : '') + '</td>' +
+          '<td style="text-align: center; color: #34A853;"><strong>' + (subOvr.total > 0 ? (((subOvr.n3) / subOvr.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (subOvr.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + subOvr.n3 + ')</span>' : '') + '</td>' +
+          '<td style="text-align: center; color: #F59E0B;"><strong>' + (subOvr.total > 0 ? (((subOvr.n2) / subOvr.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (subOvr.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + subOvr.n2 + ')</span>' : '') + '</td>' +
+          '<td style="text-align: center; color: #EF4444;"><strong>' + (subOvr.total > 0 ? (((subOvr.n1) / subOvr.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (subOvr.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + subOvr.n1 + ')</span>' : '') + '</td>' +
+          '<td style="text-align: center; font-weight: 800; color: var(--brand-primary);">' + subOvr.total + '</td>' +
+          '<td style="text-align: center; font-weight: 800; color: var(--brand-primary); font-size: 1.05rem;">' + subOvr.score.toFixed(2) + '</td>' +
+        '</tr>';
+    } else {
+      // SINGLE-FORMAT MODE
+      tableRowsHtml += 
+        buildCohortCriteriaRows(activeItem, 'var(--brand-primary)') +
+        '<tr style="background: #FFF1F2; font-weight: 800; border-top: 2px solid var(--brand-primary);">' +
+          '<td></td>' +
+          '<td style="color: var(--brand-primary); text-transform: uppercase;">ĐIỂM TRUNG BÌNH CHUNG NỘI DUNG ĐÀO TẠO</td>' +
+          '<td style="text-align: center; color: #137333;"><strong>' + (((c1.n4+c2.n4+c3.n4) / (c1.total+c2.total+c3.total || 1)) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + (c1.n4+c2.n4+c3.n4) + ')</span></td>' +
+          '<td style="text-align: center; color: #34A853;"><strong>' + (((c1.n3+c2.n3+c3.n3) / (c1.total+c2.total+c3.total || 1)) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + (c1.n3+c2.n3+c3.n3) + ')</span></td>' +
+          '<td style="text-align: center; color: #F59E0B;"><strong>' + (((c1.n2+c2.n2+c3.n2) / (c1.total+c2.total+c3.total || 1)) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + (c1.n2+c2.n2+c3.n2) + ')</span></td>' +
+          '<td style="text-align: center; color: #EF4444;"><strong>' + (((c1.n1+c2.n1+c3.n1) / (c1.total+c2.total+c3.total || 1)) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + (c1.n1+c2.n1+c3.n1) + ')</span></td>' +
+          '<td style="text-align: center; font-weight: 800; color: var(--brand-primary);">' + (c1.total+c2.total+c3.total) + '</td>' +
+          '<td style="text-align: center; font-weight: 800; color: var(--brand-primary); font-size: 1.05rem;">' + overallScore.toFixed(2) + '</td>' +
+        '</tr>';
+    }
+
+    containerElem.innerHTML = sectionHtml + tableRowsHtml + '</tbody></table></div></div>';
+
+    // Render 100% Horizontal Stacked Bar Chart with Chart.js
+    renderNddtChartByFilter(containerElem, 'all');
+  }
+
+  function renderNddtChartByFilter(containerElem, filter) {
+    const ctx = document.getElementById('reportNddtStackedBarChart');
+    if (!ctx || typeof Chart === 'undefined') return;
+
+    if (reportCharts.nddtStacked) {
+      try { reportCharts.nddtStacked.destroy(); } catch (e) {}
+    }
+
+    const nddtData = containerElem._nddtData;
+    if (!nddtData) return;
+
+    let targetItem = nddtData.overall || nddtData;
+    if (filter === 'direct' && nddtData.direct) targetItem = nddtData.direct;
+    else if (filter === 'online' && nddtData.online) targetItem = nddtData.online;
+
+    const isOld = targetItem.template === 'old' || targetItem.isOldTemplate || nddtData.template === 'old';
+    const c1DefName = isOld ? '1. Đáp ứng mong muốn' : '1. Phù hợp vị trí CV';
+    const c2DefName = isOld ? '2. Liên quan công việc' : '2. Thực tiễn';
+    const c3DefName = isOld ? '3. Ứng dụng thực tế' : '3. Áp dụng kiến thức';
+
+    const c1 = targetItem.c1 || { n4: 0, n3: 0, n2: 0, n1: 0, total: 1, score: 0 };
+    const c2 = targetItem.c2 || { n4: 0, n3: 0, n2: 0, n1: 0, total: 1, score: 0 };
+    const c3 = targetItem.c3 || { n4: 0, n3: 0, n2: 0, n1: 0, total: 1, score: 0 };
+
+    const cList = [
+      { name: (targetItem.c1 && targetItem.c1.name) ? targetItem.c1.name : c1DefName, ...c1 },
+      { name: (targetItem.c2 && targetItem.c2.name) ? targetItem.c2.name : c2DefName, ...c2 },
+      { name: (targetItem.c3 && targetItem.c3.name) ? targetItem.c3.name : c3DefName, ...c3 }
+    ];
+
+    const labels = cList.map(c => c.name);
+    const dataGood = [];
+    const dataFair = [];
+    const dataNorm = [];
+    const dataLimit = [];
+
+    cList.forEach(c => {
+      const tot = c.total || (c.n4 + c.n3 + c.n2 + c.n1) || 1;
+      dataGood.push(Number(((c.n4 / tot) * 100).toFixed(1)));
+      dataFair.push(Number(((c.n3 / tot) * 100).toFixed(1)));
+      dataNorm.push(Number(((c.n2 / tot) * 100).toFixed(1)));
+      dataLimit.push(Number(((c.n1 / tot) * 100).toFixed(1)));
+    });
+
+    reportCharts.nddtStacked = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [
+          { label: 'Tốt', data: dataGood, backgroundColor: '#137333', barThickness: 24 },
+          { label: 'Khá', data: dataFair, backgroundColor: '#34A853', barThickness: 24 },
+          { label: 'Bình thường', data: dataNorm, backgroundColor: '#F59E0B', barThickness: 24 },
+          { label: 'Hạn chế', data: dataLimit, backgroundColor: '#EF4444', barThickness: 24 }
+        ]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              title: (items) => items[0].label,
+              label: (item) => {
+                const idx = item.dataIndex;
+                const c = cList[idx];
+                let count = 0;
+                if (item.datasetIndex === 0) count = c.n4;
+                else if (item.datasetIndex === 1) count = c.n3;
+                else if (item.datasetIndex === 2) count = c.n2;
+                else count = c.n1;
+                return item.dataset.label + ': ' + item.raw + '% (' + count + ' lượt)';
+              },
+              afterBody: (items) => {
+                const idx = items[0].dataIndex;
+                return ['--------------------', 'Điểm trung bình: ' + cList[idx].score.toFixed(2) + ' / 4.00'];
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            stacked: true,
+            min: 0,
+            max: 100,
+            ticks: { callback: v => v + '%' },
+            grid: { color: '#F1F5F9' }
+          },
+          y: {
+            stacked: true,
+            ticks: { font: { weight: '700', size: 11 }, color: '#1E293B' },
+            grid: { display: false }
+          }
+        }
+      }
+    });
+
+    // Update KPI cards in Section I if filter changes
+    const kpiScoreElem = document.getElementById('nddtKpiScore');
+    const kpiRatingElem = document.getElementById('nddtKpiRating');
+    const kpiPosElem = document.getElementById('nddtKpiPosRate');
+    const kpiPosDetailElem = document.getElementById('nddtKpiPosDetail');
+    const kpiVotesElem = document.getElementById('nddtKpiVotes');
+    const kpiVotesDetailElem = document.getElementById('nddtKpiVotesDetail');
+
+    if (kpiScoreElem) {
+      const score = Number(targetItem.score || targetItem.diem_tb || 0);
+      kpiScoreElem.innerHTML = score.toFixed(2) + ' <span style="font-size: 0.85rem; font-weight: 600; color: #64748B;">/ 4.00</span>';
+      let rText = 'Đánh giá Xuất sắc';
+      if (score < 3.0) rText = 'Đánh giá Cần cải thiện';
+      else if (score < 3.5) rText = 'Đánh giá Đạt yêu cầu';
+      else if (score < 3.7) rText = 'Đánh giá Tốt';
+      if (kpiRatingElem) kpiRatingElem.innerHTML = '<i class="fa-solid fa-circle-check"></i> ' + rText;
+    }
+    if (kpiPosElem) {
+      const pos = Number(targetItem.posRate || targetItem.ty_le_tich_cuc || 0);
+      kpiPosElem.textContent = pos.toFixed(1) + '%';
+      if (kpiPosDetailElem) {
+        kpiPosDetailElem.textContent = (c1.n4+c1.n3+c2.n4+c2.n3+c3.n4+c3.n3) + ' / ' + (c1.total+c2.total+c3.total) + ' lượt đánh giá tích cực';
+      }
+    }
+    if (kpiVotesElem) {
+      const v = Number(targetItem.votes || targetItem.tong_phieu || 0);
+      kpiVotesElem.innerHTML = v.toLocaleString('vi-VN') + ' <span style="font-size: 0.85rem; font-weight: 600; color: #64748B;">phiếu</span>';
+      if (kpiVotesDetailElem) {
+        kpiVotesDetailElem.textContent = filter === 'direct' ? 'Hình thức Trực tiếp' : (filter === 'online' ? 'Hình thức Trực tiếp kết hợp Trực tuyến' : '100% phản hồi được kiểm định');
+      }
+    }
+
+    const calloutElem = document.getElementById('nddtStorytellingCallout');
+    if (calloutElem) {
+      let highestCrit = cList[0];
+      let lowestCrit = cList[0];
+      cList.forEach(c => {
+        if (Number(c.score || 0) > Number(highestCrit.score || 0)) highestCrit = c;
+        if (Number(c.score || 0) < Number(lowestCrit.score || 0)) lowestCrit = c;
+      });
+      calloutElem.innerHTML = 
+        '<div style="display: flex; align-items: center; gap: 0.4rem; color: #15803D; font-weight: 700;">' +
+          '<i class="fa-solid fa-arrow-trend-up"></i> Tiêu chí cao nhất: ' +
+          '<span style="color: #1E293B; font-weight: 600;">' + highestCrit.name + ' (' + Number(highestCrit.score || 0).toFixed(2) + '/4.00)</span>' +
+        '</div>' +
+        '<div style="width: 1px; height: 16px; background: #CBD5E1;" class="no-mobile"></div>' +
+        '<div style="display: flex; align-items: center; gap: 0.4rem; color: #B45309; font-weight: 700;">' +
+          '<i class="fa-solid fa-triangle-exclamation"></i> Cần quan tâm: ' +
+          '<span style="color: #1E293B; font-weight: 600;">' + lowestCrit.name + ' (' + Number(lowestCrit.score || 0).toFixed(2) + '/4.00)</span>' +
+        '</div>' +
+        '<div style="margin-left: auto; font-size: 0.75rem; color: #64748B; font-style: italic;">' +
+          '<i class="fa-solid fa-hand-pointer"></i> Di chuột hoặc nhấp vào biểu đồ/chú giải để tương tác phân tích' +
+        '</div>';
+    }
+  }
+
+  function filterReportNddtFormat(btn, filter) {
+    if (!btn) return;
+    const parent = btn.parentElement;
+    if (parent) {
+      parent.querySelectorAll('.btn-slicer').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    }
+    const container = document.getElementById('reportNddtSection');
+    if (container) {
+      renderNddtChartByFilter(container, filter);
+    }
+  }
+  window.filterReportNddtFormat = filterReportNddtFormat;
+
+  function toggleNddtTableDetails() {
+    const tableContainer = document.getElementById('reportNddtTableContainer');
+    const toggleText = document.getElementById('nddtTableToggleText');
+    if (!tableContainer || !toggleText) return;
+
+    if (tableContainer.style.display === 'none') {
+      tableContainer.style.display = 'block';
+      toggleText.innerHTML = '<i class="fa-solid fa-chevron-up"></i> Thu gọn';
+    } else {
+      tableContainer.style.display = 'none';
+      toggleText.innerHTML = '<i class="fa-solid fa-chevron-down"></i> Xem chi tiết';
+    }
+  }
+  window.toggleNddtTableDetails = toggleNddtTableDetails;
+
+
+
+  // --- UI RENDERER 4: SECTION II - EXECUTIVE PPHT (PHƯƠNG PHÁP & HÌNH THỨC ĐÀO TẠO) ---
+  function renderExecutivePphtSection(containerElem, pphtData, options) {
+    if (!containerElem) return;
+    const isProgram = options && options.isProgram;
+    const title = (options && options.title) || (isProgram ? 'II. TỔNG HỢP ĐÁNH GIÁ PHƯƠNG PHÁP & HÌNH THỨC ĐÀO TẠO (TOÀN CHƯƠNG TRÌNH)' : 'II. ĐÁNH GIÁ VỀ PHƯƠNG PHÁP & HÌNH THỨC ĐÀO TẠO');
+
+    let directItem = null;
+    let hybridItem = null;
+    let overallItem = null;
+
+    if (isProgram) {
+      directItem = pphtData ? pphtData.pphtDirect : null;
+      hybridItem = pphtData ? pphtData.pphtHybrid : null;
+      overallItem = pphtData ? pphtData.pphtOverall : null;
+    } else {
+      if (pphtData && pphtData.formats) {
+        directItem = pphtData.formats['Trực tiếp'] || null;
+        hybridItem = pphtData.formats['Trực tiếp kết hợp Trực tuyến'] || pphtData.formats['Trực tuyến'] || null;
+        if (directItem || hybridItem) {
+          overallItem = {
+            score: pphtData.score || 0,
+            posRate: pphtData.posRate || 0,
+            total: pphtData.votes || 0
+          };
+        }
+      } else if (pphtData) {
+        const isHyb = (pphtData.hinh_thuc_hoc || '').toLowerCase().includes('tuyến') || (pphtData.hinh_thuc_hoc || '').toLowerCase().includes('kết hợp');
+        const it = {
+          c1: { score: pphtData.c1_score || 0, posRate: pphtData.c1_pos || 0, n4: pphtData.c1_4 || 0, n3: pphtData.c1_3 || 0, n2: pphtData.c1_2 || 0, n1: pphtData.c1_1 || 0, total: pphtData.c1_n || pphtData.tong_phieu || 0 },
+          c2: { score: pphtData.c2_score || 0, posRate: pphtData.c2_pos || 0, n4: pphtData.c2_4 || 0, n3: pphtData.c2_3 || 0, n2: pphtData.c2_2 || 0, n1: pphtData.c2_1 || 0, total: pphtData.c2_n || pphtData.tong_phieu || 0 },
+          subtotal: { score: pphtData.diem_tb || 0, posRate: pphtData.ty_le_tich_cuc || 0, total: (pphtData.tong_phieu || 0) * 2 }
+        };
+        if (isHyb) hybridItem = it;
+        else directItem = it;
+        overallItem = { score: pphtData.diem_tb || 0, posRate: pphtData.ty_le_tich_cuc || 0, total: (pphtData.tong_phieu || 0) * 2 };
+      }
+    }
+
+    const hasData = directItem || hybridItem || overallItem;
+    if (!hasData) {
+      containerElem.innerHTML = 
+        '<div style="border-bottom: 1px solid #E2E8F0; padding-bottom: 0.65rem; margin-bottom: 0.85rem;">' +
+          '<h3 style="margin: 0; font-size: 1.05rem; font-weight: 800; color: var(--brand-primary); display: flex; align-items: center; gap: 0.5rem;">' +
+            '<i class="fa-solid fa-chalkboard-user"></i> ' + title +
+          '</h3>' +
+        '</div>' +
+        '<div style="padding: 1.5rem; background: #F8FAFC; border: 1px dashed #CBD5E1; border-radius: 8px; text-align: center; color: var(--text-muted); font-style: italic;">' +
+          '<i class="fa-solid fa-circle-exclamation" style="margin-right: 0.4rem; color: #94A3B8;"></i> ' +
+          'Chưa có dữ liệu đánh giá phương pháp & hình thức' +
+        '</div>';
+      return;
+    }
+
+    // Extract summary metrics
+    const overallScore = overallItem ? (overallItem.subtotal ? overallItem.subtotal.score : overallItem.score) : ((directItem ? directItem.subtotal.score : (hybridItem ? hybridItem.subtotal.score : 0)));
+    const posRate = overallItem ? (overallItem.subtotal ? overallItem.subtotal.posRate : overallItem.posRate) : ((directItem ? directItem.subtotal.posRate : (hybridItem ? hybridItem.subtotal.posRate : 0)));
+    const totalVotes = (directItem ? directItem.c1.total : 0) + (hybridItem ? hybridItem.c1.total : 0);
+
+    const curFilter = reportState.pphtFormatFilter || 'all';
+
+    // Store references on container for slicer filtering
+    containerElem._directItem = directItem;
+    containerElem._hybridItem = hybridItem;
+    containerElem._overallItem = overallItem;
+
+    const sectionHtml = 
+      '<div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #E2E8F0; padding-bottom: 0.65rem; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">' +
+        '<div>' +
+          '<h3 style="margin: 0; font-size: 1.05rem; font-weight: 800; color: var(--brand-primary); display: flex; align-items: center; gap: 0.5rem;">' +
+            '<i class="fa-solid fa-chalkboard-user"></i> ' + title +
+          '</h3>' +
+          '<div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.15rem;">Đánh giá 2 tiêu chí cốt lõi: Hoạt động học tập & Hình thức đào tạo • Thang điểm chuẩn hóa 4.00</div>' +
+        '</div>' +
+        '<div style="font-size: 0.8rem; font-weight: 700; color: #64748B; background: #F1F5F9; padding: 0.25rem 0.65rem; border-radius: 6px;">' +
+          'Thang điểm: 4.00' +
+        '</div>' +
+      '</div>' +
+
+      // TẦNG 1: EXECUTIVE KPI SUMMARY
+      '<div style="margin-bottom: 1.15rem;">' +
+        '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.85rem; margin-bottom: 0.85rem;">' +
+          // KPI 1: Điểm trung bình chung
+          '<div style="background: white; border: 1px solid #E2E8F0; border-left: 4px solid var(--brand-primary); border-radius: 8px; padding: 0.85rem 1rem;">' +
+            '<div style="display: flex; justify-content: space-between; align-items: center;">' +
+              '<span style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">ĐIỂM TRUNG BÌNH CHUNG</span>' +
+              '<div style="width: 26px; height: 26px; border-radius: 50%; background: #FFF1F2; display: flex; align-items: center; justify-content: center; color: var(--brand-primary);"><i class="fa-solid fa-award"></i></div>' +
+            '</div>' +
+            '<div style="font-size: 1.7rem; font-weight: 800; color: var(--brand-primary); line-height: 1.2; margin-top: 0.25rem;">' +
+              Number(overallScore).toFixed(2) + ' <span style="font-size: 0.85rem; font-weight: 600; color: #64748B;">/ 4.00</span>' +
+            '</div>' +
+            '<div style="font-size: 0.75rem; font-weight: 600; color: #15803D; margin-top: 0.25rem; display: flex; align-items: center; gap: 0.3rem;">' +
+              '<i class="fa-solid fa-circle-check"></i> Đánh giá Xuất sắc' +
+            '</div>' +
+          '</div>' +
+
+          // KPI 2: Tỷ lệ đánh giá tích cực
+          '<div style="background: white; border: 1px solid #E2E8F0; border-left: 4px solid #15803D; border-radius: 8px; padding: 0.85rem 1rem;">' +
+            '<div style="display: flex; justify-content: space-between; align-items: center;">' +
+              '<span style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">TỶ LỆ TÍCH CỰC (TỐT + KHÁ)</span>' +
+              '<div style="width: 26px; height: 26px; border-radius: 50%; background: #DCFCE7; display: flex; align-items: center; justify-content: center; color: #15803D;"><i class="fa-solid fa-thumbs-up"></i></div>' +
+            '</div>' +
+            '<div style="font-size: 1.7rem; font-weight: 800; color: #15803D; line-height: 1.2; margin-top: 0.25rem;">' +
+              Number(posRate).toFixed(1) + '%' +
+            '</div>' +
+            '<div style="font-size: 0.75rem; color: #64748B; margin-top: 0.25rem;">' +
+              'Tỷ lệ đồng thuận cao trên toàn bộ các hình thức' +
+            '</div>' +
+          '</div>' +
+
+          // KPI 3: Tổng số phiếu khảo sát
+          '<div style="background: white; border: 1px solid #E2E8F0; border-left: 4px solid #0284C7; border-radius: 8px; padding: 0.85rem 1rem;">' +
+            '<div style="display: flex; justify-content: space-between; align-items: center;">' +
+              '<span style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">TỔNG LƯỢT ĐÁNH GIÁ HỢP LỆ</span>' +
+              '<div style="width: 26px; height: 26px; border-radius: 50%; background: #E0F2FE; display: flex; align-items: center; justify-content: center; color: #0284C7;"><i class="fa-solid fa-square-poll-horizontal"></i></div>' +
+            '</div>' +
+            '<div style="font-size: 1.7rem; font-weight: 800; color: #0284C7; line-height: 1.2; margin-top: 0.25rem;">' +
+              totalVotes.toLocaleString('vi-VN') + ' <span style="font-size: 0.85rem; font-weight: 600; color: #64748B;">phiếu</span>' +
+            '</div>' +
+            '<div style="font-size: 0.75rem; color: #64748B; margin-top: 0.25rem;">' +
+              (directItem && hybridItem ? 'Gồm cả Trực tiếp và Trực tiếp kết hợp Trực tuyến' : 'Dữ liệu khảo sát chuẩn hóa') +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+
+      // TẦNG 2: FORMAT SLICERS & 100% HORIZONTAL STACKED BAR CHART
+      '<div style="background: white; border: 1px solid #E2E8F0; border-radius: 8px; padding: 1.15rem; margin-bottom: 1.15rem;">' +
+        '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.85rem; flex-wrap: wrap; gap: 0.5rem;">' +
+          '<div style="font-size: 0.88rem; font-weight: 800; color: #1E293B; display: flex; align-items: center; gap: 0.4rem;">' +
+            '<i class="fa-solid fa-chart-column" style="color: var(--brand-primary);"></i> PHÂN BỐ TỶ LỆ 4 MỨC ĐÁNH GIÁ THEO TIÊU CHÍ (100%)' +
+          '</div>' +
+
+          // Slicers: Tất cả, Trực tiếp, Trực tiếp kết hợp Trực tuyến
+          '<div style="display: inline-flex; gap: 0.4rem; align-items: center;" id="pphtFormatSlicersGroup">' +
+            '<button type="button" class="btn btn-sm ' + (curFilter === 'all' ? 'active' : '') + '" onclick="setReportPphtFormatFilter(\'all\')" style="padding: 0.25rem 0.65rem; font-size: 0.75rem; font-weight: 700; border-radius: 4px; ' + (curFilter === 'all' ? 'background: #1E293B; color: white;' : 'background: #F1F5F9; color: #475569;') + '">' +
+              'Tất cả hình thức' +
+            '</button>' +
+            (directItem ? 
+              '<button type="button" class="btn btn-sm ' + (curFilter === 'direct' ? 'active' : '') + '" onclick="setReportPphtFormatFilter(\'direct\')" style="padding: 0.25rem 0.65rem; font-size: 0.75rem; font-weight: 700; border-radius: 4px; ' + (curFilter === 'direct' ? 'background: #137333; color: white;' : 'background: #E6F4EA; color: #137333;') + '">' +
+                '<i class="fa-solid fa-user-group"></i> Trực tiếp' +
+              '</button>' : '') +
+            (hybridItem ? 
+              '<button type="button" class="btn btn-sm ' + (curFilter === 'hybrid' ? 'active' : '') + '" onclick="setReportPphtFormatFilter(\'hybrid\')" style="padding: 0.25rem 0.65rem; font-size: 0.75rem; font-weight: 700; border-radius: 4px; ' + (curFilter === 'hybrid' ? 'background: #7E22CE; color: white;' : 'background: #F3E8FF; color: #7E22CE;') + '">' +
+                '<i class="fa-solid fa-shapes"></i> Trực tiếp kết hợp Trực tuyến' +
+              '</button>' : '') +
+          '</div>' +
+        '</div>' +
+
+        '<div style="height: 240px; position: relative;">' +
+          '<canvas id="reportPphtStackedBarChart"></canvas>' +
+        '</div>' +
+      '</div>' +
+
+      // TẦNG 3: BẢNG CHI TIẾT TỔNG HỢP (IDENTICAL TO PART IV REFERENCE TABLE)
+      '<div style="background: white; border: 1px solid #E2E8F0; border-radius: 8px; overflow: hidden;">' +
+        '<div style="padding: 0.75rem 1rem; background: #F8FAFC; border-bottom: 1px solid #E2E8F0; font-size: 0.85rem; font-weight: 800; color: #1E293B; display: flex; align-items: center; gap: 0.4rem;">' +
+          '<i class="fa-solid fa-table-list" style="color: var(--brand-primary);"></i> BẢNG TỔNG HỢP ĐÁNH GIÁ PHƯƠNG PHÁP & HÌNH THỨC ĐÀO TẠO' +
+        '</div>' +
+        '<div class="table-container" style="padding: 0; margin: 0;">' +
+          '<table class="data-table" style="margin: 0; font-size: 0.82rem;">' +
+            '<thead>' +
+              '<tr>' +
+                '<th style="width: 5%; text-align: center;">STT</th>' +
+                '<th style="width: 32%;">TIÊU CHÍ ĐÁNH GIÁ</th>' +
+                '<th style="width: 11%; text-align: center;" style="color: #137333;">TỐT (4)</th>' +
+                '<th style="width: 11%; text-align: center;" style="color: #34A853;">KHÁ (3)</th>' +
+                '<th style="width: 11%; text-align: center;" style="color: #F59E0B;">BÌNH THƯỜNG (2)</th>' +
+                '<th style="width: 11%; text-align: center;" style="color: #EF4444;">HẠN CHẾ (1)</th>' +
+                '<th style="width: 9%; text-align: center;">TỔNG SỐ</th>' +
+                '<th style="width: 10%; text-align: center;">ĐIỂM TB (4.0)</th>' +
+              '</tr>' +
+            '</thead>' +
+            '<tbody>';
+
+    let tableRowsHtml = '';
+
+    // SECTION A: DIRECT FORMAT
+    if (directItem) {
+      const c1 = directItem.c1;
+      const c2 = directItem.c2;
+      const sub = directItem.subtotal || { score: directItem.score || 0, posRate: directItem.posRate || 0, total: ((directItem.c1 ? directItem.c1.total : 0) + (directItem.c2 ? directItem.c2.total : 0)) || directItem.votes || 0 };
+
+      tableRowsHtml += 
+        // Group Header A
+        '<tr style="background: #F1F5F9; font-weight: 800; color: #1E293B;">' +
+          '<td colspan="8" style="padding: 0.55rem 0.85rem;"><i class="fa-solid fa-user-group" style="color: #137333; margin-right: 0.35rem;"></i> A. HÌNH THỨC TRỰC TIẾP</td>' +
+        '</tr>' +
+
+        // Criterion 1
+        '<tr>' +
+          '<td style="text-align: center; color: #64748B;">1</td>' +
+          '<td style="font-weight: 600;">Hoạt động học tập</td>' +
+          '<td style="text-align: center;"><strong style="color: #137333;">' + ((c1.n4 / c1.total) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + c1.n4 + ')</span></td>' +
+          '<td style="text-align: center;"><strong style="color: #34A853;">' + ((c1.n3 / c1.total) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + c1.n3 + ')</span></td>' +
+          '<td style="text-align: center;"><strong style="color: #F59E0B;">' + ((c1.n2 / c1.total) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + c1.n2 + ')</span></td>' +
+          '<td style="text-align: center;"><strong style="color: #EF4444;">' + ((c1.n1 / c1.total) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + c1.n1 + ')</span></td>' +
+          '<td style="text-align: center; font-weight: 700;">' + c1.total + '</td>' +
+          '<td style="text-align: center; font-weight: 800; color: #137333;">' + c1.score.toFixed(2) + '</td>' +
+        '</tr>' +
+
+        // Criterion 2
+        '<tr>' +
+          '<td style="text-align: center; color: #64748B;">2</td>' +
+          '<td style="font-weight: 600;">Hình thức đào tạo</td>' +
+          '<td style="text-align: center;"><strong style="color: #137333;">' + ((c2.n4 / c2.total) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + c2.n4 + ')</span></td>' +
+          '<td style="text-align: center;"><strong style="color: #34A853;">' + ((c2.n3 / c2.total) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + c2.n3 + ')</span></td>' +
+          '<td style="text-align: center;"><strong style="color: #F59E0B;">' + ((c2.n2 / c2.total) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + c2.n2 + ')</span></td>' +
+          '<td style="text-align: center;"><strong style="color: #EF4444;">' + ((c2.n1 / c2.total) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + c2.n1 + ')</span></td>' +
+          '<td style="text-align: center; font-weight: 700;">' + c2.total + '</td>' +
+          '<td style="text-align: center; font-weight: 800; color: #137333;">' + c2.score.toFixed(2) + '</td>' +
+        '</tr>' +
+
+        // Subtotal Direct Row
+        '<tr style="background: #F8FAFC; font-weight: 800; border-top: 1px solid #CBD5E1; border-bottom: 2px solid #CBD5E1;">' +
+          '<td></td>' +
+          '<td style="color: #137333;">Cộng hình thức Trực tiếp</td>' +
+          '<td style="text-align: center; color: #137333;"><strong>' + (sub.total > 0 ? (((c1.n4 + c2.n4) / sub.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (sub.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + (c1.n4 + c2.n4) + ')</span>' : '') + '</td>' +
+          '<td style="text-align: center; color: #34A853;"><strong>' + (sub.total > 0 ? (((c1.n3 + c2.n3) / sub.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (sub.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + (c1.n3 + c2.n3) + ')</span>' : '') + '</td>' +
+          '<td style="text-align: center; color: #F59E0B;"><strong>' + (sub.total > 0 ? (((c1.n2 + c2.n2) / sub.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (sub.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + (c1.n2 + c2.n2) + ')</span>' : '') + '</td>' +
+          '<td style="text-align: center; color: #EF4444;"><strong>' + (sub.total > 0 ? (((c1.n1 + c2.n1) / sub.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (sub.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + (c1.n1 + c2.n1) + ')</span>' : '') + '</td>' +
+          '<td style="text-align: center; font-weight: 800;">' + sub.total + '</td>' +
+          '<td style="text-align: center; font-weight: 800; color: #137333; font-size: 0.95rem;">' + sub.score.toFixed(2) + '</td>' +
+        '</tr>';
+    }
+
+    // SECTION B: HYBRID FORMAT
+    if (hybridItem) {
+      const c1 = hybridItem.c1;
+      const c2 = hybridItem.c2;
+      const sub = hybridItem.subtotal || { score: hybridItem.score || 0, posRate: hybridItem.posRate || 0, total: ((hybridItem.c1 ? hybridItem.c1.total : 0) + (hybridItem.c2 ? hybridItem.c2.total : 0)) || hybridItem.votes || 0 };
+
+      tableRowsHtml += 
+        // Group Header B
+        '<tr style="background: #F1F5F9; font-weight: 800; color: #1E293B;">' +
+          '<td colspan="8" style="padding: 0.55rem 0.85rem;"><i class="fa-solid fa-shapes" style="color: #7E22CE; margin-right: 0.35rem;"></i> B. HÌNH THỨC TRỰC TIẾP KẾT HỢP TRỰC TUYẾN</td>' +
+        '</tr>' +
+
+        // Criterion 1
+        '<tr>' +
+          '<td style="text-align: center; color: #64748B;">1</td>' +
+          '<td style="font-weight: 600;">Hoạt động học tập</td>' +
+          '<td style="text-align: center;"><strong style="color: #137333;">' + ((c1.n4 / c1.total) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + c1.n4 + ')</span></td>' +
+          '<td style="text-align: center;"><strong style="color: #34A853;">' + ((c1.n3 / c1.total) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + c1.n3 + ')</span></td>' +
+          '<td style="text-align: center;"><strong style="color: #F59E0B;">' + ((c1.n2 / c1.total) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + c1.n2 + ')</span></td>' +
+          '<td style="text-align: center;"><strong style="color: #EF4444;">' + ((c1.n1 / c1.total) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + c1.n1 + ')</span></td>' +
+          '<td style="text-align: center; font-weight: 700;">' + c1.total + '</td>' +
+          '<td style="text-align: center; font-weight: 800; color: #7E22CE;">' + c1.score.toFixed(2) + '</td>' +
+        '</tr>' +
+
+        // Criterion 2
+        '<tr>' +
+          '<td style="text-align: center; color: #64748B;">2</td>' +
+          '<td style="font-weight: 600;">Hình thức đào tạo</td>' +
+          '<td style="text-align: center;"><strong style="color: #137333;">' + ((c2.n4 / c2.total) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + c2.n4 + ')</span></td>' +
+          '<td style="text-align: center;"><strong style="color: #34A853;">' + ((c2.n3 / c2.total) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + c2.n3 + ')</span></td>' +
+          '<td style="text-align: center;"><strong style="color: #F59E0B;">' + ((c2.n2 / c2.total) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + c2.n2 + ')</span></td>' +
+          '<td style="text-align: center;"><strong style="color: #EF4444;">' + ((c2.n1 / c2.total) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + c2.n1 + ')</span></td>' +
+          '<td style="text-align: center; font-weight: 700;">' + c2.total + '</td>' +
+          '<td style="text-align: center; font-weight: 800; color: #7E22CE;">' + c2.score.toFixed(2) + '</td>' +
+        '</tr>' +
+
+        // Subtotal Hybrid Row
+        '<tr style="background: #F8FAFC; font-weight: 800; border-top: 1px solid #CBD5E1; border-bottom: 2px solid #CBD5E1;">' +
+          '<td></td>' +
+          '<td style="color: #7E22CE;">Cộng hình thức Trực tiếp kết hợp Trực tuyến</td>' +
+          '<td style="text-align: center; color: #137333;"><strong>' + (sub.total > 0 ? (((c1.n4 + c2.n4) / sub.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (sub.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + (c1.n4 + c2.n4) + ')</span>' : '') + '</td>' +
+          '<td style="text-align: center; color: #34A853;"><strong>' + (sub.total > 0 ? (((c1.n3 + c2.n3) / sub.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (sub.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + (c1.n3 + c2.n3) + ')</span>' : '') + '</td>' +
+          '<td style="text-align: center; color: #F59E0B;"><strong>' + (sub.total > 0 ? (((c1.n2 + c2.n2) / sub.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (sub.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + (c1.n2 + c2.n2) + ')</span>' : '') + '</td>' +
+          '<td style="text-align: center; color: #EF4444;"><strong>' + (sub.total > 0 ? (((c1.n1 + c2.n1) / sub.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (sub.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + (c1.n1 + c2.n1) + ')</span>' : '') + '</td>' +
+          '<td style="text-align: center; font-weight: 800;">' + sub.total + '</td>' +
+          '<td style="text-align: center; font-weight: 800; color: #7E22CE; font-size: 0.95rem;">' + sub.score.toFixed(2) + '</td>' +
+        '</tr>';
+    }
+
+    // OVERALL AVERAGE ROW
+    const grandScore = Number(overallScore).toFixed(2);
+    let grandN4 = 0, grandN3 = 0, grandN2 = 0, grandN1 = 0, grandTotal = 0;
+    if (directItem) {
+      grandN4 += directItem.c1.n4 + directItem.c2.n4;
+      grandN3 += directItem.c1.n3 + directItem.c2.n3;
+      grandN2 += directItem.c1.n2 + directItem.c2.n2;
+      grandN1 += directItem.c1.n1 + directItem.c2.n1;
+      grandTotal += directItem.subtotal ? directItem.subtotal.total : (directItem.total || directItem.votes || ((directItem.c1 ? directItem.c1.total : 0) + (directItem.c2 ? directItem.c2.total : 0)));
+    }
+    if (hybridItem) {
+      grandN4 += hybridItem.c1.n4 + hybridItem.c2.n4;
+      grandN3 += hybridItem.c1.n3 + hybridItem.c2.n3;
+      grandN2 += hybridItem.c1.n2 + hybridItem.c2.n2;
+      grandN1 += hybridItem.c1.n1 + hybridItem.c2.n1;
+      grandTotal += hybridItem.subtotal ? hybridItem.subtotal.total : (hybridItem.total || hybridItem.votes || ((hybridItem.c1 ? hybridItem.c1.total : 0) + (hybridItem.c2 ? hybridItem.c2.total : 0)));
+    }
+
+    tableRowsHtml += 
+      '<tr style="background: #FFF1F2; font-weight: 800; border-top: 2px solid var(--brand-primary);">' +
+        '<td></td>' +
+        '<td style="color: var(--brand-primary); text-transform: uppercase;">ĐIỂM TRUNG BÌNH CHUNG PHƯƠNG PHÁP & HÌNH THỨC ĐÀO TẠO</td>' +
+        '<td style="text-align: center; color: #137333;"><strong>' + (grandTotal > 0 ? ((grandN4 / grandTotal) * 100).toFixed(1) + '%' : '—') + '</strong>' + (grandTotal > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + grandN4 + ')</span>' : '') + '</td>' +
+        '<td style="text-align: center; color: #34A853;"><strong>' + (grandTotal > 0 ? ((grandN3 / grandTotal) * 100).toFixed(1) + '%' : '—') + '</strong>' + (grandTotal > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + grandN3 + ')</span>' : '') + '</td>' +
+        '<td style="text-align: center; color: #F59E0B;"><strong>' + (grandTotal > 0 ? ((grandN2 / grandTotal) * 100).toFixed(1) + '%' : '—') + '</strong>' + (grandTotal > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + grandN2 + ')</span>' : '') + '</td>' +
+        '<td style="text-align: center; color: #EF4444;"><strong>' + (grandTotal > 0 ? ((grandN1 / grandTotal) * 100).toFixed(1) + '%' : '—') + '</strong>' + (grandTotal > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + grandN1 + ')</span>' : '') + '</td>' +
+        '<td style="text-align: center; font-weight: 800; color: var(--brand-primary);">' + grandTotal + '</td>' +
+        '<td style="text-align: center; font-weight: 800; color: var(--brand-primary); font-size: 1.05rem;">' + grandScore + '</td>' +
+      '</tr>';
+
+    containerElem.innerHTML = sectionHtml + tableRowsHtml + '</tbody></table></div></div>';
+
+    // Render the 100% Horizontal Stacked Bar Chart based on current slicer filter
+    renderPphtChartByFilter(containerElem, curFilter);
+  }
+
+  function renderPphtChartByFilter(containerElem, filter) {
+    const ctx = document.getElementById('reportPphtStackedBarChart');
+    if (!ctx || typeof Chart === 'undefined') return;
+
+    if (reportCharts.pphtStacked) {
+      try { reportCharts.pphtStacked.destroy(); } catch (e) {}
+    }
+
+    const directItem = containerElem._directItem;
+    const hybridItem = containerElem._hybridItem;
+
+    const displayCriteria = [];
+
+    if ((filter === 'all' || filter === 'direct') && directItem) {
+      const prefix = (filter === 'all' && hybridItem) ? 'Trực tiếp - ' : '';
+      displayCriteria.push({
+        name: prefix + 'Hoạt động học tập',
+        score: directItem.c1.score,
+        n4: directItem.c1.n4, n3: directItem.c1.n3, n2: directItem.c1.n2, n1: directItem.c1.n1, total: directItem.c1.total
+      });
+      displayCriteria.push({
+        name: prefix + 'Hình thức đào tạo',
+        score: directItem.c2.score,
+        n4: directItem.c2.n4, n3: directItem.c2.n3, n2: directItem.c2.n2, n1: directItem.c2.n1, total: directItem.c2.total
+      });
+    }
+
+    if ((filter === 'all' || filter === 'hybrid') && hybridItem) {
+      const prefix = (filter === 'all' && directItem) ? 'Trực tiếp kết hợp Trực tuyến - ' : '';
+      displayCriteria.push({
+        name: prefix + 'Hoạt động học tập',
+        score: hybridItem.c1.score,
+        n4: hybridItem.c1.n4, n3: hybridItem.c1.n3, n2: hybridItem.c1.n2, n1: hybridItem.c1.n1, total: hybridItem.c1.total
+      });
+      displayCriteria.push({
+        name: prefix + 'Hình thức đào tạo',
+        score: hybridItem.c2.score,
+        n4: hybridItem.c2.n4, n3: hybridItem.c2.n3, n2: hybridItem.c2.n2, n1: hybridItem.c2.n1, total: hybridItem.c2.total
+      });
+    }
+
+    if (displayCriteria.length === 0) return;
+
+    const labels = displayCriteria.map(c => c.name);
+    const dataGood = [];
+    const dataFair = [];
+    const dataNorm = [];
+    const dataLimit = [];
+
+    displayCriteria.forEach(c => {
+      const tot = c.total || 1;
+      dataGood.push(Number(((c.n4 / tot) * 100).toFixed(1)));
+      dataFair.push(Number(((c.n3 / tot) * 100).toFixed(1)));
+      dataNorm.push(Number(((c.n2 / tot) * 100).toFixed(1)));
+      dataLimit.push(Number(((c.n1 / tot) * 100).toFixed(1)));
+    });
+
+    reportCharts.pphtStacked = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [
+          { label: 'Tốt', data: dataGood, backgroundColor: '#137333', barThickness: 22 },
+          { label: 'Khá', data: dataFair, backgroundColor: '#34A853', barThickness: 22 },
+          { label: 'Bình thường', data: dataNorm, backgroundColor: '#F59E0B', barThickness: 22 },
+          { label: 'Hạn chế', data: dataLimit, backgroundColor: '#EF4444', barThickness: 22 }
+        ]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              title: (items) => items[0].label,
+              label: (item) => {
+                const idx = item.dataIndex;
+                const c = displayCriteria[idx];
+                let count = 0;
+                if (item.datasetIndex === 0) count = c.n4;
+                else if (item.datasetIndex === 1) count = c.n3;
+                else if (item.datasetIndex === 2) count = c.n2;
+                else count = c.n1;
+                return item.dataset.label + ': ' + count + ' lượt (' + item.raw + '%)';
+              },
+              afterBody: (items) => {
+                const idx = items[0].dataIndex;
+                return ['--------------------', 'Điểm trung bình: ' + displayCriteria[idx].score.toFixed(2) + ' / 4.00'];
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            stacked: true,
+            min: 0,
+            max: 100,
+            ticks: { callback: v => v + '%' },
+            grid: { color: '#F1F5F9' }
+          },
+          y: {
+            stacked: true,
+            ticks: { font: { weight: '700', size: 10.5 }, color: '#1E293B' },
+            grid: { display: false }
+          }
+        }
+      }
+    });
+  }
+
+  function setReportPphtFormatFilter(filter) {
+    reportState.pphtFormatFilter = filter;
+    const container = document.getElementById('reportPphtSection');
+    if (!container) return;
+
+    // Update button styles
+    const group = document.getElementById('pphtFormatSlicersGroup');
+    if (group) {
+      const btns = group.querySelectorAll('button');
+      btns.forEach(b => {
+        const txt = b.textContent.toLowerCase();
+        b.classList.remove('active');
+        if (filter === 'all' && txt.includes('tất cả')) {
+          b.classList.add('active');
+          b.style.background = '#1E293B';
+          b.style.color = 'white';
+        } else if (filter === 'direct' && txt.includes('trực tiếp') && !txt.includes('kết hợp')) {
+          b.classList.add('active');
+          b.style.background = '#137333';
+          b.style.color = 'white';
+        } else if (filter === 'hybrid' && txt.includes('kết hợp')) {
+          b.classList.add('active');
+          b.style.background = '#7E22CE';
+          b.style.color = 'white';
+        } else {
+          b.style.background = '';
+          b.style.color = '';
+        }
+      });
+    }
+
+    renderPphtChartByFilter(container, filter);
+  }
+  window.setReportPphtFormatFilter = setReportPphtFormatFilter;
+
+
+  // --- UI RENDERER 5: SECTION III - CSVC (CÔNG TÁC TỔ CHỨC & CƠ SỞ VẬT CHẤT) ---
+  function renderReportCsvcSection(containerElem, csvcData, options) {
+    if (!containerElem) return;
+    const isProgram = options && options.isProgram;
+    const title = (options && options.title) || (isProgram ? 'III. TỔNG HỢP ĐÁNH GIÁ CÔNG TÁC TỔ CHỨC & CƠ SỞ VẬT CHẤT' : 'III. ĐÁNH GIÁ CÔNG TÁC TỔ CHỨC & CƠ SỞ VẬT CHẤT');
+
+    const hasData = csvcData && ((isProgram && (csvcData.votes || 0) > 0) || (!isProgram && ((csvcData.votes || csvcData.tong_phieu || csvcData.so_phieu || 0) > 0)));
+
+    if (!hasData) {
+      containerElem.innerHTML = 
+        '<div style="border-bottom: 1px solid #E2E8F0; padding-bottom: 0.65rem; margin-bottom: 0.85rem;">' +
+          '<h3 style="margin: 0; font-size: 1.05rem; font-weight: 800; color: var(--brand-primary); display: flex; align-items: center; gap: 0.5rem;">' +
+            '<i class="fa-solid fa-hotel"></i> ' + title +
+          '</h3>' +
+        '</div>' +
+        '<div style="padding: 1.5rem; background: #F8FAFC; border: 1px dashed #CBD5E1; border-radius: 8px; text-align: center; color: var(--text-muted); font-style: italic;">' +
+          '<i class="fa-solid fa-circle-exclamation" style="margin-right: 0.4rem; color: #94A3B8;"></i> ' +
+          'Chưa có dữ liệu đánh giá CSVC' +
+        '</div>';
+      return;
+    }
+
+    containerElem._csvcData = csvcData;
+    const isMulti = !isProgram && !!csvcData.isMultiFormat;
+
+    // Active item (support multi-format for class report)
+    const activeItem = csvcData.overall || csvcData;
+
+    const overallScore = Number(activeItem.score || activeItem.diem_tb || 0);
+    const posRate = Number(activeItem.posRate || activeItem.ty_le_tich_cuc || 0);
+    const totalVotes = Number(activeItem.votes || activeItem.so_phieu || activeItem.tong_phieu || 0);
+
+    const c1 = activeItem.c1 || {
+      name: '1. Công tác tổ chức lớp học',
+      score: activeItem.cttc_score || activeItem.c1_score || 0,
+      posRate: activeItem.c1_pos || 0,
+      n4: activeItem.cttc_4 || activeItem.c1_4 || 0, n3: activeItem.cttc_3 || activeItem.c1_3 || 0, n2: activeItem.cttc_2 || activeItem.c1_2 || 0, n1: activeItem.cttc_1 || activeItem.c1_1 || 0,
+      total: activeItem.cttc_tot || activeItem.c1_n || 0
+    };
+    const c2 = activeItem.c2 || {
+      name: '2. Cơ sở vật chất & thiết bị phòng học',
+      score: activeItem.csvc_score || activeItem.c2_score || 0,
+      posRate: activeItem.c2_pos || 0,
+      n4: activeItem.csvc_4 || activeItem.c2_4 || 0, n3: activeItem.csvc_3 || activeItem.c2_3 || 0, n2: activeItem.csvc_2 || activeItem.c2_2 || 0, n1: activeItem.csvc_1 || activeItem.c2_1 || 0,
+      total: activeItem.csvc_tot || activeItem.c2_n || 0
+    };
+    const c3 = activeItem.c3 || {
+      name: '3. Công tác hậu cần (phục vụ ăn, nghỉ, nước uống)',
+      score: activeItem.hc_score || activeItem.c3_score || 0,
+      posRate: activeItem.c3_pos || 0,
+      n4: activeItem.hc_4 || activeItem.c3_4 || 0, n3: activeItem.hc_3 || activeItem.c3_3 || 0, n2: activeItem.hc_2 || activeItem.c3_2 || 0, n1: activeItem.hc_1 || activeItem.c3_1 || 0,
+      total: activeItem.hc_tot || activeItem.c3_n || 0
+    };
+
+    c1.name = '1. Công tác tổ chức lớp học';
+    c2.name = '2. Cơ sở vật chất & thiết bị phòng học';
+    c3.name = '3. Công tác hậu cần (phục vụ ăn, nghỉ, nước uống)';
+
+    const criteriaList = [c1, c2, c3];
+
+    // Multi-format slicer header if applicable
+    let headerSlicerHtml = '';
+    if (isMulti) {
+      headerSlicerHtml = 
+        '<div class="report-slicer-group" style="display: flex; gap: 0.35rem; align-items: center; background: #F8FAFC; padding: 0.2rem 0.4rem; border-radius: 6px; border: 1px solid #E2E8F0;">' +
+          '<span style="font-size: 0.72rem; font-weight: 700; color: #64748B; margin-right: 0.2rem;"><i class="fa-solid fa-filter"></i> Lọc hình thức:</span>' +
+          '<button type="button" class="btn-slicer active" data-filter="all" onclick="filterReportCsvcFormat(this, \'all\')">Tất cả</button>' +
+          '<button type="button" class="btn-slicer" data-filter="direct" onclick="filterReportCsvcFormat(this, \'direct\')">Trực tiếp</button>' +
+          '<button type="button" class="btn-slicer" data-filter="online" onclick="filterReportCsvcFormat(this, \'online\')">Trực tiếp kết hợp Trực tuyến</button>' +
+        '</div>';
+    }
+
+    let sectionHtml = 
+      '<div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #E2E8F0; padding-bottom: 0.65rem; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">' +
+        '<div>' +
+          '<h3 style="margin: 0; font-size: 1.05rem; font-weight: 800; color: var(--brand-primary); display: flex; align-items: center; gap: 0.5rem;">' +
+            '<i class="fa-solid fa-hotel"></i> ' + title +
+          '</h3>' +
+          '<div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.15rem;">Đánh giá cơ sở vật chất, hậu cần và tổ chức lớp • Thang điểm chuẩn hóa 4.00</div>' +
+        '</div>' +
+        '<div style="display: flex; align-items: center; gap: 0.6rem;">' +
+          headerSlicerHtml +
+          '<span style="font-size: 0.82rem; font-weight: 700; color: #1E293B;">' + totalVotes + ' phiếu</span>' +
+          '<span style="font-size: 0.95rem; font-weight: 800; color: var(--brand-primary);">' + overallScore.toFixed(2) + ' <span style="font-size: 0.75rem; color: #64748B;">/ 4.0</span></span>' +
+        '</div>' +
+      '</div>' +
+
+      // 3 CRITERIA CARDS
+      '<div id="reportCsvcCardsContainer" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 0.85rem; margin-bottom: 1.15rem;">' +
+        criteriaList.map((c, idx) => {
+          const icon = idx === 0 ? 'fa-clipboard-check' : (idx === 1 ? 'fa-building' : 'fa-utensils');
+          const color = idx === 0 ? '#137333' : (idx === 1 ? '#0284C7' : '#B45309');
+          const hasSurveyData = (c.total > 0 && c.score > 0);
+          const scoreStr = hasSurveyData 
+            ? (c.score.toFixed(2) + ' <span style="font-size: 0.8rem; font-weight: 600; color: #64748B;">/ 4.0</span>') 
+            : '<span style="font-size: 1.15rem; font-weight: 700; color: #94A3B8;">Không khảo sát</span>';
+          const subText = hasSurveyData 
+            ? ('Tích cực: ' + c.posRate.toFixed(1) + '% (' + (c.n4 + c.n3) + ' phiếu)') 
+            : '<span style="font-style: italic; color: #94A3B8;">Không có câu hỏi trong phiếu</span>';
+
+          return '<div style="background: white; border: 1px solid #E2E8F0; border-radius: 8px; padding: 0.85rem 1rem;">' +
+            '<div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.4rem;">' +
+              '<span style="font-size: 0.82rem; font-weight: 700; color: #1E293B;">' + c.name + '</span>' +
+              '<i class="fa-solid ' + icon + '" style="color: ' + (hasSurveyData ? color : '#94A3B8') + '; font-size: 1rem;"></i>' +
+            '</div>' +
+            '<div style="font-size: 1.6rem; font-weight: 800; color: ' + (hasSurveyData ? color : '#94A3B8') + '; line-height: 1.2;">' + scoreStr + '</div>' +
+            '<div style="font-size: 0.75rem; color: #64748B; margin-top: 0.25rem;">' + subText + '</div>' +
+          '</div>';
+        }).join('') +
+      '</div>';
+
+    // IF PROGRAM MODE: LOCATION MULTI-AXIS COMBINATION CHART & DETAILED DATA TABLE (MATCHING "TỔ CHỨC & CSVC" SCREEN)
+    if (isProgram && csvcData.locations && csvcData.locations.length > 0) {
+      const locCount = csvcData.locations.length;
+      
+      let totLocClasses = 0;
+      csvcData.locations.forEach(l => {
+        totLocClasses += (l.classes || l.classesCount || 1);
+      });
+
+      const progFmt = (csvcData.format || (activeItem && activeItem.format) || 'Trực tiếp');
+      const c1ScoreVal = (csvcData.c1 && typeof csvcData.c1.score === 'number' && csvcData.c1.score > 0) 
+        ? csvcData.c1.score.toFixed(2) 
+        : '—';
+      const c2ScoreVal = (csvcData.c2 && typeof csvcData.c2.score === 'number' && csvcData.c2.score > 0) 
+        ? csvcData.c2.score.toFixed(2) 
+        : '—';
+      const c3ScoreVal = (csvcData.c3 && typeof csvcData.c3.score === 'number' && csvcData.c3.score > 0) 
+        ? csvcData.c3.score.toFixed(2) 
+        : '—';
+
+      // Build Table Rows
+      let tableRowsHtml = '';
+      csvcData.locations.forEach((loc, idx) => {
+        const s1 = (typeof loc.score1 === 'number' && loc.score1 > 0) ? loc.score1.toFixed(2) : '—';
+        const s2 = (typeof loc.score2 === 'number' && loc.score2 > 0) ? loc.score2.toFixed(2) : '—';
+        const s3 = (typeof loc.score3 === 'number' && loc.score3 > 0) ? loc.score3.toFixed(2) : '—';
+        const clsCnt = loc.classes || loc.classesCount || 1;
+        const fmtBadge = getReportFormatBadge(loc.format || 'Trực tiếp');
+
+        tableRowsHtml += 
+          '<tr style="border-bottom: 1px solid #F1F5F9; transition: background 0.15s;" onmouseover="this.style.background=\'#F8FAFC\'" onmouseout="this.style.background=\'transparent\'">' +
+            '<td style="padding: 0.45rem 0.55rem; font-weight: 700; color: #1E293B; font-size: 0.78rem; white-space: nowrap;">' +
+              (loc.full_name || loc.name) +
+            '</td>' +
+            '<td style="padding: 0.45rem 0.35rem; text-align: center; font-weight: 700; color: #64748B; font-size: 0.78rem; white-space: nowrap;">' +
+              clsCnt + ' lớp' +
+            '</td>' +
+            '<td style="padding: 0.45rem 0.4rem; text-align: center; white-space: nowrap;">' +
+              fmtBadge +
+            '</td>' +
+            '<td style="padding: 0.45rem 0.35rem; text-align: center; font-size: 0.8rem; white-space: nowrap;">' +
+              (s1 !== '—' ? '<strong style="color: #0F5132;">' + s1 + '</strong>' : '<span style="color: #94A3B8; font-style: italic;">—</span>') +
+            '</td>' +
+            '<td style="padding: 0.45rem 0.35rem; text-align: center; font-size: 0.8rem; white-space: nowrap;">' +
+              (s2 !== '—' ? '<strong style="color: #8C1D40;">' + s2 + '</strong>' : '<span style="color: #94A3B8; font-style: italic;">—</span>') +
+            '</td>' +
+            '<td style="padding: 0.45rem 0.35rem; text-align: center; font-size: 0.8rem; white-space: nowrap;">' +
+              (s3 !== '—' ? '<strong style="color: #D97706;">' + s3 + '</strong>' : '<span style="color: #94A3B8; font-style: italic;">—</span>') +
+            '</td>' +
+          '</tr>';
+      });
+
+      sectionHtml += 
+        '<div style="background: white; border: 1px solid #E2E8F0; border-radius: 8px; padding: 1.15rem; margin-bottom: 1.15rem;">' +
+          '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.85rem; flex-wrap: wrap; gap: 0.5rem;">' +
+            '<div>' +
+              '<div style="font-size: 0.88rem; font-weight: 800; color: #1E293B; display: flex; align-items: center; gap: 0.4rem;">' +
+                '<i class="fa-solid fa-map-location-dot" style="color: var(--brand-primary);"></i> SO SÁNH ĐIỂM ĐÁNH GIÁ THEO ĐỊA ĐIỂM' +
+              '</div>' +
+              '<div style="font-size: 0.75rem; color: #64748B; margin-top: 0.15rem;">' +
+                'Phân tích chất lượng tổ chức & cơ sở vật chất theo từng địa bàn tổ chức' +
+              '</div>' +
+            '</div>' +
+            '<div style="display: flex; align-items: center; gap: 0.5rem;">' +
+              '<span style="font-size: 0.72rem; background: #F1F5F9; color: #475569; padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: 600;">' +
+                '<i class="fa-solid fa-layer-group"></i> ' + locCount + ' địa bàn' +
+              '</span>' +
+              (locCount > 3 ? '<span style="font-size: 0.72rem; background: #FFF1F2; color: var(--brand-primary); padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: 600;"><i class="fa-solid fa-arrows-left-right"></i> Kéo ngang biểu đồ</span>' : '') +
+            '</div>' +
+          '</div>' +
+          
+          '<div class="report-csvc-location-grid" style="display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1.05fr); gap: 1rem; align-items: start;">' +
+            // LEFT COLUMN: Combination Chart
+            '<div style="min-width: 0; background: #FAFBFD; border: 1px solid #E2E8F0; border-radius: 8px; padding: 0.65rem;">' +
+              '<div id="reportCsvcScrollOuter" style="width: 100%; overflow-x: auto; cursor: grab;">' +
+                '<div id="reportCsvcScrollInner" style="height: 335px; position: relative;">' +
+                  '<canvas id="reportCsvcLocationChart"></canvas>' +
+                '</div>' +
+              '</div>' +
+            '</div>' +
+            
+            // RIGHT COLUMN: Matching Data Table
+            '<div style="min-width: 0; background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 8px; overflow: hidden; display: flex; flex-direction: column;">' +
+              '<div style="padding: 0.55rem 0.85rem; background: #F8FAFC; border-bottom: 1px solid #E2E8F0; display: flex; justify-content: space-between; align-items: center;">' +
+                '<div style="font-size: 0.8rem; font-weight: 800; color: #1E293B; display: flex; align-items: center; gap: 0.35rem;">' +
+                  '<i class="fa-solid fa-table-list" style="color: var(--brand-primary);"></i> CHI TIẾT ĐIỂM THEO ĐỊA ĐIỂM' +
+                '</div>' +
+                '<span style="font-size: 0.72rem; color: #64748B; font-weight: 600;">' + locCount + ' địa điểm</span>' +
+              '</div>' +
+              '<div style="max-height: 335px; overflow-y: auto; overflow-x: auto;" class="table-container">' +
+                '<table class="data-table" id="reportCsvcLocationTable" style="width: 100%; border-collapse: collapse; margin: 0;">' +
+                  '<thead style="position: sticky; top: 0; background: #F8FAFC; z-index: 2; border-bottom: 2px solid #E2E8F0;">' +
+                    '<tr>' +
+                      '<th style="padding: 0.5rem 0.55rem; text-align: left; font-size: 0.74rem; color: #475569; white-space: nowrap;">ĐỊA ĐIỂM</th>' +
+                      '<th style="padding: 0.5rem 0.35rem; text-align: center; font-size: 0.74rem; color: #475569; white-space: nowrap;">SỐ LỚP</th>' +
+                      '<th style="padding: 0.5rem 0.4rem; text-align: center; font-size: 0.74rem; color: #475569; white-space: nowrap;">HÌNH THỨC</th>' +
+                      '<th style="padding: 0.5rem 0.35rem; text-align: center; font-size: 0.74rem; color: #0F5132; white-space: nowrap;" title="1. Công tác tổ chức lớp học (Thang 4.0)">CTTC (4.0)</th>' +
+                      '<th style="padding: 0.5rem 0.35rem; text-align: center; font-size: 0.74rem; color: #8C1D40; white-space: nowrap;" title="2. Cơ sở vật chất & thiết bị phòng học (Thang 4.0)">CSVC (4.0)</th>' +
+                      '<th style="padding: 0.5rem 0.35rem; text-align: center; font-size: 0.74rem; color: #D97706; white-space: nowrap;" title="3. Công tác hậu cần ăn nghỉ nước uống (Thang 4.0)">HẬU CẦN (4.0)</th>' +
+                    '</tr>' +
+                  '</thead>' +
+                  '<tbody>' +
+                    tableRowsHtml +
+                  '</tbody>' +
+                  '<tfoot style="position: sticky; bottom: 0; background: #FFF1F2; font-weight: 700; border-top: 2px solid #FECDD3; z-index: 2;">' +
+                    '<tr>' +
+                      '<td style="padding: 0.45rem 0.55rem; font-weight: 800; color: var(--brand-primary); font-size: 0.75rem; white-space: nowrap;">BÌNH QUÂN CHUNG</td>' +
+                      '<td style="padding: 0.45rem 0.35rem; text-align: center; font-weight: 800; color: #1E293B; font-size: 0.76rem; white-space: nowrap;">' + totLocClasses + ' lớp</td>' +
+                      '<td style="padding: 0.45rem 0.4rem; text-align: center; white-space: nowrap;">' + getReportFormatBadge(progFmt) + '</td>' +
+                      '<td style="padding: 0.45rem 0.35rem; text-align: center; font-weight: 800; color: #0F5132; font-size: 0.78rem; white-space: nowrap;">' + c1ScoreVal + '</td>' +
+                      '<td style="padding: 0.45rem 0.35rem; text-align: center; font-weight: 800; color: #8C1D40; font-size: 0.78rem; white-space: nowrap;">' + c2ScoreVal + '</td>' +
+                      '<td style="padding: 0.45rem 0.35rem; text-align: center; font-weight: 800; color: #D97706; font-size: 0.78rem; white-space: nowrap;">' + c3ScoreVal + '</td>' +
+                    '</tr>' +
+                  '</tfoot>' +
+                '</table>' +
+              '</div>' +
+            '</div>' +
+          '</div>' +
+        '</div>';
+    }
+
+    // DETAILED PROGRESS BARS FOR CRITERIA
+    sectionHtml += 
+      '<div id="reportCsvcCriteriaBars" style="display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1.15rem;">' +
+        criteriaList.map((c, idx) => {
+          const tot = c.total || (c.n4 + c.n3 + c.n2 + c.n1) || 0;
+          if (tot === 0) {
+            return '<div style="background: white; border: 1px solid #E2E8F0; border-radius: 8px; padding: 0.85rem 1rem;">' +
+              '<div style="display: flex; justify-content: space-between; align-items: center;">' +
+                '<span style="font-size: 0.82rem; font-weight: 700; color: #64748B;">' + c.name + '</span>' +
+                '<span style="font-size: 0.78rem; font-weight: 600; color: #94A3B8; font-style: italic;"><i class="fa-solid fa-circle-info" style="margin-right: 0.3rem;"></i> Không khảo sát tiêu chí này</span>' +
+              '</div>' +
+            '</div>';
+          }
+          const r4 = ((c.n4 / tot) * 100).toFixed(1);
+          const r3 = ((c.n3 / tot) * 100).toFixed(1);
+          const r2 = ((c.n2 / tot) * 100).toFixed(1);
+          const r1 = ((c.n1 / tot) * 100).toFixed(1);
+
+          return '<div style="background: white; border: 1px solid #E2E8F0; border-radius: 8px; padding: 0.85rem 1rem;">' +
+            '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.45rem;">' +
+              '<span style="font-size: 0.82rem; font-weight: 700; color: #1E293B;">' + c.name + '</span>' +
+              '<span style="font-size: 0.82rem; font-weight: 700; color: #15803D;">Tích cực: ' + c.posRate.toFixed(1) + '% &nbsp;•&nbsp; <strong style="font-size: 0.95rem; color: var(--brand-primary);">' + c.score.toFixed(2) + '</strong>/4.0</span>' +
+            '</div>' +
+            '<div style="display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: #E2E8F0; margin-bottom: 0.65rem;">' +
+              '<div style="width: ' + r4 + '%; background: #137333;" title="Tốt: ' + r4 + '%"></div>' +
+              '<div style="width: ' + r3 + '%; background: #34A853;" title="Khá: ' + r3 + '%"></div>' +
+              '<div style="width: ' + r2 + '%; background: #F59E0B;" title="Bình thường: ' + r2 + '%"></div>' +
+              '<div style="width: ' + r1 + '%; background: #EF4444;" title="Hạn chế: ' + r1 + '%"></div>' +
+            '</div>' +
+            '<div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; text-align: center; font-size: 0.75rem; background: #F8FAFC; padding: 0.5rem; border-radius: 6px;">' +
+              '<div><span style="color: #64748B;">Tốt (4):</span> <strong style="color: #137333;">' + r4 + '%</strong> (' + c.n4 + ')</div>' +
+              '<div><span style="color: #64748B;">Khá (3):</span> <strong style="color: #34A853;">' + r3 + '%</strong> (' + c.n3 + ')</div>' +
+              '<div><span style="color: #64748B;">Bình thường (2):</span> <strong style="color: #F59E0B;">' + r2 + '%</strong> (' + c.n2 + ')</div>' +
+              '<div><span style="color: #64748B;">Hạn chế (1):</span> <strong style="color: #EF4444;">' + r1 + '%</strong> (' + c.n1 + ')</div>' +
+            '</div>' +
+          '</div>';
+        }).join('') +
+      '</div>';
+
+    containerElem.innerHTML = sectionHtml;
+
+    // Render Location Combination Chart if in program mode (Exact Visual Matching "Tổ chức & CSVC")
+    if (isProgram && csvcData.locations && csvcData.locations.length > 0) {
+      const locCanvas = document.getElementById('reportCsvcLocationChart');
+      const scrollInner = document.getElementById('reportCsvcScrollInner');
+      const scrollOuter = document.getElementById('reportCsvcScrollOuter');
+
+      if (locCanvas && typeof Chart !== 'undefined') {
+        if (reportCharts.csvcLocation) {
+          try { reportCharts.csvcLocation.destroy(); } catch (e) {}
+          reportCharts.csvcLocation = null;
+        }
+
+        const itemList = csvcData.locations;
+
+        // Dynamic width for scroll if more than 3 locations
+        if (scrollInner) {
+          const minW = Math.max(540, itemList.length * 75);
+          scrollInner.style.width = (itemList.length > 3 ? minW + 'px' : '100%');
+        }
+
+        // Multi-line labels: Name + (X lớp) directly on axis
+        const labels = itemList.map(it => [it.name, '(' + (it.classes || it.classesCount || 1) + ' lớp)']);
+        const dataClasses = itemList.map(it => it.classes || it.classesCount || 1);
+        const dataC1 = itemList.map(it => (typeof it.score1 === 'number' && !isNaN(it.score1)) ? Number(it.score1.toFixed(2)) : null);
+        const dataC2 = itemList.map(it => (typeof it.score2 === 'number' && !isNaN(it.score2)) ? Number(it.score2.toFixed(2)) : null);
+        const dataC3 = itemList.map(it => (typeof it.score3 === 'number' && !isNaN(it.score3)) ? Number(it.score3.toFixed(2)) : null);
+
+        const validScores = [...dataC1, ...dataC2, ...dataC3].filter(s => typeof s === 'number' && s > 0);
+        const minVal = validScores.length ? Math.min(...validScores) : 3.0;
+        const yMin = Math.max(2.5, Math.floor((minVal - 0.15) * 10) / 10);
+        const maxClassVal = dataClasses.length ? Math.max(...dataClasses) : 5;
+        const yClassMax = Math.max(5, Math.ceil(maxClassVal * 1.35));
+
+        const ctx = locCanvas.getContext('2d');
+        reportCharts.csvcLocation = new Chart(ctx, {
+          data: {
+            labels: labels,
+            datasets: [
+              {
+                type: 'bar',
+                label: 'Số lớp tổ chức (cột mờ)',
+                data: dataClasses,
+                yAxisID: 'yClasses',
+                backgroundColor: 'rgba(140, 29, 64, 0.10)',
+                hoverBackgroundColor: 'rgba(140, 29, 64, 0.22)',
+                borderColor: 'rgba(140, 29, 64, 0.28)',
+                borderWidth: 1,
+                borderRadius: 4,
+                barPercentage: 0.5,
+                order: 10
+              },
+              {
+                type: 'line',
+                label: '1. Công tác tổ chức (CTTC)',
+                data: dataC1,
+                yAxisID: 'y',
+                borderColor: '#0F5132',
+                backgroundColor: '#0F5132',
+                borderWidth: 2.75,
+                pointRadius: 4.5,
+                pointHoverRadius: 7,
+                pointBackgroundColor: '#0F5132',
+                tension: 0.25,
+                spanGaps: true,
+                order: 1,
+                clip: false
+              },
+              {
+                type: 'line',
+                label: '2. Cơ sở vật chất (CSVC)',
+                data: dataC2,
+                yAxisID: 'y',
+                borderColor: '#8C1D40',
+                backgroundColor: '#8C1D40',
+                borderWidth: 2.75,
+                pointRadius: 4.5,
+                pointHoverRadius: 7,
+                pointBackgroundColor: '#8C1D40',
+                tension: 0.25,
+                spanGaps: true,
+                order: 2,
+                clip: false
+              },
+              {
+                type: 'line',
+                label: '3. Công tác hậu cần (HC)',
+                data: dataC3,
+                yAxisID: 'y',
+                borderColor: '#D97706',
+                backgroundColor: '#D97706',
+                borderWidth: 2.75,
+                pointRadius: 4.5,
+                pointHoverRadius: 7,
+                pointBackgroundColor: '#D97706',
+                borderDash: [4, 4],
+                tension: 0.25,
+                spanGaps: true,
+                order: 3,
+                clip: false
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            layout: {
+              padding: {
+                top: 18,
+                right: 18,
+                left: 6,
+                bottom: 6
+              }
+            },
+            interaction: {
+              mode: 'index',
+              intersect: false
+            },
+            scales: {
+              y: {
+                type: 'linear',
+                position: 'left',
+                min: yMin,
+                max: 4.15,
+                title: {
+                  display: true,
+                  text: 'Điểm đánh giá (thang 4.0)',
+                  font: { family: 'Plus Jakarta Sans', weight: '700', size: 10.5 },
+                  color: '#475569'
+                },
+                ticks: {
+                  stepSize: 0.2,
+                  callback: function(v) {
+                    if (v > 4.0) return '';
+                    return v.toFixed(1).replace('.', ',');
+                  },
+                  font: { family: 'Plus Jakarta Sans', weight: '600', size: 10.5 }
+                },
+                grid: {
+                  color: function(context) {
+                    if (context.tick && context.tick.value > 4.0) return 'transparent';
+                    return '#E2E8F0';
+                  }
+                }
+              },
+              yClasses: {
+                type: 'linear',
+                position: 'right',
+                min: 0,
+                max: yClassMax,
+                title: {
+                  display: true,
+                  text: 'Số lớp tổ chức',
+                  font: { family: 'Plus Jakarta Sans', weight: '700', size: 10.5 },
+                  color: '#8C1D40'
+                },
+                ticks: {
+                  stepSize: yClassMax > 10 ? 5 : 2,
+                  callback: (v) => v + ' lớp',
+                  font: { family: 'Plus Jakarta Sans', weight: '700', size: 10 },
+                  color: '#8C1D40'
+                },
+                grid: { display: false }
+              },
+              x: {
+                ticks: {
+                  autoSkip: false,
+                  maxRotation: 45,
+                  minRotation: 45,
+                  font: { family: 'Plus Jakarta Sans', weight: '700', size: 9.5 },
+                  color: '#374151'
+                },
+                grid: { color: '#F1F5F9' }
+              }
+            },
+            plugins: {
+              legend: {
+                position: 'top',
+                labels: {
+                  boxWidth: 12,
+                  usePointStyle: true,
+                  font: { family: 'Plus Jakarta Sans', weight: '700', size: 11 },
+                  color: '#374151',
+                  padding: 12
+                }
+              },
+              tooltip: {
+                backgroundColor: '#1E293B',
+                titleFont: { family: 'Plus Jakarta Sans', weight: '700' },
+                bodyFont: { family: 'Plus Jakarta Sans' },
+                padding: 10,
+                cornerRadius: 6,
+                callbacks: {
+                  title: function(items) {
+                    if (!items || items.length === 0) return '';
+                    const idx = items[0].dataIndex;
+                    const it = itemList[idx];
+                    if (!it) return '';
+                    const numCls = it.classes || it.classesCount || 1;
+                    return 'Địa điểm: ' + (it.full_name || it.name) + ' (' + numCls + ' lớp - ' + it.votes + ' phiếu)';
+                  },
+                  label: function(context) {
+                    const label = context.dataset.label || '';
+                    const val = context.parsed.y;
+                    if (context.dataset.yAxisID === 'yClasses') {
+                      return 'Số lớp tổ chức: ' + val + ' lớp';
+                    }
+                    if (val === null || typeof val === 'undefined') {
+                      return label + ': Không khảo sát';
+                    }
+                    return label + ': ' + val.toFixed(2) + ' / 4.0';
+                  }
+                }
+              }
+            }
+          }
+        });
+
+        // Drag-to-scroll support for horizontal panning
+        if (scrollOuter && !scrollOuter._hasDragScroll) {
+          scrollOuter._hasDragScroll = true;
+          let isDown = false;
+          let startX = 0;
+          let scrollLeft = 0;
+
+          scrollOuter.addEventListener('mousedown', (e) => {
+            isDown = true;
+            scrollOuter.style.cursor = 'grabbing';
+            startX = e.pageX - scrollOuter.offsetLeft;
+            scrollLeft = scrollOuter.scrollLeft;
+          });
+          scrollOuter.addEventListener('mouseleave', () => { 
+            isDown = false; 
+            scrollOuter.style.cursor = 'grab';
+          });
+          scrollOuter.addEventListener('mouseup', () => { 
+            isDown = false; 
+            scrollOuter.style.cursor = 'grab';
+          });
+          scrollOuter.addEventListener('mousemove', (e) => {
+            if (!isDown) return;
+            e.preventDefault();
+            const x = e.pageX - scrollOuter.offsetLeft;
+            const walk = (x - startX) * 1.5;
+            scrollOuter.scrollLeft = scrollLeft - walk;
+          });
+        }
+      }
+    }
+  }
+
+  // Multi-format filter handler for CSVC in class mode
+  function filterReportCsvcFormat(btn, formatKey) {
+    if (!btn) return;
+    const group = btn.closest('.report-slicer-group');
+    if (group) {
+      group.querySelectorAll('.btn-slicer').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    }
+    const container = document.getElementById('reportCsvcSection');
+    if (!container || !container._csvcData) return;
+    const fullData = container._csvcData;
+    let targetData = fullData.overall || fullData;
+    if (formatKey === 'direct' && fullData.direct) {
+      targetData = fullData.direct;
+    } else if (formatKey === 'online' && fullData.online) {
+      targetData = fullData.online;
+    }
+    renderReportCsvcSection(container, { ...targetData, isMultiFormat: fullData.isMultiFormat, direct: fullData.direct, online: fullData.online, overall: fullData.overall }, { isProgram: false });
+  }
+  window.filterReportCsvcFormat = filterReportCsvcFormat;
+
+
+
+  // --- UI RENDERER 6: SECTION IV - GV (ĐÁNH GIÁ ĐỘI NGŨ GIẢNG VIÊN) ---
+  function renderReportGvSection(containerElem, gvData, options) {
+    if (!containerElem) return;
+    const isProgram = options && options.isProgram;
+    const title = (options && options.title) || (isProgram ? 'IV. ĐÁNH GIÁ ĐỘI NGŨ GIẢNG VIÊN THAM GIA GIẢNG DẠY' : 'IV. ĐÁNH GIÁ GIẢNG VIÊN GIẢNG DẠY');
+
+    const gvObj = (gvData && gvData.gv) ? gvData.gv : gvData;
+    const directCohort = gvObj && gvObj.direct ? gvObj.direct : null;
+    const hybridCohort = gvObj && gvObj.hybrid ? gvObj.hybrid : null;
+    const overallCohort = gvObj && gvObj.overall ? gvObj.overall : null;
+
+    const overallLecturers = (overallCohort && overallCohort.lecturers) 
+      || (isProgram ? (gvData && gvData.lecturers) : (gvData && gvData.gvList)) 
+      || [];
+    const directLecturers = (directCohort && directCohort.lecturers) || [];
+    const hybridLecturers = (hybridCohort && hybridCohort.lecturers) || [];
+
+    const hasData = Array.isArray(overallLecturers) && overallLecturers.length > 0;
+
+    if (!hasData) {
+      containerElem.innerHTML = 
+        '<div style="border-bottom: 1px solid #E2E8F0; padding-bottom: 0.65rem; margin-bottom: 0.85rem;">' +
+          '<h3 style="margin: 0; font-size: 1.05rem; font-weight: 800; color: var(--brand-primary); display: flex; align-items: center; gap: 0.5rem;">' +
+            '<i class="fa-solid fa-chalkboard-user"></i> ' + title +
+          '</h3>' +
+        '</div>' +
+        '<div style="padding: 1.5rem; background: #F8FAFC; border: 1px dashed #CBD5E1; border-radius: 8px; text-align: center; color: var(--text-muted); font-style: italic;">' +
+          '<i class="fa-solid fa-circle-exclamation" style="margin-right: 0.4rem; color: #94A3B8;"></i> ' +
+          'Chưa có dữ liệu đánh giá giảng viên' +
+        '</div>';
+      return;
+    }
+
+    const hasDirect = directLecturers.length > 0;
+    const hasHybrid = hybridLecturers.length > 0;
+    const isMultiFormat = hasDirect && hasHybrid;
+
+    let sectionHtml = 
+      '<div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #E2E8F0; padding-bottom: 0.65rem; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">' +
+        '<div>' +
+          '<h3 style="margin: 0; font-size: 1.05rem; font-weight: 800; color: var(--brand-primary); display: flex; align-items: center; gap: 0.5rem;">' +
+            '<i class="fa-solid fa-chalkboard-user"></i> ' + title +
+          '</h3>' +
+          '<div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.15rem;">Đánh giá 3 tiêu chí: Chuyên môn, Sư phạm, Tác phong • Thang điểm chuẩn hóa 5.00</div>' +
+        '</div>';
+
+    if (isMultiFormat) {
+      sectionHtml +=
+        '<div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">' +
+          '<span style="font-size: 0.78rem; font-weight: 700; color: #15803D; background: #DCFCE7; padding: 0.25rem 0.6rem; border-radius: 6px;">' +
+            '<i class="fa-solid fa-user-group"></i> Trực tiếp: ' + directCohort.totalVotes + ' phiếu • ' + directCohort.avgTb.toFixed(2) + '/5.0' +
+          '</span>' +
+          '<span style="font-size: 0.78rem; font-weight: 700; color: #7E22CE; background: #F3E8FF; padding: 0.25rem 0.6rem; border-radius: 6px;">' +
+            '<i class="fa-solid fa-shapes"></i> Trực tiếp kết hợp Trực tuyến: ' + hybridCohort.totalVotes + ' phiếu • ' + hybridCohort.avgTb.toFixed(2) + '/5.0' +
+          '</span>' +
+          '<span style="font-size: 0.82rem; font-weight: 800; color: #8C1D40; background: #FFE4E6; padding: 0.25rem 0.6rem; border-radius: 6px;">' +
+            '<i class="fa-solid fa-star"></i> Bình quân chung: ' + overallCohort.totalVotes + ' phiếu • ' + overallCohort.avgTb.toFixed(2) + '/5.0' +
+          '</span>' +
+        '</div>' +
+      '</div>';
+    } else {
+      const totVotes = overallCohort ? overallCohort.totalVotes : overallLecturers.reduce((acc, g) => acc + (g.totalVotes || 0), 0);
+      const totHours = overallCohort ? overallCohort.totalHours : overallLecturers.reduce((acc, g) => acc + (g.totalHours || 0), 0);
+      const avgScore = overallCohort ? overallCohort.avgTb.toFixed(2) : (overallLecturers.length > 0 ? (overallLecturers.reduce((acc, g) => acc + g.diem_tb, 0) / overallLecturers.length).toFixed(2) : '0.00');
+
+      sectionHtml +=
+        '<div style="display: flex; align-items: center; gap: 0.6rem;">' +
+          '<span style="font-size: 0.8rem; font-weight: 700; color: #64748B; background: #F1F5F9; padding: 0.25rem 0.65rem; border-radius: 6px;">' +
+            overallLecturers.length + ' Giảng viên &nbsp;•&nbsp; ' + totHours + ' Tiết' +
+          '</span>' +
+          '<span style="font-size: 0.95rem; font-weight: 800; color: #8C1D40;">' + avgScore + ' <span style="font-size: 0.75rem; color: #64748B;">/ 5.0</span></span>' +
+        '</div>' +
+      '</div>';
+    }
+
+    // MULTI-AXIS CHART FOR LECTURER RANKING & COMPARISON
+    sectionHtml += 
+      '<div style="background: white; border: 1px solid #E2E8F0; border-radius: 8px; padding: 1.15rem; margin-bottom: 1.15rem;">' +
+        '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.85rem; flex-wrap: wrap; gap: 0.5rem;">' +
+          '<div style="font-size: 0.88rem; font-weight: 800; color: #1E293B; display: flex; align-items: center; gap: 0.4rem;">' +
+            '<i class="fa-solid fa-chart-line" style="color: var(--brand-primary);"></i> SO SÁNH & XẾP HẠNG ĐÁNH GIÁ GIẢNG VIÊN' +
+          '</div>' +
+          '<div style="display: flex; gap: 0.85rem; align-items: center; font-size: 0.75rem; font-weight: 700;">' +
+            '<span style="display: inline-flex; align-items: center; gap: 0.3rem;"><span style="width: 10px; height: 10px; border-radius: 50%; background: #8C1D40;"></span> 1. Chuyên môn (KTCM)</span>' +
+            '<span style="display: inline-flex; align-items: center; gap: 0.3rem;"><span style="width: 10px; height: 10px; border-radius: 50%; background: #0284C7;"></span> 2. Sư phạm (KNSP)</span>' +
+            '<span style="display: inline-flex; align-items: center; gap: 0.3rem;"><span style="width: 10px; height: 10px; border-radius: 50%; background: #059669;"></span> 3. Tác phong (TDTP)</span>' +
+            '<span style="display: inline-flex; align-items: center; gap: 0.3rem;"><span style="width: 12px; height: 8px; background: rgba(148, 163, 184, 0.4); border-radius: 2px;"></span> Tổng số tiết</span>' +
+            (isProgram ? '<span style="display: inline-flex; align-items: center; gap: 0.3rem;"><span style="width: 12px; height: 8px; background: rgba(217, 119, 6, 0.35); border-radius: 2px;"></span> Tổng số lớp</span>' : '') +
+          '</div>' +
+        '</div>' +
+        '<div style="height: 340px; position: relative;">' +
+          '<canvas id="reportGvComparisonChart"></canvas>' +
+        '</div>' +
+      '</div>';
+
+    // DETAILED LECTURER TABLE
+    sectionHtml += 
+      '<div style="background: white; border: 1px solid #E2E8F0; border-radius: 8px; overflow: hidden;">' +
+        '<div style="padding: 0.75rem 1rem; background: #F8FAFC; border-bottom: 1px solid #E2E8F0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">' +
+          '<div style="font-size: 0.85rem; font-weight: 800; color: #1E293B; display: flex; align-items: center; gap: 0.4rem;">' +
+            '<i class="fa-solid fa-list-check" style="color: var(--brand-primary);"></i> DANH SÁCH CHI TIẾT ĐÁNH GIÁ TỪNG GIẢNG VIÊN' +
+          '</div>' +
+          '<div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;">';
+
+    if (isMultiFormat) {
+      sectionHtml +=
+            '<div style="display: inline-flex; gap: 0.25rem; background: #E2E8F0; padding: 2px; border-radius: 6px;">' +
+              '<button type="button" class="report-gv-tab-btn active" data-tab="all" onclick="switchReportGvTab(\'all\')" style="font-size: 0.72rem; font-weight: 700; padding: 0.25rem 0.55rem; border: none; border-radius: 4px; cursor: pointer; background: var(--brand-primary); color: #fff;">Tất cả</button>' +
+              '<button type="button" class="report-gv-tab-btn" data-tab="direct" onclick="switchReportGvTab(\'direct\')" style="font-size: 0.72rem; font-weight: 700; padding: 0.25rem 0.55rem; border: none; border-radius: 4px; cursor: pointer; background: transparent; color: #475569;">Trực tiếp</button>' +
+              '<button type="button" class="report-gv-tab-btn" data-tab="hybrid" onclick="switchReportGvTab(\'hybrid\')" style="font-size: 0.72rem; font-weight: 700; padding: 0.25rem 0.55rem; border: none; border-radius: 4px; cursor: pointer; background: transparent; color: #475569;">Trực tiếp kết hợp Trực tuyến</button>' +
+              '<button type="button" class="report-gv-tab-btn" data-tab="overall" onclick="switchReportGvTab(\'overall\')" style="font-size: 0.72rem; font-weight: 700; padding: 0.25rem 0.55rem; border: none; border-radius: 4px; cursor: pointer; background: transparent; color: #475569;">Bình quân chung</button>' +
+            '</div>';
+    }
+
+    sectionHtml +=
+            '<input type="text" id="reportGvTableSearch" placeholder="Tìm theo tên giảng viên..." onkeyup="filterReportGvTable()" style="font-size: 0.78rem; padding: 0.3rem 0.65rem; border: 1px solid #CBD5E1; border-radius: 4px; width: 200px;">' +
+          '</div>' +
+        '</div>' +
+        '<div class="table-container" style="max-height: 500px; overflow-y: auto; margin: 0; padding: 0;">' +
+          '<table class="data-table" id="reportGvDataTable" style="margin: 0; font-size: 0.82rem;">' +
+            '<thead>' +
+              '<tr>' +
+                '<th style="width: 4%; text-align: center;">STT</th>' +
+                '<th style="width: 20%;">HỌ VÀ TÊN GIẢNG VIÊN</th>' +
+                '<th style="width: 18%;">ĐƠN VỊ CÔNG TÁC</th>' +
+                (isProgram ? '<th style="width: 8%; text-align: center;">SỐ LỚP DẠY</th>' : '<th style="width: 14%;">NỘI DUNG GIẢNG</th>') +
+                '<th style="width: 8%; text-align: center;">SỐ TIẾT</th>' +
+                '<th style="width: 8%; text-align: center;">SỐ PHIẾU</th>' +
+                '<th style="width: 9%; text-align: center;">KTCM (5.0)</th>' +
+                '<th style="width: 9%; text-align: center;">KNSP (5.0)</th>' +
+                '<th style="width: 9%; text-align: center;">TDTP (5.0)</th>' +
+                '<th style="width: 10%; text-align: center;">ĐIỂM TB (5.0)</th>' +
+                '<th style="width: 9%; text-align: center;">XẾP LOẠI</th>' +
+              '</tr>' +
+            '</thead>' +
+            '<tbody id="reportGvDataTableBody">';
+
+    function buildGvRowHtml(g, idx, rowClass, isProg) {
+      const gvName = g.name || g.ten_gv || 'Giảng viên';
+      const donVi = g.donVi || g.don_vi || 'Trường ĐTCB';
+      const hours = Number(g.totalHours || g.so_tiet) || 0;
+      const votes = Number(g.totalVotes || g.tong_phieu) || 0;
+      const ktcm = Number(g.diem_ktcm || 0).toFixed(2);
+      const knsp = Number(g.diem_knsp || 0).toFixed(2);
+      const tdtp = Number(g.diem_tdtp || 0).toFixed(2);
+      const diemTb = Number(g.diem_tb || 0).toFixed(2);
+
+      let xepLoai = '<span class="badge" style="background: #DCFCE7; color: #15803D; font-size: 0.72rem;">Xuất sắc</span>';
+      if (g.diem_tb < 4.0) xepLoai = '<span class="badge" style="background: #FEE2E2; color: #B91C1C; font-size: 0.72rem;">Hạn chế</span>';
+      else if (g.diem_tb < 4.5) xepLoai = '<span class="badge" style="background: #FEF3C7; color: #B45309; font-size: 0.72rem;">Khá</span>';
+      else if (g.diem_tb < 4.8) xepLoai = '<span class="badge" style="background: #E0F2FE; color: #0284C7; font-size: 0.72rem;">Tốt</span>';
+
+      return '<tr class="gv-data-row ' + rowClass + '" data-gv-name="' + gvName.toLowerCase() + '">' +
+        '<td style="text-align: center; color: #64748B;">' + (idx + 1) + '</td>' +
+        '<td style="font-weight: 700; color: #1E293B;">' + gvName + '</td>' +
+        '<td style="color: #475569;">' + donVi + '</td>' +
+        (isProg ? '<td style="text-align: center; font-weight: 700; color: #D97706;">' + (g.classesCount || 1) + ' lớp</td>' : '<td style="font-size: 0.78rem;">' + (g.noi_dung_giang || 'Toàn khóa') + '</td>') +
+        '<td style="text-align: center; font-weight: 800; color: #1E293B;">' + hours + '</td>' +
+        '<td style="text-align: center; color: #64748B;">' + votes + '</td>' +
+        '<td style="text-align: center; font-weight: 700; color: #8C1D40;">' + ktcm + '</td>' +
+        '<td style="text-align: center; font-weight: 700; color: #0284C7;">' + knsp + '</td>' +
+        '<td style="text-align: center; font-weight: 700; color: #059669;">' + tdtp + '</td>' +
+        '<td style="text-align: center; font-weight: 800; color: var(--brand-primary); font-size: 0.95rem;">' + diemTb + '</td>' +
+        '<td style="text-align: center;">' + xepLoai + '</td>' +
+      '</tr>';
+    }
+
+    function buildGvSubtotalHtml(label, color, cohort, isFinal, isProg) {
+      if (!cohort || cohort.totalVotes === 0) return '';
+      let xepLoai = '<span class="badge" style="background: #DCFCE7; color: #15803D; font-size: 0.72rem;">Xuất sắc</span>';
+      if (cohort.avgTb < 4.0) xepLoai = '<span class="badge" style="background: #FEE2E2; color: #B91C1C; font-size: 0.72rem;">Hạn chế</span>';
+      else if (cohort.avgTb < 4.5) xepLoai = '<span class="badge" style="background: #FEF3C7; color: #B45309; font-size: 0.72rem;">Khá</span>';
+      else if (cohort.avgTb < 4.8) xepLoai = '<span class="badge" style="background: #E0F2FE; color: #0284C7; font-size: 0.72rem;">Tốt</span>';
+
+      const bg = isFinal ? '#FFF1F2' : '#F8FAFC';
+      const borderTop = isFinal ? 'border-top: 2px solid #8C1D40;' : 'border-top: 1px solid #CBD5E1;';
+      const borderBottom = isFinal ? '' : 'border-bottom: 2px solid #E2E8F0;';
+      const fontSize = isFinal ? 'font-size: 1.02rem;' : 'font-size: 0.95rem;';
+      const rowClass = isFinal ? 'gv-row-overall' : (color === '#15803D' ? 'gv-row-direct' : 'gv-row-hybrid');
+
+      return '<tr class="gv-subtotal-row ' + rowClass + '" style="background: ' + bg + '; font-weight: 800; ' + borderTop + ' ' + borderBottom + '">' +
+        '<td colspan="4" style="text-align: right; color: ' + color + '; font-weight: 800; padding: 0.6rem 0.85rem;">' + label + '</td>' +
+        '<td style="text-align: center; color: #1E293B;">' + cohort.totalHours + '</td>' +
+        '<td style="text-align: center; color: #64748B;">' + cohort.totalVotes + '</td>' +
+        '<td style="text-align: center; color: #8C1D40;">' + cohort.avgKtcm.toFixed(2) + '</td>' +
+        '<td style="text-align: center; color: #0284C7;">' + cohort.avgKnsp.toFixed(2) + '</td>' +
+        '<td style="text-align: center; color: #059669;">' + cohort.avgTdtp.toFixed(2) + '</td>' +
+        '<td style="text-align: center; color: var(--brand-primary); ' + fontSize + '">' + cohort.avgTb.toFixed(2) + '</td>' +
+        '<td style="text-align: center;">' + xepLoai + '</td>' +
+      '</tr>';
+    }
+
+    if (isMultiFormat) {
+      // 1. SECTION A: DIRECT
+      sectionHtml +=
+        '<tr class="gv-section-row gv-sec-direct" style="background: #F0FDF4; font-weight: 800; color: #15803D; border-top: 1px solid #BBF7D0;">' +
+          '<td colspan="11" style="padding: 0.6rem 0.85rem; font-size: 0.85rem;"><i class="fa-solid fa-user-group" style="margin-right: 0.4rem;"></i> A. HÌNH THỨC TRỰC TIẾP (' + directCohort.lecturers.length + ' Giảng viên)</td>' +
+        '</tr>';
+      directCohort.lecturers.forEach((g, idx) => {
+        sectionHtml += buildGvRowHtml(g, idx, 'gv-row-direct', isProgram);
+      });
+      sectionHtml += buildGvSubtotalHtml('Cộng hình thức Trực tiếp:', '#15803D', directCohort, false, isProgram);
+
+      // 2. SECTION B: HYBRID / ONLINE
+      sectionHtml +=
+        '<tr class="gv-section-row gv-sec-hybrid" style="background: #FAF5FF; font-weight: 800; color: #7E22CE; border-top: 2px solid #E9D5FF;">' +
+          '<td colspan="11" style="padding: 0.6rem 0.85rem; font-size: 0.85rem;"><i class="fa-solid fa-shapes" style="margin-right: 0.4rem;"></i> B. HÌNH THỨC TRỰC TIẾP KẾT HỢP TRỰC TUYẾN (' + hybridCohort.lecturers.length + ' Giảng viên)</td>' +
+        '</tr>';
+      hybridCohort.lecturers.forEach((g, idx) => {
+        sectionHtml += buildGvRowHtml(g, idx, 'gv-row-hybrid', isProgram);
+      });
+      sectionHtml += buildGvSubtotalHtml('Cộng hình thức Trực tiếp kết hợp Trực tuyến:', '#7E22CE', hybridCohort, false, isProgram);
+
+      // 3. SECTION C: OVERALL
+      sectionHtml +=
+        '<tr class="gv-section-row gv-sec-overall" style="background: #FFF1F2; font-weight: 800; color: #8C1D40; border-top: 2px solid #FECDD3;">' +
+          '<td colspan="11" style="padding: 0.6rem 0.85rem; font-size: 0.85rem;"><i class="fa-solid fa-star" style="margin-right: 0.4rem;"></i> C. TỔNG HỢP BÌNH QUÂN ĐÁNH GIÁ CHUNG GIẢNG VIÊN (' + overallCohort.lecturers.length + ' Giảng viên)</td>' +
+        '</tr>';
+      overallCohort.lecturers.forEach((g, idx) => {
+        sectionHtml += buildGvRowHtml(g, idx, 'gv-row-overall', isProgram);
+      });
+      sectionHtml += buildGvSubtotalHtml('ĐIỂM TRUNG BÌNH CHUNG TOÀN BỘ GIẢNG VIÊN:', '#8C1D40', overallCohort, true, isProgram);
+    } else if (hasDirect) {
+      directCohort.lecturers.forEach((g, idx) => {
+        sectionHtml += buildGvRowHtml(g, idx, 'gv-row-direct', isProgram);
+      });
+      sectionHtml += buildGvSubtotalHtml('ĐIỂM TRUNG BÌNH HÌNH THỨC TRỰC TIẾP:', '#15803D', directCohort, true, isProgram);
+    } else if (hasHybrid) {
+      hybridCohort.lecturers.forEach((g, idx) => {
+        sectionHtml += buildGvRowHtml(g, idx, 'gv-row-hybrid', isProgram);
+      });
+      sectionHtml += buildGvSubtotalHtml('ĐIỂM TRUNG BÌNH HÌNH THỨC TRỰC TIẾP KẾT HỢP TRỰC TUYẾN:', '#7E22CE', hybridCohort, true, isProgram);
+    } else {
+      overallLecturers.forEach((g, idx) => {
+        sectionHtml += buildGvRowHtml(g, idx, 'gv-row-overall', isProgram);
+      });
+    }
+
+    sectionHtml += '</tbody></table></div></div>';
+    containerElem.innerHTML = sectionHtml;
+
+    // Render Multi-Axis Chart with Chart.js
+    const ctx = document.getElementById('reportGvComparisonChart');
+    if (ctx && typeof Chart !== 'undefined') {
+      if (reportCharts.gvComparison) {
+        try { reportCharts.gvComparison.destroy(); } catch (e) {}
+      }
+
+      const displayList = overallLecturers.slice(0, 15);
+      const labels = displayList.map(g => g.name || g.ten_gv);
+      const ktcmData = displayList.map(g => Number(g.diem_ktcm || 0));
+      const knspData = displayList.map(g => Number(g.diem_knsp || 0));
+      const tdtpData = displayList.map(g => Number(g.diem_tdtp || 0));
+      const hoursData = displayList.map(g => Number(g.totalHours || g.so_tiet || 0));
+      const classCountData = displayList.map(g => Number(g.classesCount || 1));
+
+      const maxHours = Math.max(...hoursData, 1);
+      const suggestedMaxHours = Math.ceil(maxHours * 1.25);
+
+      const datasets = [
+        // LINE 1: 1. Chuyên môn (KTCM)
+        {
+          type: 'line',
+          label: '1. Chuyên môn (KTCM)',
+          data: ktcmData,
+          borderColor: '#8C1D40',
+          backgroundColor: '#8C1D40',
+          borderWidth: 2.8,
+          pointRadius: 5,
+          pointHoverRadius: 7,
+          pointStyle: 'circle',
+          pointBackgroundColor: '#FFFFFF',
+          pointBorderColor: '#8C1D40',
+          pointBorderWidth: 2.5,
+          tension: 0.25,
+          yAxisID: 'yScores',
+          order: 1
+        },
+        // LINE 2: 2. Sư phạm (KNSP)
+        {
+          type: 'line',
+          label: '2. Sư phạm (KNSP)',
+          data: knspData,
+          borderColor: '#0284C7',
+          backgroundColor: '#0284C7',
+          borderWidth: 2.8,
+          pointRadius: 5,
+          pointHoverRadius: 7,
+          pointStyle: 'rectRot',
+          pointBackgroundColor: '#FFFFFF',
+          pointBorderColor: '#0284C7',
+          pointBorderWidth: 2.5,
+          tension: 0.25,
+          yAxisID: 'yScores',
+          order: 1
+        },
+        // LINE 3: 3. Tác phong (TDTP)
+        {
+          type: 'line',
+          label: '3. Tác phong (TDTP)',
+          data: tdtpData,
+          borderColor: '#059669',
+          backgroundColor: '#059669',
+          borderWidth: 2.8,
+          pointRadius: 5,
+          pointHoverRadius: 7,
+          pointStyle: 'triangle',
+          pointBackgroundColor: '#FFFFFF',
+          pointBorderColor: '#059669',
+          pointBorderWidth: 2.5,
+          tension: 0.25,
+          yAxisID: 'yScores',
+          order: 1
+        },
+        // BAR 1: Tổng số tiết (Deduplicated)
+        {
+          type: 'bar',
+          label: 'Tổng số tiết',
+          data: hoursData,
+          backgroundColor: 'rgba(148, 163, 184, 0.25)',
+          borderColor: 'rgba(100, 116, 139, 0.5)',
+          borderWidth: 1.2,
+          borderRadius: 4,
+          barPercentage: 0.55,
+          categoryPercentage: 0.7,
+          yAxisID: 'yVolume',
+          order: 2
+        }
+      ];
+
+      if (isProgram) {
+        datasets.push({
+          type: 'bar',
+          label: 'Tổng số lớp',
+          data: classCountData,
+          backgroundColor: 'rgba(217, 119, 6, 0.25)',
+          borderColor: 'rgba(217, 119, 6, 0.5)',
+          borderWidth: 1.2,
+          borderRadius: 4,
+          barPercentage: 0.55,
+          categoryPercentage: 0.7,
+          yAxisID: 'yVolume',
+          order: 2
+        });
+      }
+
+      reportCharts.gvComparison = new Chart(ctx, {
+        data: {
+          labels: labels,
+          datasets: datasets
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'top',
+              labels: {
+                boxWidth: 12,
+                font: { size: 10.5, weight: '700' },
+                usePointStyle: true
+              }
+            },
+            tooltip: {
+              mode: 'index',
+              intersect: false,
+              callbacks: {
+                title: function(items) {
+                  const idx = items[0].dataIndex;
+                  const g = displayList[idx];
+                  return g.name || g.ten_gv;
+                },
+                beforeBody: function(items) {
+                  const idx = items[0].dataIndex;
+                  const g = displayList[idx];
+                  return [
+                    '🏛️ Đơn vị: ' + (g.donVi || g.don_vi || 'Nội bộ Agribank'),
+                    '⏳ Tổng số tiết: ' + (g.totalHours || g.so_tiet) + ' tiết',
+                    (isProgram ? '📚 Số lớp giảng dạy: ' + (g.classesCount || 1) + ' lớp' : ''),
+                    '⭐ Điểm TB chung: ' + Number(g.diem_tb || 0).toFixed(2) + ' / 5.0',
+                    '--------------------------------'
+                  ].filter(Boolean);
+                },
+                label: function(context) {
+                  const ds = context.dataset;
+                  const val = context.parsed.y;
+                  if (ds.yAxisID === 'yVolume') {
+                    return ds.label + ': ' + val;
+                  }
+                  return ds.label + ': ' + Number(val).toFixed(2) + ' / 5.0';
+                }
+              }
+            }
+          },
+          scales: {
+            yScores: {
+              type: 'linear',
+              position: 'left',
+              min: 3.5,
+              max: 5.0,
+              ticks: {
+                stepSize: 0.25,
+                callback: v => Number(v).toFixed(2),
+                font: { size: 10, weight: '700' },
+                color: '#8C1D40'
+              },
+              title: {
+                display: true,
+                text: 'Điểm đánh giá (1.0 - 5.0)',
+                font: { size: 10, weight: '700' },
+                color: '#8C1D40'
+              },
+              grid: { color: '#F1F5F9' }
+            },
+            yVolume: {
+              type: 'linear',
+              position: 'right',
+              beginAtZero: true,
+              suggestedMax: suggestedMaxHours,
+              ticks: {
+                font: { size: 10, weight: '600' },
+                color: '#475569'
+              },
+              title: {
+                display: true,
+                text: 'Số tiết / Số lớp',
+                font: { size: 10, weight: '700' },
+                color: '#475569'
+              },
+              grid: { display: false }
+            },
+            x: {
+              ticks: {
+                font: { size: 10, weight: '700' },
+                maxRotation: 30,
+                minRotation: 0,
+                autoSkip: false
+              },
+              grid: { display: false }
+            }
+          }
+        }
+      });
+    }
+  }
+
+  function switchReportGvTab(mode) {
+    const table = document.getElementById('reportGvDataTable');
+    if (!table) return;
+
+    document.querySelectorAll('.report-gv-tab-btn').forEach(btn => {
+      const isAct = btn.getAttribute('data-tab') === mode;
+      btn.classList.toggle('active', isAct);
+      btn.style.background = isAct ? 'var(--brand-primary)' : 'transparent';
+      btn.style.color = isAct ? '#fff' : '#475569';
+    });
+
+    const rows = table.querySelectorAll('tbody tr');
+    rows.forEach(tr => {
+      if (mode === 'all') {
+        tr.style.display = '';
+      } else if (mode === 'direct') {
+        const isDir = tr.classList.contains('gv-sec-direct') || tr.classList.contains('gv-row-direct');
+        tr.style.display = isDir ? '' : 'none';
+      } else if (mode === 'hybrid') {
+        const isHyb = tr.classList.contains('gv-sec-hybrid') || tr.classList.contains('gv-row-hybrid');
+        tr.style.display = isHyb ? '' : 'none';
+      } else if (mode === 'overall') {
+        const isOvr = tr.classList.contains('gv-sec-overall') || tr.classList.contains('gv-row-overall');
+        tr.style.display = isOvr ? '' : 'none';
+      }
+    });
+  }
+  window.switchReportGvTab = switchReportGvTab;
+
+  function filterReportGvTable() {
+    const input = document.getElementById('reportGvTableSearch');
+    const filter = (input ? input.value : '').toLowerCase().trim();
+    const table = document.getElementById('reportGvDataTable');
+    if (!table) return;
+
+    const dataRows = table.querySelectorAll('tbody tr.gv-data-row');
+    dataRows.forEach(tr => {
+      const name = tr.getAttribute('data-gv-name') || '';
+      tr.style.display = (!filter || name.includes(filter)) ? '' : 'none';
+    });
+  }
+  window.filterReportGvTable = filterReportGvTable;
+
+
+
+  // --- UI RENDERER 7: SECTION V - DGC (ĐÁNH GIÁ CHUNG VÀ Ý KIẾN ĐÓNG GÓP) ---
+  function renderReportDgcSection(containerElem, dgcData, options) {
+    if (!containerElem) return;
+    const isProgram = options && options.isProgram;
+    const title = (options && options.title) || (isProgram ? 'V. ĐÁNH GIÁ CHUNG TOÀN KHÓA VÀ Ý KIẾN ĐÓNG GÓP' : 'V. ĐÁNH GIÁ CHUNG VÀ Ý KIẾN ĐÓNG GÓP');
+
+    const hasData = dgcData && ((isProgram && (dgcData.votes || 0) > 0) || (!isProgram && ((dgcData.votes || dgcData.tong_phieu || 0) > 0)));
+
+    if (!hasData) {
+      containerElem.innerHTML = 
+        '<div style="border-bottom: 1px solid #E2E8F0; padding-bottom: 0.65rem; margin-bottom: 0.85rem;">' +
+          '<h3 style="margin: 0; font-size: 1.05rem; font-weight: 800; color: var(--brand-primary); display: flex; align-items: center; gap: 0.5rem;">' +
+            '<i class="fa-solid fa-comments"></i> ' + title +
+          '</h3>' +
+        '</div>' +
+        '<div style="padding: 1.5rem; background: #F8FAFC; border: 1px dashed #CBD5E1; border-radius: 8px; text-align: center; color: var(--text-muted); font-style: italic;">' +
+          '<i class="fa-solid fa-circle-exclamation" style="margin-right: 0.4rem; color: #94A3B8;"></i> ' +
+          'Chưa có dữ liệu đánh giá chung' +
+        '</div>';
+      return;
+    }
+
+    const overallScore = Number(dgcData.score || dgcData.diem_tb || 0);
+    const totalVotes = Number(dgcData.votes || dgcData.tong_phieu || 0);
+
+    const kt = dgcData.kt || {
+      name: 'Khả năng áp dụng kiến thức vào thực tế công việc',
+      score: Number(dgcData.diem_kt ?? dgcData.kt_score ?? 0),
+      posRate: Number(dgcData.ty_le_tich_cuc_kt ?? dgcData.kt_pos ?? 0),
+      n5: Number(dgcData.c5_kt ?? dgcData.kt_5 ?? 0),
+      n4: Number(dgcData.c4_kt ?? dgcData.kt_4 ?? 0),
+      n3: Number(dgcData.c3_kt ?? dgcData.kt_3 ?? 0),
+      n2: Number(dgcData.c2_kt ?? dgcData.kt_2 ?? 0),
+      n1: Number(dgcData.c1_kt ?? dgcData.kt_1 ?? 0),
+      total: Number(dgcData.tong_phieu_kt ?? dgcData.kt_n ?? totalVotes)
+    };
+    const kn = dgcData.kn || {
+      name: 'Khả năng vận dụng kỹ năng nghiệp vụ được đào tạo',
+      score: Number(dgcData.diem_kn ?? dgcData.kn_score ?? 0),
+      posRate: Number(dgcData.ty_le_tich_cuc_kn ?? dgcData.kn_pos ?? 0),
+      n5: Number(dgcData.c5_kn ?? dgcData.kn_5 ?? 0),
+      n4: Number(dgcData.c4_kn ?? dgcData.kn_4 ?? 0),
+      n3: Number(dgcData.c3_kn ?? dgcData.kn_3 ?? 0),
+      n2: Number(dgcData.c2_kn ?? dgcData.kn_2 ?? 0),
+      n1: Number(dgcData.c1_kn ?? dgcData.kn_1 ?? 0),
+      total: Number(dgcData.tong_phieu_kn ?? dgcData.kn_n ?? totalVotes)
+    };
+
+    kt.name = 'Khả năng áp dụng kiến thức vào thực tế công việc';
+    kn.name = 'Khả năng vận dụng kỹ năng nghiệp vụ được đào tạo';
+
+    const commentsList = (dgcData.comments && Array.isArray(dgcData.comments)) ? dgcData.comments : [];
+
+    let sectionHtml = 
+      '<div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #E2E8F0; padding-bottom: 0.65rem; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">' +
+        '<div>' +
+          '<h3 style="margin: 0; font-size: 1.05rem; font-weight: 800; color: var(--brand-primary); display: flex; align-items: center; gap: 0.5rem;">' +
+            '<i class="fa-solid fa-comments"></i> ' + title +
+          '</h3>' +
+          '<div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.15rem;">Đánh giá mức độ tiếp thu và khả năng ứng dụng thực tế • Thang điểm chuẩn hóa 5.00</div>' +
+        '</div>' +
+        '<div style="display: flex; align-items: center; gap: 0.6rem;">' +
+          '<span style="font-size: 0.82rem; font-weight: 700; color: #1E293B;">' + totalVotes + ' phiếu</span>' +
+          '<span style="font-size: 0.95rem; font-weight: 800; color: #059669;">' + overallScore.toFixed(2) + ' <span style="font-size: 0.75rem; color: #64748B;">/ 5.0</span></span>' +
+        '</div>' +
+      '</div>' +
+
+      // 2 DISTRIBUTION CARDS (KIẾN THỨC & KỸ NĂNG)
+      '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1rem; margin-bottom: 1.15rem;">' +
+        [kt, kn].map((item, idx) => {
+          const tot = item.total || (item.n5 + item.n4 + item.n3 + item.n2 + item.n1) || 1;
+          const r5 = ((item.n5 / tot) * 100).toFixed(1);
+          const r4 = ((item.n4 / tot) * 100).toFixed(1);
+          const r3 = ((item.n3 / tot) * 100).toFixed(1);
+          const r2 = ((item.n2 / tot) * 100).toFixed(1);
+          const r1 = ((item.n1 / tot) * 100).toFixed(1);
+
+          return '<div style="background: white; border: 1px solid #E2E8F0; border-radius: 8px; padding: 1rem;">' +
+            '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.6rem;">' +
+              '<span style="font-size: 0.85rem; font-weight: 700; color: #1E293B;">' + item.name + '</span>' +
+              '<strong style="font-size: 1.05rem; color: #059669;">' + item.score.toFixed(2) + ' <span style="font-size: 0.75rem; color: #64748B;">/ 5.0</span></strong>' +
+            '</div>' +
+            '<div style="display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: #E2E8F0; margin-bottom: 0.75rem;">' +
+              '<div style="width: ' + r5 + '%; background: #059669;" title="Rất rõ rệt (5): ' + r5 + '%"></div>' +
+              '<div style="width: ' + r4 + '%; background: #10B981;" title="Rõ rệt (4): ' + r4 + '%"></div>' +
+              '<div style="width: ' + r3 + '%; background: #F59E0B;" title="Khá (3): ' + r3 + '%"></div>' +
+              '<div style="width: ' + r2 + '%; background: #F97316;" title="Ít (2): ' + r2 + '%"></div>' +
+              '<div style="width: ' + r1 + '%; background: #EF4444;" title="Rất ít (1): ' + r1 + '%"></div>' +
+            '</div>' +
+            '<div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.35rem; text-align: center; font-size: 0.72rem; background: #F8FAFC; padding: 0.5rem; border-radius: 6px;">' +
+              '<div><span style="color: #64748B;">Rất rõ (5):</span> <strong style="color: #059669;">' + r5 + '%</strong> (' + item.n5 + ')</div>' +
+              '<div><span style="color: #64748B;">Rõ (4):</span> <strong style="color: #10B981;">' + r4 + '%</strong> (' + item.n4 + ')</div>' +
+              '<div><span style="color: #64748B;">Khá (3):</span> <strong style="color: #F59E0B;">' + r3 + '%</strong> (' + item.n3 + ')</div>' +
+              '<div><span style="color: #64748B;">Ít (2):</span> <strong style="color: #F97316;">' + r2 + '%</strong> (' + item.n2 + ')</div>' +
+              '<div><span style="color: #64748B;">Rất ít (1):</span> <strong style="color: #EF4444;">' + r1 + '%</strong> (' + item.n1 + ')</div>' +
+            '</div>' +
+          '</div>';
+        }).join('') +
+      '</div>';
+
+    // STUDENT COMMENTS SECTION
+    if (commentsList.length > 0) {
+      sectionHtml += 
+        '<div style="background: white; border: 1px solid #E2E8F0; border-radius: 8px; overflow: hidden;">' +
+          '<div style="padding: 0.75rem 1rem; background: #F8FAFC; border-bottom: 1px solid #E2E8F0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">' +
+            '<div style="font-size: 0.85rem; font-weight: 800; color: #1E293B; display: flex; align-items: center; gap: 0.4rem;">' +
+              '<i class="fa-regular fa-comment-dots" style="color: var(--brand-primary);"></i> TỔNG HỢP Ý KIẾN ĐÓNG GÓP CỦA HỌC VIÊN (' + commentsList.length + ' ý kiến)' +
+            '</div>' +
+            '<div>' +
+              '<input type="text" id="reportDgcCommentSearch" placeholder="Tìm kiếm ý kiến..." onkeyup="filterReportDgcComments()" style="font-size: 0.78rem; padding: 0.3rem 0.65rem; border: 1px solid #CBD5E1; border-radius: 4px; width: 220px;">' +
+            '</div>' +
+          '</div>' +
+          '<div style="max-height: 280px; overflow-y: auto; padding: 0.85rem;" id="reportDgcCommentsContainer">';
+
+      commentsList.forEach((cmt, idx) => {
+        const text = typeof cmt === 'string' ? cmt : (cmt.noi_dung || cmt.content || JSON.stringify(cmt));
+        sectionHtml += 
+          '<div class="report-comment-item" style="padding: 0.65rem 0.85rem; background: #F8FAFC; border-left: 3px solid var(--brand-primary); border-radius: 4px; margin-bottom: 0.5rem; font-size: 0.82rem; color: #334155; line-height: 1.5;">' +
+            '<div style="font-weight: 700; color: var(--brand-primary); font-size: 0.75rem; margin-bottom: 0.2rem;">Ý kiến #' + (idx + 1) + '</div>' +
+            text +
+          '</div>';
+      });
+
+      sectionHtml += '</div></div>';
+    }
+
+    containerElem.innerHTML = sectionHtml;
+  }
+
+  function filterReportDgcComments() {
+    const input = document.getElementById('reportDgcCommentSearch');
+    const filter = (input ? input.value : '').toLowerCase().trim();
+    const container = document.getElementById('reportDgcCommentsContainer');
+    if (!container) return;
+    const items = container.getElementsByClassName('report-comment-item');
+
+    for (let i = 0; i < items.length; i++) {
+      const txt = items[i].textContent || items[i].innerText;
+      items[i].style.display = txt.toLowerCase().indexOf(filter) > -1 ? '' : 'none';
+    }
+  }
+  window.filterReportDgcComments = filterReportDgcComments;
+
+  // --- CONTROLLER & DROPDOWNS SETUP ---
+  function populateReportDropdowns() {
+    const classSelect = document.getElementById('selectReportClass');
+    const classFmtSelect = document.getElementById('filterReportClassFormat');
+    const classCbqlSelect = document.getElementById('filterReportClassCbql');
+    const classBadge = document.getElementById('reportClassAvailableBadge');
+
+    const progSelect = document.getElementById('selectReportProgram');
+    const progFmtSelect = document.getElementById('filterReportProgramFormat');
+    const progBadge = document.getElementById('reportProgramAvailableBadge');
+
+    if (!classSelect || !progSelect) return;
+
+    // 1. Classes dropdown
+    const classList = getAllReportClassList();
+    const distinctClassCount = new Set(classList.map(c => normalizeReportClassKey(c.ma_lop)).filter(Boolean)).size;
+    if (classBadge) classBadge.textContent = distinctClassCount + ' lớp';
+
+    let classOptHtml = '<option value="">-- Vui lòng chọn lớp học (' + distinctClassCount + ' lớp) --</option>';
+    classList.forEach(c => {
+      const progShort = c.ten_ct.length > 38 ? c.ten_ct.slice(0, 36) + '...' : c.ten_ct;
+      classOptHtml += '<option value="' + (c.uniqueKey || c.ma_lop) + '">' + c.ma_lop + ' (' + c.hinh_thuc_hoc + ') - ' + progShort + '</option>';
+    });
+    classSelect.innerHTML = classOptHtml;
+
+    // CBQL Filter
+    if (classCbqlSelect) {
+      const cbqls = Array.from(new Set(classList.map(c => (c.cbql || '').trim()).filter(Boolean))).sort();
+      let cbqlHtml = '<option value="">Tất cả cán bộ (' + cbqls.length + ')</option>';
+      cbqls.forEach(cb => {
+        cbqlHtml += '<option value="' + cb + '">' + cb + '</option>';
+      });
+      classCbqlSelect.innerHTML = cbqlHtml;
+    }
+
+    // Class Format Filter
+    if (classFmtSelect) {
+      classFmtSelect.innerHTML = 
+        '<option value="">Tất cả hình thức</option>' +
+        '<option value="Trực tiếp">Trực tiếp</option>' +
+        '<option value="Trực tiếp kết hợp Trực tuyến">Trực tiếp kết hợp Trực tuyến</option>' +
+        '<option value="Trực tuyến">Trực tuyến</option>';
+    }
+
+    // 2. Programs dropdown
+    const progList = getAllReportProgramList();
+    if (progBadge) progBadge.textContent = progList.length + ' CT';
+
+    let progOptHtml = '<option value="">-- Vui lòng chọn chương trình (' + progList.length + ' CT) --</option>';
+    progList.forEach(p => {
+      const nameShort = p.name.length > 45 ? p.name.slice(0, 43) + '...' : p.name;
+      progOptHtml += '<option value="' + p.code + '">' + p.code + ' — ' + nameShort + '</option>';
+    });
+    progSelect.innerHTML = progOptHtml;
+
+    // Program Format Filter
+    if (progFmtSelect) {
+      progFmtSelect.innerHTML = 
+        '<option value="">Tất cả hình thức</option>' +
+        '<option value="Trực tiếp">Trực tiếp</option>' +
+        '<option value="Trực tiếp kết hợp Trực tuyến">Trực tiếp kết hợp Trực tuyến</option>' +
+        '<option value="Trực tuyến">Trực tuyến</option>';
+    }
+  }
+
+  // --- LOADER 1: LOAD CLASS REPORT ---
+  function loadClassReport(keyOrCode) {
+    if (!keyOrCode) return;
+    reportState.mode = 'class';
+    reportState.selectedClass = keyOrCode;
+
+    const data = getDetailedClassReport(keyOrCode);
+    if (!data) return;
+    reportState.currentClassData = data;
+
+    const emptyState = document.getElementById('reportEmptyState');
+    const contentArea = document.getElementById('reportContentArea');
+    if (emptyState) emptyState.style.display = 'none';
+    if (contentArea) contentArea.style.display = 'block';
+
+    // Hide program comparison section in class mode
+    const progSection = document.getElementById('reportProgramComparisonSection');
+    if (progSection) progSection.style.display = 'none';
+
+    // Render Overview & KPIs
+    const overviewCard = document.getElementById('reportOverviewCard');
+    renderExecutiveOverview(overviewCard, data, false);
+
+    // Render Section I (NDĐT)
+    const nddtSec = document.getElementById('reportNddtSection');
+    renderExecutiveNddtSection(nddtSec, data.nddt, { isProgram: false });
+
+    // Render Section II (PPHTĐT)
+    const pphtSec = document.getElementById('reportPphtSection');
+    renderExecutivePphtSection(pphtSec, data.ppht, { isProgram: false });
+
+    // Render Section III (CSVC)
+    const csvcSec = document.getElementById('reportCsvcSection');
+    renderReportCsvcSection(csvcSec, data.csvc, { isProgram: false });
+
+    // Render Section IV (GV)
+    const gvSec = document.getElementById('reportGvSection');
+    renderReportGvSection(gvSec, data, { isProgram: false });
+
+    // Render Section V (DGC)
+    const dgcSec = document.getElementById('reportDgcSection');
+    renderReportDgcSection(dgcSec, data.dgc, { isProgram: false });
+  }
+
+  // --- LOADER 2: LOAD PROGRAM REPORT ---
+  function loadProgramReport(programCode) {
+    if (!programCode) return;
+    reportState.mode = 'program';
+    reportState.selectedProgram = programCode;
+
+    const data = getDetailedProgramReport(programCode);
+    if (!data) return;
+    reportState.currentProgramData = data;
+
+    const emptyState = document.getElementById('reportEmptyState');
+    const contentArea = document.getElementById('reportContentArea');
+    if (emptyState) emptyState.style.display = 'none';
+    if (contentArea) contentArea.style.display = 'block';
+
+    // Render Overview & KPIs
+    const overviewCard = document.getElementById('reportOverviewCard');
+    renderExecutiveOverview(overviewCard, data, true);
+
+    // Render Program Comparison Tables (Table 1 & Table 2)
+    const progSection = document.getElementById('reportProgramComparisonSection');
+    renderProgramComparisonSection(progSection, data);
+
+    // Render Section I (NDĐT)
+    const nddtSec = document.getElementById('reportNddtSection');
+    renderExecutiveNddtSection(nddtSec, data.nddt, {
+      isProgram: true,
+      evaluatedClassesCount: data.classes.filter(c => c.votes > 0).length
+    });
+
+    // Render Section II (PPHTĐT)
+    const pphtSec = document.getElementById('reportPphtSection');
+    renderExecutivePphtSection(pphtSec, data, {
+      isProgram: true,
+      evaluatedClassesCount: data.classes.filter(c => c.votes > 0).length
+    });
+
+    // Render Section III (CSVC)
+    const csvcSec = document.getElementById('reportCsvcSection');
+    renderReportCsvcSection(csvcSec, data.csvc, { isProgram: true });
+
+    // Render Section IV (GV)
+    const gvSec = document.getElementById('reportGvSection');
+    renderReportGvSection(gvSec, data, { isProgram: true });
+
+    // Render Section V (DGC)
+    const dgcSec = document.getElementById('reportDgcSection');
+    renderReportDgcSection(dgcSec, data.dgc, { isProgram: true });
+  }
+
+  // --- ATTACH EVENT LISTENERS ---
+  function attachReportEventListeners() {
+    // Mode toggles
+    const btnModeClass = document.getElementById('btnReportModeClass');
+    const btnModeProg = document.getElementById('btnReportModeProgram');
+    const selClass = (document.getElementById('reportClassSelectorArea') || document.getElementById('selectorReportClass'));
+    const selProg = (document.getElementById('reportProgramSelectorArea') || document.getElementById('selectorReportProgram'));
+
+    if (btnModeClass) {
+      btnModeClass.addEventListener('click', () => {
+        reportState.mode = 'class';
+        btnModeClass.classList.add('active');
+        if (btnModeProg) btnModeProg.classList.remove('active');
+        if (selClass) selClass.style.display = 'block';
+        if (selProg) selProg.style.display = 'none';
+      });
+    }
+
+    if (btnModeProg) {
+      btnModeProg.addEventListener('click', () => {
+        reportState.mode = 'program';
+        btnModeProg.classList.add('active');
+        if (btnModeClass) btnModeClass.classList.remove('active');
+        if (selClass) selClass.style.display = 'none';
+        if (selProg) selProg.style.display = 'block';
+      });
+    }
+
+    // Button Load Class
+    const btnLoadClass = document.getElementById('btnLoadClassReport');
+    if (btnLoadClass) {
+      btnLoadClass.addEventListener('click', () => {
+        const sel = document.getElementById('selectReportClass');
+        if (sel && sel.value) loadClassReport(sel.value);
+      });
+    }
+
+    // Button Load Program
+    const btnLoadProg = document.getElementById('btnLoadProgramReport');
+    if (btnLoadProg) {
+      btnLoadProg.addEventListener('click', () => {
+        const sel = document.getElementById('selectReportProgram');
+        if (sel && sel.value) loadProgramReport(sel.value);
+      });
+    }
+
+    // Auto change dropdown listeners
+    const classSelect = document.getElementById('selectReportClass');
+    if (classSelect) {
+      classSelect.addEventListener('change', () => {
+        if (classSelect.value) loadClassReport(classSelect.value);
+      });
+    }
+
+    const progSelect = document.getElementById('selectReportProgram');
+    if (progSelect) {
+      progSelect.addEventListener('change', () => {
+        if (progSelect.value) loadProgramReport(progSelect.value);
+      });
+    }
+
+    // Class Search Input
+    const classSearch = (document.getElementById('inputReportClassSearch') || document.getElementById('filterReportClassSearch'));
+    if (classSearch) {
+      classSearch.addEventListener('input', () => {
+        const val = classSearch.value.toLowerCase().trim();
+        if (!classSelect) return;
+        Array.from(classSelect.options).forEach((opt, idx) => {
+          if (idx === 0) return;
+          const txt = opt.textContent.toLowerCase();
+          opt.style.display = txt.includes(val) ? '' : 'none';
+        });
+      });
+    }
+
+    // Program Search Input
+    const progSearch = (document.getElementById('inputReportProgramSearch') || document.getElementById('filterReportProgramSearch'));
+    if (progSearch) {
+      progSearch.addEventListener('input', () => {
+        const val = progSearch.value.toLowerCase().trim();
+        if (!progSelect) return;
+        Array.from(progSelect.options).forEach((opt, idx) => {
+          if (idx === 0) return;
+          const txt = opt.textContent.toLowerCase();
+          opt.style.display = txt.includes(val) ? '' : 'none';
+        });
+      });
+    }
+
+    // Export Buttons
+    const btnPdf = (document.getElementById('btnReportPrint') || document.getElementById('btnReportExportPdf'));
+    if (btnPdf) btnPdf.addEventListener('click', exportReportToPdf);
+
+    const btnExcel = document.getElementById('btnReportExportExcel');
+    if (btnExcel) btnExcel.addEventListener('click', exportReportToExcel);
+
+    const btnCsv = document.getElementById('btnReportExportCsv');
+    if (btnCsv) btnCsv.addEventListener('click', exportReportToCsv);
+  }
+
+  // --- INITIALIZER ---
+  function setupGeneralReportModule() {
+    if (typeof reportState === 'undefined' || !reportState) {
+      reportState = window.reportState = window.reportState || {
+        mode: 'class',
+        selectedClass: '',
+        selectedProgram: '',
+        previousProgram: '',
+        classSearch: '',
+        classFormat: '',
+        classCbql: '',
+        programSearch: '',
+        programTime: '',
+        programFormat: '',
+        compareMetric: 'all',
+        currentClassData: null,
+        currentProgramData: null,
+        pphtFormatFilter: 'all',
+        nddtFormatFilter: 'all'
+      };
+    }
+    if (typeof reportCharts === 'undefined' || !reportCharts) {
+      reportCharts = window.reportCharts = window.reportCharts || {
+        programComparison: null,
+        nddtStacked: null,
+        pphtStacked: null,
+        csvcLocation: null,
+        gvComparison: null
+      };
+    }
+    populateReportDropdowns();
+    attachReportEventListeners();
+
+    // Default: if no class or program selected, load first program or class
+    if (!reportState.selectedClass && !reportState.selectedProgram) {
+      // Keep empty state initially so user can choose
+    }
+  }
+
+  // --- EXPORT 1: EXCEL (MULTI-SHEET WORKBOOK) ---
+  function exportReportToExcel() {
+    if (typeof XLSX !== 'undefined') {
+      try {
+        if (reportState.mode === 'class') {
+          const d = reportState.currentClassData;
+          if (!d) return;
+
+          const summaryData = [{
+            'Mã Lớp Học': d.classCode,
+            'Chương Trình': d.className,
+            'Hình Thức': d.format,
+            'Thời Gian': d.startDate + (d.endDate ? ' - ' + d.endDate : ''),
+            'Địa Điểm': d.location,
+            'Cán Bộ Quản Lý': d.cbql,
+            'Học Viên Kế Hoạch': d.hvKh || 0,
+            'Học Viên Thực Tế': d.hvThucTe,
+            'Số Phiếu Khảo Sát': d.votes,
+            'Tỷ Lệ Phản Hồi (%)': Number(d.responseRate.toFixed(1)),
+            'Điểm NDĐT (4.0)': d.nddt ? Number((d.nddt.score || d.nddt.diem_tb || 0).toFixed(2)) : null,
+            'Điểm PPHT (4.0)': d.ppht ? Number((d.ppht.score || d.ppht.diem_tb || 0).toFixed(2)) : null,
+            'Điểm CSVC (4.0)': d.csvc ? Number((d.csvc.score || d.csvc.diem_tb || 0).toFixed(2)) : null,
+            'Điểm Giảng Viên (5.0)': (d.gvList && d.gvList.length > 0) ? Number((d.gvList.reduce((acc, g) => acc + (g.diem_tb || 0), 0) / d.gvList.length).toFixed(2)) : null,
+            'Điểm ĐGC (5.0)': d.dgc ? Number((d.dgc.score || d.dgc.diem_tb || 0).toFixed(2)) : null
+          }];
+
+          const wb = XLSX.utils.book_new();
+          const wsSummary = XLSX.utils.json_to_sheet(summaryData);
+          XLSX.utils.book_append_sheet(wb, wsSummary, "TongQuan");
+
+          if (d.gvList && d.gvList.length > 0) {
+            const gvRows = d.gvList.map((g, idx) => ({
+              'STT': idx + 1,
+              'Họ và Tên': g.name || g.ten_gv,
+              'Đơn Vị': g.donVi || g.don_vi,
+              'Nội Dung Giảng': g.noi_dung_giang || 'Toàn khóa',
+              'Số Tiết (Chuẩn)': g.totalHours || g.so_tiet || 0,
+              'Số Phiếu': g.tong_phieu || 0,
+              'KT Chuyên Môn (5.0)': g.diem_ktcm || 0,
+              'Kỹ Năng Sư Phạm (5.0)': g.diem_knsp || 0,
+              'Tác Phong (5.0)': g.diem_tdtp || 0,
+              'Điểm TB (5.0)': g.diem_tb || 0
+            }));
+            const wsGv = XLSX.utils.json_to_sheet(gvRows);
+            XLSX.utils.book_append_sheet(wb, wsGv, "GiangVien");
+          }
+
+          XLSX.writeFile(wb, 'Bao_cao_lop_' + d.classCode.replace(/[^a-zA-Z0-9]/g, '_') + '.xlsx');
+          if (typeof showToast === 'function') showToast('Đã xuất thành công báo cáo Excel', 'success');
+          return;
+
+        } else {
+          const p = reportState.currentProgramData;
+          if (!p) return;
+
+          const classRows = p.classes.map((c, idx) => {
+            const gvTb = (c.gvList && c.gvList.length > 0) ? Number((c.gvList.reduce((acc, g) => acc + (g.diem_tb || 0), 0) / c.gvList.length).toFixed(2)) : null;
+            return {
+              'STT': idx + 1,
+              'Mã Lớp': c.classCode,
+              'Hình Thức': c.format,
+              'Từ Ngày': c.startDate,
+              'Đến Ngày': c.endDate,
+              'Địa Điểm': c.location,
+              'Cán Bộ Quản Lý': c.cbql,
+              'HV Kế Hoạch': c.hvKh || 0,
+              'HV Thực Tế': c.hvThucTe,
+              'Số Phiếu': c.votes,
+              'Tỷ Lệ Phản Hồi (%)': Number(c.responseRate.toFixed(1)),
+              'Điểm NDĐT (4.0)': c.nddt ? Number((c.nddt.score || c.nddt.diem_tb || 0).toFixed(2)) : null,
+              'Điểm PPHT (4.0)': c.ppht ? Number((c.ppht.score || c.ppht.diem_tb || 0).toFixed(2)) : null,
+              'Điểm CSVC (4.0)': c.csvc ? Number((c.csvc.score || c.csvc.diem_tb || 0).toFixed(2)) : null,
+              'Điểm Giảng Viên (5.0)': gvTb,
+              'Điểm ĐGC (5.0)': c.dgc ? Number((c.dgc.score || c.dgc.diem_tb || 0).toFixed(2)) : null
+            };
+          });
+
+          const wb = XLSX.utils.book_new();
+          const wsClasses = XLSX.utils.json_to_sheet(classRows);
+          XLSX.utils.book_append_sheet(wb, wsClasses, "DanhSachLop");
+
+          if (p.lecturers && p.lecturers.length > 0) {
+            const gvRows = p.lecturers.map((g, idx) => ({
+              'STT': idx + 1,
+              'Họ và Tên': g.name,
+              'Đơn Vị': g.donVi,
+              'Số Lớp Dạy': g.classesCount,
+              'Tổng Số Tiết (Chuẩn)': g.totalHours,
+              'Tổng Số Phiếu': g.totalVotes,
+              'KT Chuyên Môn (5.0)': g.diem_ktcm,
+              'Kỹ Năng Sư Phạm (5.0)': g.diem_knsp,
+              'Tác Phong (5.0)': g.diem_tdtp,
+              'Điểm TB (5.0)': g.diem_tb
+            }));
+            const wsGv = XLSX.utils.json_to_sheet(gvRows);
+            XLSX.utils.book_append_sheet(wb, wsGv, "GiangVienChuongTrinh");
+          }
+
+          XLSX.writeFile(wb, 'Bao_cao_chuong_trinh_' + p.programCode.replace(/[^a-zA-Z0-9]/g, '_') + '.xlsx');
+          if (typeof showToast === 'function') showToast('Đã xuất thành công báo cáo Excel', 'success');
+          return;
+        }
+      } catch (err) {
+        console.warn("XLSX export error, falling back to CSV:", err);
+      }
+    }
+    exportReportToCsv();
+  }
+
+  // --- EXPORT 2: PDF PRINT ---
+  function exportReportToPdf() {
+    window.print();
+  }
+
+  // --- EXPORT 3: CSV FALLBACK ---
+  function exportReportToCsv() {
+    if (reportState.mode === 'class') {
+      const d = reportState.currentClassData;
+      if (!d) return;
+      const csv = 'Ma Lop,Chuong Trinh,Hinh Thuc,Dia Diem,HV Thuc Te,So Phieu,Diem TB NDDT,Diem TB PPHT,Diem TB CSVC\n' +
+        '"' + d.classCode + '","' + d.className + '","' + d.format + '","' + d.location + '",' + d.hvThucTe + ',' + d.votes + ',' +
+        (d.nddt ? (d.nddt.score || d.nddt.diem_tb || 0).toFixed(2) : '0') + ',' +
+        (d.ppht ? (d.ppht.score || d.ppht.diem_tb || 0).toFixed(2) : '0') + ',' +
+        (d.csvc ? (d.csvc.score || d.csvc.diem_tb || 0).toFixed(2) : '0');
+      downloadCsvFile(csv, 'Bao_cao_lop_' + d.classCode.replace(/[^a-zA-Z0-9]/g, '_') + '.csv');
+    } else {
+      const p = reportState.currentProgramData;
+      if (!p) return;
+      let csv = 'STT,Ma Lop,Hinh Thuc,Thoi Gian,Dia Diem,HV Ke Hoach,HV Thuc Te,So Phieu,Ty Le Phan Hoi\n';
+      p.classes.forEach((c, idx) => {
+        csv += (idx + 1) + ',"' + c.classCode + '","' + c.format + '","' + c.startDate + '","' + c.location + '",' + (c.hvKh || 0) + ',' + c.hvThucTe + ',' + c.votes + ',' + c.responseRate.toFixed(1) + '%\n';
+      });
+      downloadCsvFile(csv, 'Bao_cao_chuong_trinh_' + p.programCode.replace(/[^a-zA-Z0-9]/g, '_') + '.csv');
+    }
+  }
+
+  function downloadCsvFile(csvContent, filename) {
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  // End of General Report Module
+
+  // Window exports for general report
+  window.setupGeneralReportModule = setupGeneralReportModule;
+  window.loadClassReport = loadClassReport;
+  window.loadProgramReport = loadProgramReport;
+  window.getDetailedProgramReport = getDetailedProgramReport;
+  window.getDetailedClassReport = getDetailedClassReport;
+  window.findClassesForProgram = findClassesForProgram;
+  window.getAllReportClassList = getAllReportClassList;
+  window.getAllReportProgramList = getAllReportProgramList;
+  window.renderReportCsvcSection = renderReportCsvcSection;
+  window.renderExecutiveNddtSection = renderExecutiveNddtSection;
+  window.renderExecutivePphtSection = renderExecutivePphtSection;
+  window.renderReportGvSection = renderReportGvSection;
+  window.renderReportDgcSection = renderReportDgcSection;
 
   function closeSheetUrlModal() {
     window.closeSheetModal();

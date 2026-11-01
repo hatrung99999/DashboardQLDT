@@ -19,7 +19,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
   <!-- Dashboard Stylesheet -->
-  <link rel="stylesheet" href="styles.css?v=9669_v25">
+  <link rel="stylesheet" href="styles.css?v=9669_v39">
 </head>
 
 <body>
@@ -84,6 +84,12 @@
       </button>
       <button type="button" class="screen-tab" id="tabGv" data-screen="screenGv" onclick="if(window.switchScreen) window.switchScreen('screenGv')">
         <i class="fa-solid fa-user-tie"></i> Đánh giá Giảng viên
+      </button>
+      <button type="button" class="screen-tab" id="tabDgc" data-screen="screenDgc" onclick="if(window.switchScreen) window.switchScreen('screenDgc')">
+        <i class="fa-solid fa-clipboard-check"></i> Đánh giá chung
+      </button>
+      <button type="button" class="screen-tab" id="tabGeneralReport" data-screen="screenGeneralReport" onclick="if(window.switchScreen) window.switchScreen('screenGeneralReport')">
+        <i class="fa-solid fa-file-invoice"></i> Báo cáo chung
       </button>
     </nav>
 
@@ -1374,6 +1380,689 @@
       </section>
     </main>
 
+    <!-- SCREEN 6: ĐÁNH GIÁ CHUNG (DGC) -->
+    <main id="screenDgc" class="screen-content">
+      <!-- TIME FILTER & SLICER SECTION -->
+      <section class="filter-panel" style="margin-bottom: 1.25rem;">
+        <div class="filter-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <i class="fa-solid fa-filter" style="color: var(--brand-primary); font-size: 1.1rem;"></i>
+            <span style="font-weight: 700; font-size: 0.95rem; color: #1E293B;">BỘ LỌC TỰ ĐÁNH GIÁ CUỐI KHÓA</span>
+            <span class="badge" style="background: #E0F2FE; color: #0284C7; font-weight: 600; font-size: 0.75rem; padding: 0.2rem 0.5rem; border-radius: 4px;">Sheet: ĐGC</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <span id="dgcFilterCountSummary" style="font-size: 0.82rem; color: var(--text-muted); font-weight: 600;">Hiển thị: 0/0 lớp</span>
+            <button type="button" id="btnSyncDgcGoogleSheet" class="btn" style="font-size: 0.75rem; padding: 0.3rem 0.65rem; background: #ECFDF5; color: #0F5132; border: 1px solid #A7F3D0; border-radius: 6px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 0.35rem;" title="Đồng bộ trực tiếp từ Google Sheet ĐGC">
+              <i class="fa-solid fa-cloud-arrow-down"></i> Đồng bộ GG Sheet
+            </button>
+          </div>
+        </div>
+
+        <!-- Date Presets -->
+        <div class="preset-group" style="display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.85rem;">
+          <button type="button" class="btn btn-sm dgc-preset-btn active" data-dgc-preset="all">Tất cả</button>
+          <button type="button" class="btn btn-sm dgc-preset-btn" data-dgc-preset="today">Hôm nay</button>
+          <button type="button" class="btn btn-sm dgc-preset-btn" data-dgc-preset="thisWeek">Tuần này</button>
+          <button type="button" class="btn btn-sm dgc-preset-btn" data-dgc-preset="thisMonth">Tháng này</button>
+          <button type="button" class="btn btn-sm dgc-preset-btn" data-dgc-preset="q1">Quý 1</button>
+          <button type="button" class="btn btn-sm dgc-preset-btn" data-dgc-preset="q2">Quý 2</button>
+          <button type="button" class="btn btn-sm dgc-preset-btn" data-dgc-preset="q3">Quý 3</button>
+          <button type="button" class="btn btn-sm dgc-preset-btn" data-dgc-preset="q4">Quý 4</button>
+          <button type="button" class="btn btn-sm dgc-preset-btn" data-dgc-preset="thisYear">Năm 2026</button>
+        </div>
+
+        <!-- Selectors Row -->
+        <div class="filter-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; align-items: end;">
+          <!-- Program Select -->
+          <div class="selector-item">
+            <label for="filterDgcProgram"><i class="fa-solid fa-graduation-cap"></i> Chương trình</label>
+            <select id="filterDgcProgram">
+              <option value="">Tất cả chương trình</option>
+            </select>
+          </div>
+
+          <!-- Format Select -->
+          <div class="selector-item">
+            <label for="filterDgcFormat"><i class="fa-solid fa-chalkboard-user"></i> Hình thức học</label>
+            <select id="filterDgcFormat">
+              <option value="">Tất cả hình thức</option>
+            </select>
+          </div>
+
+          <!-- CBQL Select -->
+          <div class="selector-item">
+            <label for="filterDgcCbql"><i class="fa-solid fa-user-gear"></i> Cán bộ quản lý</label>
+            <select id="filterDgcCbql">
+              <option value="">Tất cả cán bộ QL</option>
+            </select>
+          </div>
+
+          <!-- Rating Level Dropdown -->
+          <div class="selector-item">
+            <label for="filterDgcRatingLevel"><i class="fa-solid fa-star-half-stroke"></i> Mức đánh giá (Điểm TB)</label>
+            <select id="filterDgcRatingLevel">
+              <option value="">Tất cả mức</option>
+              <option value="high">Xuất sắc / Rất rõ rệt (≥ 4.50)</option>
+              <option value="good">Tốt / Rõ rệt (4.00 – 4.49)</option>
+              <option value="fair">Khá / Trung bình (3.00 – 3.99)</option>
+              <option value="warning">Cần lưu ý (&lt; 3.00)</option>
+            </select>
+          </div>
+
+          <!-- Search Query -->
+          <div class="selector-item" style="min-width: 220px;">
+            <label for="filterDgcSearch"><i class="fa-solid fa-magnifying-glass"></i> Tìm kiếm</label>
+            <input type="text" id="filterDgcSearch" placeholder="Tìm theo mã lớp, chương trình, CBQL...">
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="selector-item actions-cell" style="display: flex; align-items: flex-end; gap: 0.5rem; justify-content: flex-end;">
+            <button type="button" id="btnResetDgcFilter" class="btn btn-secondary" title="Đặt lại toàn bộ bộ lọc" style="font-size: 0.8rem; padding: 0.5rem 0.85rem;">
+              <i class="fa-solid fa-rotate-left"></i> Đặt lại
+            </button>
+            <button type="button" id="btnExportDgcCsv" class="btn btn-export" title="Xuất dữ liệu Đánh giá chung ra CSV" style="font-size: 0.8rem; padding: 0.5rem 0.85rem;">
+              <i class="fa-solid fa-file-csv"></i> Xuất CSV
+            </button>
+            <button type="button" id="btnExportDgcExcel" class="btn btn-export" title="Xuất báo cáo Đánh giá chung ra Excel" style="font-size: 0.8rem; padding: 0.5rem 0.85rem; background: #0F5132; color: white;">
+              <i class="fa-solid fa-file-excel"></i> Xuất Excel
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 6 EXECUTIVE KPI CARDS -->
+      <section class="kpi-grid-6">
+        <!-- KPI 1: Số lớp khảo sát -->
+        <div class="kpi-card-light">
+          <div class="kpi-card-top">
+            <span class="kpi-label-light">TỔNG SỐ LỚP KHẢO SÁT</span>
+            <div class="kpi-icon-circle" style="background: #E0F2FE; color: #0284C7;">
+              <i class="fa-solid fa-chalkboard"></i>
+            </div>
+          </div>
+          <div class="kpi-val-light" id="kpiDgcTotalClasses">0</div>
+          <div class="kpi-subtext" style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.35rem;">
+            Lớp học có dữ liệu đánh giá cuối khóa
+          </div>
+        </div>
+
+        <!-- KPI 2: Tổng phiếu khảo sát -->
+        <div class="kpi-card-light">
+          <div class="kpi-card-top">
+            <span class="kpi-label-light">TỔNG PHIẾU PHẢN HỒI</span>
+            <div class="kpi-icon-circle" style="background: #FDF2F8; color: var(--brand-primary);">
+              <i class="fa-solid fa-square-poll-vertical"></i>
+            </div>
+          </div>
+          <div class="kpi-val-light" id="kpiDgcTotalVotes">0</div>
+          <div class="kpi-subtext" style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.35rem;">
+            Lượt học viên gửi phiếu hợp lệ
+          </div>
+        </div>
+
+        <!-- KPI 3: Tỷ lệ tham gia khảo sát -->
+        <div class="kpi-card-light">
+          <div class="kpi-card-top">
+            <span class="kpi-label-light">TỶ LỆ THAM GIA KHẢO SÁT</span>
+            <div class="kpi-icon-circle" style="background: #ECFDF5; color: #059669;">
+              <i class="fa-solid fa-user-check"></i>
+            </div>
+          </div>
+          <div style="display: flex; align-items: baseline; gap: 0.3rem;">
+            <div class="kpi-val-light" id="kpiDgcParticipationRate" style="color: #0F5132;">0.0</div>
+            <span style="font-size: 1rem; font-weight: 700; color: #0F5132;">%</span>
+          </div>
+          <div class="kpi-subtext" id="kpiDgcParticipationSubtext" style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.35rem;">
+            So với học viên thực tế
+          </div>
+        </div>
+
+        <!-- KPI 4: Điểm Cải thiện Kiến thức -->
+        <div class="kpi-card-light">
+          <div class="kpi-card-top">
+            <span class="kpi-label-light">CẢI THIỆN KIẾN THỨC</span>
+            <div class="kpi-icon-circle" style="background: #EFF6FF; color: #1D4ED8;">
+              <i class="fa-solid fa-brain"></i>
+            </div>
+          </div>
+          <div style="display: flex; align-items: baseline; gap: 0.4rem;">
+            <div class="kpi-val-light" id="kpiDgcScoreKt" style="color: #1D4ED8;">0.00</div>
+            <span style="font-size: 0.95rem; font-weight: 700; color: var(--text-muted);">/ 5.0</span>
+          </div>
+          <div id="kpiDgcPosRateKtBadge" class="kpi-subtext" style="font-size: 0.78rem; font-weight: 700; color: #0F5132; margin-top: 0.35rem;">
+            Tích cực (Mức 4-5): 0.0%
+          </div>
+        </div>
+
+        <!-- KPI 5: Điểm Cải thiện Kỹ năng -->
+        <div class="kpi-card-light">
+          <div class="kpi-card-top">
+            <span class="kpi-label-light">CẢI THIỆN KỸ NĂNG</span>
+            <div class="kpi-icon-circle" style="background: #ECFDF5; color: #059669;">
+              <i class="fa-solid fa-screwdriver-wrench"></i>
+            </div>
+          </div>
+          <div style="display: flex; align-items: baseline; gap: 0.4rem;">
+            <div class="kpi-val-light" id="kpiDgcScoreKn" style="color: #059669;">0.00</div>
+            <span style="font-size: 0.95rem; font-weight: 700; color: var(--text-muted);">/ 5.0</span>
+          </div>
+          <div id="kpiDgcPosRateKnBadge" class="kpi-subtext" style="font-size: 0.78rem; font-weight: 700; color: #0F5132; margin-top: 0.35rem;">
+            Tích cực (Mức 4-5): 0.0%
+          </div>
+        </div>
+
+        <!-- KPI 6: Điểm Đánh giá chung TB -->
+        <div class="kpi-card-light">
+          <div class="kpi-card-top">
+            <span class="kpi-label-light">ĐIỂM ĐÁNH GIÁ CHUNG TB</span>
+            <div class="kpi-icon-circle" style="background: #FDF2F8; color: var(--brand-primary);">
+              <i class="fa-solid fa-award"></i>
+            </div>
+          </div>
+          <div style="display: flex; align-items: baseline; gap: 0.4rem;">
+            <div class="kpi-val-light" id="kpiDgcAvgScore" style="color: var(--brand-primary);">0.00</div>
+            <span style="font-size: 0.95rem; font-weight: 700; color: var(--text-muted);">/ 5.0</span>
+          </div>
+          <div id="kpiDgcRatingBadge" class="kpi-subtext" style="font-size: 0.78rem; font-weight: 700; color: #0F5132; margin-top: 0.35rem;">
+            Xếp loại: Xuất sắc
+          </div>
+        </div>
+      </section>
+
+      <!-- CHARTS SECTION: Visual 1 (Cơ cấu 5 mức - 4 Cột) + Visual 2 (So sánh Điểm đánh giá - 8 Cột) -->
+      <section class="charts-grid-row">
+        <!-- Visual 1: 100% Stacked Bar Chart (4 Columns - 33.3%) -->
+        <div class="chart-card chart-col-4" id="dgcStackedBarCard">
+          <div class="chart-header">
+            <div>
+              <h3>
+                <i class="fa-solid fa-chart-column" style="color: var(--brand-primary);"></i>
+                CƠ CẤU 5 MỨC ĐÁNH GIÁ THEO 2 TIÊU CHÍ
+              </h3>
+              <p style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.15rem;">
+                Tỷ lệ % tự đánh giá (5-Rất rõ rệt, 4-Rõ rệt, 3-Khá, 2-Ít, 1-Rất ít)
+              </p>
+            </div>
+          </div>
+          <div class="chart-container" style="height: 380px; min-height: 340px; position: relative;">
+            <canvas id="dgcStackedBarChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Visual 2: So sánh kết quả đánh giá chung (8 Columns - 66.7%) -->
+        <div class="chart-card chart-col-8">
+          <div class="chart-header" style="flex-wrap: wrap; gap: 0.5rem; justify-content: space-between; align-items: center;">
+            <div>
+              <h3>
+                <i class="fa-solid fa-chart-line" style="color: var(--brand-primary);"></i>
+                SO SÁNH KẾT QUẢ ĐÁNH GIÁ CHUNG
+              </h3>
+              <p style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.15rem;">
+                Phân tích điểm tự đánh giá Kiến thức, Kỹ năng (dạng đường) và Tổng số phiếu khảo sát (dạng cột)
+              </p>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+              <!-- Slicer đối tượng: Theo Lớp học / Theo Chương trình -->
+              <div class="btn-group" style="display: inline-flex; background: #F1F5F9; padding: 2px; border-radius: 6px; border: 1px solid #E2E8F0;">
+                <button type="button" id="btnDgcToggleClass" class="btn btn-sm active" style="font-size: 0.75rem; padding: 0.25rem 0.6rem; border: none; border-radius: 4px; font-weight: 700; cursor: pointer; background: var(--brand-primary); color: white;">
+                  <i class="fa-solid fa-chalkboard-user"></i> Theo Lớp học
+                </button>
+                <button type="button" id="btnDgcToggleProgram" class="btn btn-sm" style="font-size: 0.75rem; padding: 0.25rem 0.6rem; border: none; border-radius: 4px; font-weight: 700; cursor: pointer; background: transparent; color: #475569;">
+                  <i class="fa-solid fa-graduation-cap"></i> Theo Chương trình
+                </button>
+              </div>
+
+              <!-- Slicer con: Tiêu chí lọc Top -->
+              <div class="btn-group dgc-rank-slicer" style="display: inline-flex; background: #F1F5F9; padding: 2px; border-radius: 6px; border: 1px solid #CBD5E1;">
+                <button type="button" id="btnDgcRankAvg" class="btn btn-sm active" data-dgc-rank="avg" title="Lọc theo Top Điểm ĐGC TB" style="font-size: 0.75rem; padding: 0.25rem 0.6rem; border: none; border-radius: 4px; font-weight: 700; cursor: pointer; background: var(--brand-primary); color: white;">
+                  <i class="fa-solid fa-star" style="color: #FBBF24;"></i> Top Điểm TB
+                </button>
+                <button type="button" id="btnDgcRankKt" class="btn btn-sm" data-dgc-rank="kt" title="Lọc theo Top Điểm Cải thiện Kiến thức" style="font-size: 0.75rem; padding: 0.25rem 0.6rem; border: none; border-radius: 4px; font-weight: 700; cursor: pointer; background: transparent; color: #475569;">
+                  <i class="fa-solid fa-brain" style="color: #0284C7;"></i> Top Kiến thức
+                </button>
+                <button type="button" id="btnDgcRankKn" class="btn btn-sm" data-dgc-rank="kn" title="Lọc theo Top Điểm Cải thiện Kỹ năng" style="font-size: 0.75rem; padding: 0.25rem 0.6rem; border: none; border-radius: 4px; font-weight: 700; cursor: pointer; background: transparent; color: #475569;">
+                  <i class="fa-solid fa-screwdriver-wrench" style="color: #059669;"></i> Top Kỹ năng
+                </button>
+                <button type="button" id="btnDgcRankVotes" class="btn btn-sm" data-dgc-rank="votes" title="Lọc theo Top Số phiếu khảo sát" style="font-size: 0.75rem; padding: 0.25rem 0.6rem; border: none; border-radius: 4px; font-weight: 700; cursor: pointer; background: transparent; color: #475569;">
+                  <i class="fa-solid fa-users" style="color: #8C1D40;"></i> Top Số phiếu
+                </button>
+              </div>
+
+              <!-- Slicer giới hạn số lượng Top -->
+              <div style="display: inline-flex; align-items: center; gap: 0.25rem;">
+                <select id="selectDgcTopLimit" class="form-select form-select-sm" title="Chọn số lượng hiển thị" style="font-size: 0.75rem; padding: 0.22rem 0.45rem; border-radius: 6px; border: 1px solid #CBD5E1; background: white; font-weight: 700; color: #1E293B; cursor: pointer;">
+                  <option value="15" selected>Top 15</option>
+                  <option value="10">Top 10</option>
+                  <option value="20">Top 20</option>
+                  <option value="30">Top 30</option>
+                  <option value="all">Tất cả</option>
+                </select>
+              </div>
+
+              <span id="dgcChartDataCountBadge" class="badge" style="background: #FFF1F2; color: var(--brand-primary); border: 1px solid #FECDD3; font-size: 0.75rem; padding: 0.25rem 0.5rem; font-weight: 700;">
+                Top 15 / 136 mục
+              </span>
+            </div>
+          </div>
+          <div class="chart-container" style="height: 380px; min-height: 340px; position: relative;">
+            <canvas id="dgcComparisonChart"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <!-- QUALITATIVE FEEDBACK & GOVERNANCE NOTICE SECTION -->
+      <section class="card" style="margin-bottom: 1.25rem; border-left: 4px solid var(--brand-primary); background: #FAFDFB;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap;">
+          <div style="flex: 1; min-width: 280px;">
+            <h4 style="font-size: 0.95rem; font-weight: 800; color: #0F5132; margin-bottom: 0.35rem; display: flex; align-items: center; gap: 0.5rem;">
+              <i class="fa-solid fa-circle-info" style="color: var(--brand-primary);"></i> THÔNG BÁO VỀ Ý KIẾN ĐÓNG GÓP ĐỊNH TÍNH & BẢN CHẤT DỮ LIỆU
+            </h4>
+            <p style="font-size: 0.82rem; color: #374151; line-height: 1.5; margin: 0 0 0.4rem 0;">
+              • <strong>Bản chất dữ liệu:</strong> Toàn bộ điểm số tại phân hệ này là <strong>kết quả tự đánh giá của học viên ngay sau khi hoàn thành khóa học</strong> thông qua phiếu khảo sát cuối khóa. Điểm số phản ánh mức độ cải thiện tự nhận thức về mặt kiến thức và kỹ năng làm việc, không thay thế cho bài kiểm tra đánh giá năng lực thực tế hoặc đo lường hiệu quả ứng dụng sau 3–6 tháng tại đơn vị.
+            </p>
+            <p style="font-size: 0.82rem; color: #4B5563; line-height: 1.5; margin: 0;">
+              • <strong>Ý kiến định tính & Nội dung hữu ích:</strong> Dữ liệu tổng hợp từ sheet <code>ĐGC</code> hiện đang tổng hợp định lượng 2 tiêu chí đánh giá mức độ cải thiện. Các câu hỏi mở về <em>"Nội dung học viên thấy hữu ích nhất"</em> và <em>"Ý kiến góp ý, đề xuất cải tiến khác"</em> đang được lưu trữ tại phiếu khảo sát chi tiết của từng học viên và sẽ được tích hợp phân tích ngữ nghĩa / trích xuất từ khóa khi có tệp xuất chi tiết học viên.
+            </p>
+          </div>
+          <div style="background: white; border: 1px solid #E2E8F0; border-radius: 8px; padding: 0.75rem 1rem; min-width: 260px; box-shadow: var(--shadow-sm);">
+            <div style="font-size: 0.78rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 0.35rem;">
+              Khảo sát theo hình thức
+            </div>
+            <div id="dgcFormatBreakdownStats" style="display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.8rem;">
+              <!-- Rendered dynamically -->
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- DATA TABLE SECTION -->
+      <section class="card">
+        <div class="card-header" style="flex-wrap: wrap; gap: 0.75rem; justify-content: space-between; align-items: center;">
+          <div>
+            <h3>
+              <i class="fa-solid fa-table-list" style="color: var(--brand-primary);"></i>
+              DANH SÁCH LỚP HỌC KHẢO SÁT ĐÁNH GIÁ CHUNG
+            </h3>
+            <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.15rem;">
+              Bảng chi tiết điểm tự đánh giá Kiến thức, Kỹ năng, Điểm TB và Tỷ lệ tích cực theo từng lớp học
+            </p>
+          </div>
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <span id="dgcTableCountBadge" class="badge" style="background: #F1F5F9; color: #334155; font-size: 0.8rem; padding: 0.35rem 0.65rem;">
+              0 lớp
+            </span>
+          </div>
+        </div>
+
+        <div class="table-container" style="max-height: 520px; overflow-y: auto;">
+          <table class="data-table" id="dgcClassesTable">
+            <thead>
+              <tr>
+                <th style="width: 4%; text-align: center;">STT</th>
+                <th data-dgc-sort="ma_lop" style="width: 22%;">MÃ LỚP / CHƯƠNG TRÌNH <i class="fa-solid fa-sort"></i></th>
+                <th data-dgc-sort="hinh_thuc_hoc" style="width: 11%; text-align: center;">HÌNH THỨC <i class="fa-solid fa-sort"></i></th>
+                <th data-dgc-sort="ngay_bd" style="width: 10%; text-align: center;">THỜI GIAN <i class="fa-solid fa-sort"></i></th>
+                <th data-dgc-sort="cbql" style="width: 12%;">CB QUẢN LÝ <i class="fa-solid fa-sort"></i></th>
+                <th data-dgc-sort="tong_phieu" style="width: 6%; text-align: center;" title="Tổng số phiếu khảo sát">PHIẾU <i class="fa-solid fa-sort"></i></th>
+                <th data-dgc-sort="diem_kt" style="width: 8%; text-align: center;" title="Điểm TB tự đánh giá Cải thiện Kiến thức (Thang 5)">ĐIỂM KT <i class="fa-solid fa-sort"></i></th>
+                <th data-dgc-sort="diem_kn" style="width: 8%; text-align: center;" title="Điểm TB tự đánh giá Cải thiện Kỹ năng (Thang 5)">ĐIỂM KN <i class="fa-solid fa-sort"></i></th>
+                <th data-dgc-sort="diem_tb" style="width: 8.5%; text-align: center;" title="Điểm trung bình cộng Kiến thức & Kỹ năng (Thang 5)">ĐIỂM ĐGC <i class="fa-solid fa-sort"></i></th>
+                <th data-dgc-sort="ty_le_tich_cuc_tb" style="width: 7.5%; text-align: center;" title="Tỷ lệ đánh giá tích cực Mức 4 - 5">TÍCH CỰC <i class="fa-solid fa-sort"></i></th>
+                <th style="width: 5%; text-align: center;">CHI TIẾT</th>
+              </tr>
+            </thead>
+            <tbody id="dgcClassesTableBody">
+              <!-- Rendered dynamically by JS -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <!-- SCREEN 7: BÁO CÁO CHUNG (GENERAL TRAINING REPORT) -->
+    <main id="screenGeneralReport" class="screen-content">
+      <!-- REPORT CONTROL BAR: SEGMENTED CONTROLS & EXPORT ACTIONS -->
+      <section class="card no-print" style="margin-bottom: 1.25rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+          <div>
+            <h2 style="font-size: 1.25rem; font-weight: 800; color: var(--brand-primary); margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+              <i class="fa-solid fa-file-invoice"></i> BÁO CÁO TỔNG HỢP KẾT QUẢ ĐÀO TẠO
+            </h2>
+            <p style="font-size: 0.82rem; color: var(--text-muted); margin: 0.25rem 0 0 0;">
+              Tra cứu, tổng hợp đa chiều và xem chi tiết kết quả đào tạo theo Lớp học hoặc theo Chương trình
+            </p>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+            <!-- Segmented Mode Control -->
+            <div class="btn-group" style="display: inline-flex; background: #F1F5F9; padding: 3px; border-radius: 8px; border: 1px solid #CBD5E1;">
+              <button type="button" id="btnReportModeClass" class="btn btn-sm active" style="font-size: 0.8rem; padding: 0.35rem 0.85rem; border: none; border-radius: 6px; font-weight: 700; cursor: pointer; background: var(--brand-primary); color: white;">
+                <i class="fa-solid fa-chalkboard-user"></i> Báo cáo theo Lớp học
+              </button>
+              <button type="button" id="btnReportModeProgram" class="btn btn-sm" style="font-size: 0.8rem; padding: 0.35rem 0.85rem; border: none; border-radius: 6px; font-weight: 700; cursor: pointer; background: transparent; color: #475569;">
+                <i class="fa-solid fa-graduation-cap"></i> Báo cáo theo Chương trình
+              </button>
+            </div>
+
+            <!-- Export Actions -->
+            <div style="display: flex; align-items: center; gap: 0.4rem;">
+              <button type="button" id="btnReportPrint" class="btn" style="font-size: 0.8rem; padding: 0.35rem 0.85rem; background: #FFF1F2; color: var(--brand-primary); border: 1px solid #FECDD3; border-radius: 6px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 0.35rem;" title="In báo cáo hoặc Xuất file PDF">
+                <i class="fa-solid fa-print"></i> In / Xuất PDF
+              </button>
+              <button type="button" id="btnReportExportExcel" class="btn btn-export" style="font-size: 0.8rem; padding: 0.35rem 0.85rem; background: #0F5132; color: white;" title="Xuất báo cáo tổng hợp ra Excel">
+                <i class="fa-solid fa-file-excel"></i> Xuất Excel
+              </button>
+              <button type="button" id="btnReportExportCsv" class="btn btn-export" style="font-size: 0.8rem; padding: 0.35rem 0.85rem;" title="Xuất dữ liệu chi tiết ra CSV">
+                <i class="fa-solid fa-file-csv"></i> Xuất CSV
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SELECTOR & FILTER PANEL -->
+      <section class="filter-panel no-print" style="margin-bottom: 1.25rem;">
+        <!-- MODE 1: CLASS SELECTOR AREA -->
+        <div id="reportClassSelectorArea">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.65rem; flex-wrap: wrap; gap: 0.5rem;">
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <i class="fa-solid fa-magnifying-glass" style="color: var(--brand-primary);"></i>
+              <strong style="font-size: 0.9rem; color: #1E293B;">TRA CỨU VÀ CHỌN LỚP HỌC</strong>
+              <span id="reportClassAvailableBadge" class="badge" style="background: #E0F2FE; color: #0284C7; font-size: 0.75rem; padding: 2px 6px;">0 lớp</span>
+            </div>
+            <span style="font-size: 0.78rem; color: var(--text-muted);">Hệ thống tự động liên kết 5 phân hệ đánh giá cho lớp được chọn</span>
+          </div>
+
+          <div class="filter-grid" style="display: grid; grid-template-columns: 2fr 1fr 1fr 1fr auto; gap: 0.75rem; align-items: end;">
+            <!-- Select Class dropdown -->
+            <div class="selector-item">
+              <label for="selectReportClass"><i class="fa-solid fa-chalkboard"></i> Chọn Mã Lớp Học</label>
+              <select id="selectReportClass" style="font-weight: 700; color: var(--brand-primary);">
+                <option value="">-- Vui lòng chọn lớp học --</option>
+              </select>
+            </div>
+
+            <!-- Search input -->
+            <div class="selector-item">
+              <label for="inputReportClassSearch"><i class="fa-solid fa-filter"></i> Lọc mã lớp / Tên</label>
+              <input type="text" id="inputReportClassSearch" placeholder="Gõ tìm nhanh mã lớp...">
+            </div>
+
+            <!-- Format filter -->
+            <div class="selector-item">
+              <label for="filterReportClassFormat"><i class="fa-solid fa-chalkboard-user"></i> Hình thức học</label>
+              <select id="filterReportClassFormat">
+                <option value="">Tất cả hình thức</option>
+              </select>
+            </div>
+
+            <!-- CBQL filter -->
+            <div class="selector-item">
+              <label for="filterReportClassCbql"><i class="fa-solid fa-user-gear"></i> Cán bộ quản lý</label>
+              <select id="filterReportClassCbql">
+                <option value="">Tất cả cán bộ</option>
+              </select>
+            </div>
+
+            <!-- Action View -->
+            <div class="selector-item actions-cell" style="display: flex; align-items: flex-end;">
+              <button type="button" id="btnLoadClassReport" class="btn" style="background: var(--brand-primary); color: white; font-weight: 700; padding: 0.5rem 1rem; font-size: 0.82rem; border-radius: 6px;">
+                <i class="fa-solid fa-eye"></i> Xem báo cáo
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- MODE 2: PROGRAM SELECTOR AREA -->
+        <div id="reportProgramSelectorArea" style="display: none;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.65rem; flex-wrap: wrap; gap: 0.5rem;">
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <i class="fa-solid fa-magnifying-glass" style="color: var(--brand-primary);"></i>
+              <strong style="font-size: 0.9rem; color: #1E293B;">TRA CỨU VÀ CHỌN CHƯƠNG TRÌNH ĐÀO TẠO</strong>
+              <span id="reportProgramAvailableBadge" class="badge" style="background: #E0F2FE; color: #0284C7; font-size: 0.75rem; padding: 2px 6px;">0 chương trình</span>
+            </div>
+            <span style="font-size: 0.78rem; color: var(--text-muted);">Tổng hợp dữ liệu toàn bộ các lớp thuộc chương trình (Bình quân gia quyền)</span>
+          </div>
+
+          <div class="filter-grid" style="display: grid; grid-template-columns: 2.2fr 1fr 1fr 1fr auto; gap: 0.75rem; align-items: end;">
+            <!-- Select Program dropdown -->
+            <div class="selector-item">
+              <label for="selectReportProgram"><i class="fa-solid fa-graduation-cap"></i> Chọn Chương Trình Đào Tạo</label>
+              <select id="selectReportProgram" style="font-weight: 700; color: var(--brand-primary);">
+                <option value="">-- Vui lòng chọn chương trình --</option>
+              </select>
+            </div>
+
+            <!-- Search input -->
+            <div class="selector-item">
+              <label for="inputReportProgramSearch"><i class="fa-solid fa-filter"></i> Lọc theo tên CT</label>
+              <input type="text" id="inputReportProgramSearch" placeholder="Gõ tìm tên chương trình...">
+            </div>
+
+            <!-- Time filter -->
+            <div class="selector-item">
+              <label for="filterReportProgramTime"><i class="fa-solid fa-calendar"></i> Khoảng thời gian</label>
+              <select id="filterReportProgramTime">
+                <option value="">Toàn bộ năm 2026</option>
+                <option value="q1">Quý 1 / 2026</option>
+                <option value="q2">Quý 2 / 2026</option>
+                <option value="q3">Quý 3 / 2026</option>
+                <option value="q4">Quý 4 / 2026</option>
+              </select>
+            </div>
+
+            <!-- Format filter -->
+            <div class="selector-item">
+              <label for="filterReportProgramFormat"><i class="fa-solid fa-chalkboard-user"></i> Hình thức đào tạo</label>
+              <select id="filterReportProgramFormat">
+                <option value="">Tất cả hình thức</option>
+              </select>
+            </div>
+
+            <!-- Action View -->
+            <div class="selector-item actions-cell" style="display: flex; align-items: flex-end;">
+              <button type="button" id="btnLoadProgramReport" class="btn" style="background: var(--brand-primary); color: white; font-weight: 700; padding: 0.5rem 1rem; font-size: 0.82rem; border-radius: 6px;">
+                <i class="fa-solid fa-eye"></i> Xem báo cáo
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ADMINISTRATIVE HEADER FOR PRINT (PRINT ONLY) -->
+      <section class="report-admin-header print-only" style="margin-bottom: 1.5rem;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #1E293B; padding-bottom: 1rem;">
+          <div style="text-align: center; width: 45%;">
+            <div style="font-size: 11pt; font-weight: 700; text-transform: uppercase;">TRƯỜNG ĐÀO TẠO CÁN BỘ AGRIBANK</div>
+            <div style="font-size: 10pt; font-weight: 700; text-transform: uppercase;">PHÒNG QUẢN LÝ ĐÀO TẠO VÀ THƯ VIỆN</div>
+            <div style="font-size: 9pt; margin-top: 3px;">Số: ...... /BC-ĐT</div>
+          </div>
+          <div style="text-align: center; width: 50%;">
+            <div style="font-size: 11pt; font-weight: 700; text-transform: uppercase;">CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</div>
+            <div style="font-size: 10pt; font-weight: 700;">Độc lập - Tự do - Hạnh phúc</div>
+            <div style="font-size: 9pt; font-style: italic; margin-top: 4px;">Hà Nội, ngày ... tháng ... năm 2026</div>
+          </div>
+        </div>
+
+        <div style="text-align: center; margin-top: 1.25rem;">
+          <h1 id="reportPrintTitle" style="font-size: 14pt; font-weight: 800; text-transform: uppercase; margin: 0 0 0.35rem 0;">
+            BẢNG TỔNG HỢP KẾT QUẢ ĐÁNH GIÁ KHÓA HỌC
+          </h1>
+          <div id="reportPrintMeta" style="font-size: 10.5pt; font-style: italic; color: #334155;">
+            <!-- Rendered dynamically -->
+          </div>
+        </div>
+      </section>
+
+      <!-- EMPTY STATE (WHEN NO SELECTION) -->
+      <div id="reportEmptyState" class="card" style="text-align: center; padding: 4rem 1.5rem; margin-bottom: 1.5rem;">
+        <i class="fa-solid fa-file-magnifying-glass" style="font-size: 3.5rem; color: var(--brand-primary); opacity: 0.6; margin-bottom: 1rem;"></i>
+        <h3 style="font-size: 1.25rem; font-weight: 800; color: #1E293B; margin-bottom: 0.5rem;">
+          Vui lòng chọn Mã Lớp học hoặc Chương trình đào tạo
+        </h3>
+        <p style="font-size: 0.88rem; color: var(--text-muted); max-width: 620px; margin: 0 auto 1.25rem auto; line-height: 1.6;">
+          Phân hệ Báo cáo chung liên kết và tổng hợp tự động số liệu từ 5 phân hệ đánh giá: 
+          <em>Nội dung đào tạo, Phương pháp & Hình thức, Tổ chức & CSVC, Đánh giá Giảng viên</em> và <em>Đánh giá chung cuối khóa</em>.
+        </p>
+        <div style="display: inline-flex; gap: 0.75rem;">
+          <button type="button" class="btn btn-sm" onclick="document.getElementById('btnReportModeClass').click();" style="background: #F1F5F9; color: #334155; font-weight: 700; padding: 0.45rem 1rem;">
+            <i class="fa-solid fa-chalkboard-user"></i> Chọn Lớp học
+          </button>
+          <button type="button" class="btn btn-sm" onclick="document.getElementById('btnReportModeProgram').click();" style="background: var(--brand-primary); color: white; font-weight: 700; padding: 0.45rem 1rem;">
+            <i class="fa-solid fa-graduation-cap"></i> Chọn Chương trình
+          </button>
+        </div>
+      </div>
+
+      <!-- MAIN REPORT CONTENT (DYNAMICALLY POPULATED) -->
+      <div id="reportContentArea" style="display: none;">
+        <!-- OVERVIEW SECTION: METADATA CARD & KPI CARDS -->
+        <section class="card" id="reportOverviewCard" style="margin-bottom: 1.25rem; border-left: 4px solid var(--brand-primary);">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem; margin-bottom: 1rem;">
+            <div>
+              <span id="reportTargetTypeBadge" class="badge" style="background: var(--brand-primary); color: white; font-size: 0.75rem; padding: 2px 8px;">
+                BÁO CÁO LỚP HỌC
+              </span>
+              <h2 id="reportTargetTitle" style="font-size: 1.25rem; font-weight: 800; color: #1E293B; margin: 0.4rem 0 0 0;">
+                Tên Đối Tượng Báo Cáo
+              </h2>
+            </div>
+            <div id="reportActionPills" style="display: flex; gap: 0.5rem; align-items: center;" class="no-print">
+              <!-- Dynamically rendered badges or quick links -->
+            </div>
+          </div>
+
+          <!-- Metadata Grid -->
+          <div class="modal-grid" id="reportMetadataGrid" style="margin-bottom: 1.25rem;">
+            <!-- Dynamically populated -->
+          </div>
+
+          <!-- Executive KPI Cards -->
+          <div id="reportKpiGrid">
+            <!-- Dynamically populated -->
+          </div>
+        </section>
+
+        <!-- SPECIAL SECTION FOR PROGRAM MODE: CLASS LIST & CROSS-CLASS COMPARISON -->
+        <section class="card" id="reportProgramComparisonSection" style="margin-bottom: 1.25rem; display: none;">
+          <div class="card-header" style="flex-wrap: wrap; gap: 0.5rem; justify-content: space-between; align-items: center; margin-bottom: 0.85rem;">
+            <div>
+              <h3 style="display: flex; align-items: center; gap: 0.5rem;">
+                <i class="fa-solid fa-list-check" style="color: var(--brand-primary);"></i>
+                DANH SÁCH & KẾT QUẢ ĐÁNH GIÁ CÁC LỚP THUỘC CHƯƠNG TRÌNH
+              </h3>
+              <p style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.15rem;">
+                Tổng hợp kết quả và đối chiếu chi tiết các lớp trong cùng chương trình đào tạo
+              </p>
+            </div>
+          </div>
+
+          <!-- Table 1: Cross-Class 5-Module Score Comparison Table -->
+          <div style="margin-bottom: 1.25rem;">
+            <div style="font-size: 0.88rem; font-weight: 800; color: var(--brand-primary); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.4rem;">
+              <i class="fa-solid fa-table-columns"></i> BẢNG SO SÁNH KẾT QUẢ ĐÁNH GIÁ 5 PHÂN HỆ GIỮA CÁC LỚP
+            </div>
+            <div class="table-container" style="max-height: 380px; overflow-y: auto;">
+              <table class="data-table" id="reportProgramComparisonTable">
+                <thead>
+                  <tr>
+                    <th style="width: 4%; text-align: center;">STT</th>
+                    <th style="width: 17%;">MÃ LỚP HỌC</th>
+                    <th style="width: 15%; text-align: center;">HÌNH THỨC</th>
+                    <th style="width: 12%; min-width: 155px; text-align: center;">THỜI GIAN</th>
+                    <th style="width: 7%; text-align: center;" title="Số phiếu phản hồi">PHIẾU</th>
+                    <th style="width: 9%; text-align: center;" title="Nội dung đào tạo (Thang 4)">NDĐT (4.0)</th>
+                    <th style="width: 9%; text-align: center;" title="Phương pháp & Hình thức (Thang 4)">PPHT (4.0)</th>
+                    <th style="width: 9%; text-align: center;" title="Tổ chức & CSVC (Thang 4)">CSVC (4.0)</th>
+                    <th style="width: 10%; text-align: center;" title="Giảng viên (Thang 5)">GV (5.0)</th>
+                    <th style="width: 9%; text-align: center;" title="Đánh giá chung (Thang 5)">ĐGC (5.0)</th>
+                  </tr>
+                </thead>
+                <tbody id="reportProgramComparisonTableBody">
+                  <!-- Rendered dynamically -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Table 2: Detailed Class List Table with drill-down button -->
+          <div>
+            <div style="font-size: 0.88rem; font-weight: 800; color: #1E293B; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.4rem;">
+              <i class="fa-solid fa-clipboard-list"></i> DANH SÁCH CHI TIẾT CÁC LỚP HỌC THUỘC CHƯƠNG TRÌNH
+            </div>
+            <div class="table-container" style="max-height: 360px; overflow-y: auto;">
+              <table class="data-table" id="reportProgramClassesTable">
+                <thead>
+                  <tr>
+                    <th style="width: 3%; text-align: center;">STT</th>
+                    <th style="width: 14%;">MÃ LỚP</th>
+                    <th style="width: 14%; text-align: center;">HÌNH THỨC</th>
+                    <th style="width: 12%; min-width: 155px; text-align: center;">THỜI GIAN</th>
+                    <th style="width: 11%;">ĐỊA ĐIỂM</th>
+                    <th style="width: 10%;">CB QUẢN LÝ</th>
+                    <th style="width: 7%; text-align: center;">HV KẾ HOẠCH</th>
+                    <th style="width: 7%; text-align: center;">HV THỰC TẾ</th>
+                    <th style="width: 9%; text-align: center;">TỶ LỆ THAM DỰ</th>
+                    <th style="width: 7%; text-align: center;">TỶ LỆ PHẢN HỒI</th>
+                    <th style="width: 9%; text-align: center;" class="no-print">THAO TÁC</th>
+                  </tr>
+                </thead>
+                <tbody id="reportProgramClassesTableBody">
+                  <!-- Rendered dynamically -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- 5 COMPREHENSIVE EVALUATION SECTIONS -->
+        <div style="display: flex; flex-direction: column; gap: 1.25rem;">
+          <!-- SECTION I: NỘI DUNG ĐÀO TẠO -->
+          <section class="card" id="reportNddtSection">
+            <!-- Dynamically populated -->
+          </section>
+
+          <!-- SECTION II: PHƯƠNG PHÁP & HÌNH THỨC -->
+          <section class="card" id="reportPphtSection">
+            <!-- Dynamically populated -->
+          </section>
+
+          <!-- SECTION III: TỔ CHỨC & CSVC -->
+          <section class="card" id="reportCsvcSection">
+            <!-- Dynamically populated -->
+          </section>
+
+          <!-- SECTION IV: ĐÁNH GIÁ GIẢNG VIÊN -->
+          <section class="card" id="reportGvSection">
+            <!-- Dynamically populated -->
+          </section>
+
+          <!-- SECTION V: ĐÁNH GIÁ CHUNG -->
+          <section class="card" id="reportDgcSection">
+            <!-- Dynamically populated -->
+          </section>
+        </div>
+
+        <!-- ADMINISTRATIVE SIGNATURE BLOCK (PRINT ONLY) -->
+        <section class="report-signature-block print-only" style="margin-top: 2rem; padding-top: 1.5rem; page-break-inside: avoid;">
+          <div style="display: flex; justify-content: space-between; text-align: center;">
+            <div style="width: 45%;">
+              <div style="font-weight: 700; text-transform: uppercase; font-size: 11pt;">NGƯỜI LẬP BÁO CÁO</div>
+              <div style="font-size: 9.5pt; font-style: italic; color: #64748B;">(Ký, ghi rõ họ tên)</div>
+              <div style="height: 70px;"></div>
+              <div style="font-weight: 700; font-size: 11pt;">Bộ phận Phân tích Dữ liệu Đào tạo</div>
+            </div>
+            <div style="width: 45%;">
+              <div style="font-weight: 700; text-transform: uppercase; font-size: 11pt;">LÃNH ĐẠO PHÒNG QLĐT & THƯ VIỆN</div>
+              <div style="font-size: 9.5pt; font-style: italic; color: #64748B;">(Ký, ghi rõ họ tên)</div>
+              <div style="height: 70px;"></div>
+              <div style="font-weight: 700; font-size: 11pt;">Trưởng / Phó Trưởng Phòng</div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+
     <!-- FOOTER -->
     <footer class="app-footer">
       Dashboard Quản lý Đào tạo 2026 &copy; Trường Đào tạo Cán bộ Agribank | Hệ thống Phân tích Dữ liệu Cao cấp
@@ -1551,14 +2240,51 @@
     </div>
   </div>
 
+  <!-- DGC DETAIL MODAL -->
+  <div class="modal-overlay" id="dgcDetailModal" onclick="window.closeDgcModalOnOverlay(event)">
+    <div class="modal-content" onclick="event.stopPropagation()" style="max-width: 880px;">
+      <div class="modal-header">
+        <div>
+          <span class="badge" id="modalDgcClassCode" style="background: var(--brand-primary); color: white;">Mã Lớp</span>
+          <h2 id="modalDgcClassName" style="margin-top: 0.3rem; font-size: 1.25rem;">Tên Chương Trình Đào Tạo</h2>
+        </div>
+        <button class="modal-close" id="btnCloseDgcModal" type="button" onclick="window.closeDgcModal(event)" aria-label="Đóng">&times;</button>
+      </div>
+
+      <div class="modal-grid" id="modalDgcInfoGrid" style="margin-bottom: 1.25rem;">
+        <!-- Meta info rendered dynamically -->
+      </div>
+
+      <div style="border-top: 1px solid var(--border-color); padding-top: 1rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.85rem; flex-wrap: wrap; gap: 0.5rem;">
+          <h3 style="font-size: 1.05rem; font-weight: 800; color: var(--brand-primary); display: flex; align-items: center; gap: 0.5rem; margin: 0;">
+            <i class="fa-solid fa-chart-pie"></i> PHÂN BỐ TỰ ĐÁNH GIÁ THEO 2 TIÊU CHÍ CỐT LÕI
+          </h3>
+          <span style="font-size: 0.8rem; color: var(--text-muted); font-weight: 600;">Thang điểm 5 mức (5: Rất rõ rệt, 4: Rõ rệt, 3: Khá, 2: Ít, 1: Rất ít)</span>
+        </div>
+        <div id="modalDgcCriteriaContent" style="display: flex; flex-direction: column; gap: 1rem;">
+          <!-- 2 criteria breakdown boxes rendered dynamically -->
+        </div>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; margin-top: 1.25rem; padding-top: 0.85rem; border-top: 1px solid var(--border-color);">
+        <button type="button" class="btn" onclick="window.closeDgcModal(event)"
+          style="padding: 0.5rem 1.25rem; font-size: 0.85rem; font-weight: 700; background: #F3F4F6; color: #374151; border: 1px solid var(--border-color); border-radius: var(--radius-sm); cursor: pointer; display: inline-flex; align-items: center; gap: 0.35rem;">
+          <i class="fa-solid fa-xmark"></i> Đóng cửa sổ
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- TOAST NOTIFICATION CONTAINER -->
   <div id="toastContainer"
     style="position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 10000; display: flex; flex-direction: column; gap: 0.5rem; pointer-events: none;">
   </div>
 
   <!-- JavaScript Files -->
-  <script src="data.js?v=9669_v25"></script>
-  <script src="app.js?v=9669_v25"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="data.js?v=9669_v29"></script>
+  <script src="app.js?v=9669_v39"></script>
 </body>
 
 </html>
