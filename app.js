@@ -864,7 +864,68 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (e) { }
   }
 
-  let isSyncing = false;
+  let isClassSyncing = false;
+  let isDgcSyncing = false;
+  let isGvSyncing = false;
+  let isNddtSyncing = false;
+  let isNddtOldSyncing = false;
+  let isPphtdtSyncing = false;
+  let isCsvcSyncing = false;
+
+  // Helper to re-render whichever report or screen is currently active after fresh data arrives
+  function refreshActiveReportViews() {
+    try {
+      normalizeAllModuleData();
+      updateBookmarkBadges();
+
+      // Refresh Report Dropdowns & Current Report View
+      if (typeof populateReportProgramDropdown === 'function') populateReportProgramDropdown();
+      if (typeof populateReportClassDropdown === 'function') populateReportClassDropdown();
+
+      if (typeof reportState !== 'undefined' && reportState) {
+        if (reportState.mode === 'program' && reportState.selectedProgram) {
+          if (typeof loadProgramReport === 'function') loadProgramReport(reportState.selectedProgram);
+        } else if (reportState.mode === 'class' && reportState.selectedClass) {
+          if (typeof loadClassReport === 'function') loadClassReport(reportState.selectedClass);
+        }
+      }
+
+      // Refresh other active views
+      if (activeView === 'overview' && typeof applyFilters === 'function') applyFilters();
+      else if (activeView === 'content' && typeof applyNddtFilters === 'function') applyNddtFilters();
+      else if (activeView === 'pphtdt' && typeof applyPphtdtFilters === 'function') applyPphtdtFilters();
+      else if (activeView === 'csvc' && typeof applyCsvcFilters === 'function') applyCsvcFilters();
+      else if (activeView === 'gv' && typeof applyGvFilters === 'function') applyGvFilters();
+      else if (activeView === 'dgc' && typeof applyDgcFilters === 'function') applyDgcFilters();
+    } catch (e) {
+      console.warn("Error refreshing active views after sync:", e);
+    }
+  }
+
+  // Unified sync runner for all 7 Google Sheets
+  async function syncAllModulesData(options = {}) {
+    const isSilent = Boolean(options.silent);
+    try {
+      await Promise.allSettled([
+        syncGoogleSheetData(getDefaultClassUrl(), options),
+        syncGvGoogleSheetData(getDefaultGvUrl(), options),
+        syncNddtGoogleSheetData(getDefaultNddtUrl(), options),
+        syncNddtOldGoogleSheetData(getDefaultNddtOldUrl(), options),
+        syncPphtdtGoogleSheetData(getDefaultPphtdtUrl(), options),
+        syncCsvcGoogleSheetData(getDefaultCsvcUrl(), options),
+        syncDgcGoogleSheetData(getDefaultDgcUrl(), options)
+      ]);
+    } catch (e) {
+      console.warn("syncAllModulesData error:", e);
+    } finally {
+      refreshActiveReportViews();
+      if (!isSilent && typeof showToast === 'function') {
+        showToast('Toàn bộ dữ liệu 7 phân hệ đã được đồng bộ mới nhất từ Google Sheets!', 'success');
+      }
+    }
+  }
+  window.syncAllModulesData = syncAllModulesData;
+  window.refreshActiveReportViews = refreshActiveReportViews;
 
   // 1. Initialize Application
   initApp();
@@ -1031,15 +1092,9 @@ document.addEventListener('DOMContentLoaded', () => {
     try { setupDgcModule(); } catch (e) { console.error("Error in setupDgcModule:", e); }
     try { setupGeneralReportModule(); } catch (e) { console.error("Error in setupGeneralReportModule:", e); }
 
-    // Background sync from Google Sheets if online
+    // Background live sync from Google Sheets if online
     try {
-      syncGoogleSheetData(getDefaultClassUrl(), { silent: true });
-      syncGvGoogleSheetData(getDefaultGvUrl(), { silent: true });
-      syncNddtGoogleSheetData(getDefaultNddtUrl(), { silent: true });
-      syncNddtOldGoogleSheetData(getDefaultNddtOldUrl(), { silent: true });
-      syncPphtdtGoogleSheetData(getDefaultPphtdtUrl(), { silent: true });
-      syncCsvcGoogleSheetData(getDefaultCsvcUrl(), { silent: true });
-      syncDgcGoogleSheetData(getDefaultDgcUrl(), { silent: true });
+      syncAllModulesData({ silent: true });
     } catch (e) {
       console.warn("Background sheet sync skipped:", e);
     }
@@ -1733,12 +1788,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnSyncNow = document.getElementById('btnSyncNow');
     if (btnSyncNow) {
       btnSyncNow.addEventListener('click', () => {
-        syncGoogleSheetData(getDefaultClassUrl(), { silent: false });
-        if (typeof syncGvGoogleSheetData === 'function') syncGvGoogleSheetData(getDefaultGvUrl(), { silent: true });
-        if (typeof syncNddtGoogleSheetData === 'function') syncNddtGoogleSheetData(getDefaultNddtUrl(), { silent: true });
-        if (typeof syncNddtOldGoogleSheetData === 'function') syncNddtOldGoogleSheetData(getDefaultNddtOldUrl(), { silent: true });
-        if (typeof syncPphtdtGoogleSheetData === 'function') syncPphtdtGoogleSheetData(getDefaultPphtdtUrl(), { silent: true });
-        if (typeof syncCsvcGoogleSheetData === 'function') syncCsvcGoogleSheetData(getDefaultCsvcUrl(), { silent: true });
+        syncAllModulesData({ silent: false });
       });
     }
   }
@@ -1766,8 +1816,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
   async function syncGoogleSheetData(sheetUrl, options = {}) {
-    if (isSyncing) return;
-    isSyncing = true;
+    if (isClassSyncing) return;
+    isClassSyncing = true;
     const isSilent = Boolean(options.silent);
 
     const syncIcon = document.getElementById('syncIcon');
@@ -1803,6 +1853,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         populateFilterDropdowns();
         if (activeView === 'overview') applyFilters();
+        refreshActiveReportViews();
 
         const timeStr = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
         if (statusBadge) statusBadge.className = 'sync-status-badge';
@@ -1820,7 +1871,7 @@ document.addEventListener('DOMContentLoaded', () => {
         showToast('Không thể kết nối Google Sheet. Đang sử dụng dữ liệu lưu tạm!', 'warning');
       }
     } finally {
-      isSyncing = false;
+      isClassSyncing = false;
       if (syncIcon) syncIcon.classList.remove('fa-spin');
       if (btnSync) btnSync.classList.remove('syncing');
       if (syncBtnLabel) syncBtnLabel.textContent = 'Đồng bộ Sheet';
@@ -2815,6 +2866,8 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   async function syncNddtOldGoogleSheetData(sheetUrl, options = {}) {
+    if (isNddtOldSyncing) return;
+    isNddtOldSyncing = true;
     const isSilent = Boolean(options.silent);
     try {
       const targetUrl = sheetUrl || getDefaultNddtOldUrl();
@@ -2843,6 +2896,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         updateBookmarkBadges();
+        refreshActiveReportViews();
 
         if (!isSilent) {
           showToast('Đã đồng bộ ' + nddtOldItems.length + ' lớp đánh giá Mẫu cũ từ Google Sheet!', 'success');
@@ -2850,10 +2904,14 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     } catch (e) {
       console.warn('NDDT Old sheet sync error:', e);
+    } finally {
+      isNddtOldSyncing = false;
     }
   }
 
   async function syncNddtGoogleSheetData(sheetUrl, options = {}) {
+    if (isNddtSyncing) return;
+    isNddtSyncing = true;
     const isSilent = Boolean(options.silent);
     try {
       const targetUrl = sheetUrl || getDefaultNddtUrl();
@@ -2887,6 +2945,7 @@ document.addEventListener('DOMContentLoaded', () => {
         updateBookmarkBadges();
         populateNddtFilterDropdowns();
         if (activeView === 'content') applyNddtFilters();
+        refreshActiveReportViews();
 
         if (!isSilent) {
           showToast('Đã đồng bộ ' + allNddtItems.length + ' lớp đánh giá nội dung từ Google Sheet!', 'success');
@@ -2894,6 +2953,8 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     } catch (e) {
       console.warn('NDDT sheet sync error:', e);
+    } finally {
+      isNddtSyncing = false;
     }
   }
 
@@ -3882,6 +3943,8 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   async function syncPphtdtGoogleSheetData(sheetUrl, options = {}) {
+    if (isPphtdtSyncing) return;
+    isPphtdtSyncing = true;
     const isSilent = Boolean(options.silent);
     try {
       const targetUrl = sheetUrl || getDefaultPphtdtUrl();
@@ -3911,6 +3974,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         populatePphtdtFilterDropdowns();
         if (activeView === 'pphtdt') applyPphtdtFilters();
+        refreshActiveReportViews();
 
         const countPp = new Set(allPphtdtItems.map(c => (c.ma_lop || '').trim().toLowerCase()).filter(Boolean)).size;
         if (!isSilent) {
@@ -3919,6 +3983,8 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     } catch (e) {
       console.warn('PPHTDT sheet sync error:', e);
+    } finally {
+      isPphtdtSyncing = false;
     }
   }
 
@@ -5182,6 +5248,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function syncCsvcGoogleSheetData(url, options = {}) {
     if (!url) return;
+    if (isCsvcSyncing) return;
+    isCsvcSyncing = true;
     try {
       const res = await fetch(url, { cache: 'no-store', redirect: 'follow' });
       if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -5200,6 +5268,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (activeView === 'csvc' && typeof applyCsvcFilters === 'function') {
           applyCsvcFilters();
         }
+        refreshActiveReportViews();
         if (!options.silent) {
           showToast('Đồng bộ dữ liệu Tổ chức & CSVC thành công!', 'success');
         }
@@ -5209,6 +5278,8 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!options.silent) {
         showToast('Không thể kết nối Google Sheet CSVC, đang dùng dữ liệu dự phòng.', 'warning');
       }
+    } finally {
+      isCsvcSyncing = false;
     }
   }
 
@@ -6741,6 +6812,8 @@ document.addEventListener('DOMContentLoaded', () => {
   // Live Sync for GV
   async function syncGvGoogleSheetData(url, options = {}) {
     if (!url) return;
+    if (isGvSyncing) return;
+    isGvSyncing = true;
     try {
       const response = await fetch(url, { cache: 'no-store', redirect: 'follow' });
       if (!response.ok) return;
@@ -6758,6 +6831,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         populateGvFilterDropdowns();
         if (activeView === 'gv') applyGvFilters();
+        refreshActiveReportViews();
 
         if (!options.silent && typeof showToast === 'function') {
           showToast('Đã đồng bộ ' + allGvItems.length + ' bản ghi Đánh giá Giảng viên từ Google Sheets!', 'success');
@@ -6765,6 +6839,8 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     } catch (e) {
       console.warn('Sync GV Sheet error:', e);
+    } finally {
+      isGvSyncing = false;
     }
   }
 
@@ -8146,8 +8222,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Google Sheet Sync for DGC
   async function syncDgcGoogleSheetData(sheetUrl, options = {}) {
-    if (isSyncing) return;
-    isSyncing = true;
+    if (isDgcSyncing) return;
+    isDgcSyncing = true;
     const isSilent = Boolean(options.silent);
 
     const btnSync = document.getElementById('btnSyncDgcGoogleSheet');
@@ -8178,6 +8254,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         populateDgcFilterDropdowns();
         applyDgcFilters();
+        refreshActiveReportViews();
 
         if (!isSilent && typeof showToast === 'function') {
           showToast(`Đồng bộ thành công ${allDgcItems.length} lớp học từ Sheet ĐGC!`, 'success');
@@ -8191,7 +8268,7 @@ document.addEventListener('DOMContentLoaded', () => {
         showToast('Không thể đồng bộ Google Sheet ĐGC: ' + (err.message || 'Lỗi mạng'), 'error');
       }
     } finally {
-      isSyncing = false;
+      isDgcSyncing = false;
       if (btnSync) {
         btnSync.disabled = false;
         btnSync.innerHTML = '<i class="fa-solid fa-cloud-arrow-down"></i> Đồng bộ GG Sheet';
@@ -12931,7 +13008,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // End of General Report Module
 
-  // Window exports for general report
+  // Window exports for general report & data sync
   window.setupGeneralReportModule = setupGeneralReportModule;
   window.loadClassReport = loadClassReport;
   window.loadProgramReport = loadProgramReport;
@@ -12945,6 +13022,13 @@ document.addEventListener('DOMContentLoaded', () => {
   window.renderExecutivePphtSection = renderExecutivePphtSection;
   window.renderReportGvSection = renderReportGvSection;
   window.renderReportDgcSection = renderReportDgcSection;
+  window.parseCsvToClasses = parseCsvToClasses;
+  window.parseGvCsvContent = parseGvCsvContent;
+  window.parseCsvToNddtItems = parseCsvToNddtItems;
+  window.parseCsvToPphtdtItems = parseCsvToPphtdtItems;
+  window.parseCsvToCsvcItems = parseCsvToCsvcItems;
+  window.parseDgcCsvToObjects = parseDgcCsvToObjects;
+  window.normalizeAllModuleData = normalizeAllModuleData;
 
   function closeSheetUrlModal() {
     window.closeSheetModal();
