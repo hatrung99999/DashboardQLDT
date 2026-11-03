@@ -4,7 +4,7 @@
  */
 
 // Global window functions for detail modal handling (available immediately)
-window.openClassModalById = function(id) {
+window.openClassModalById = function (id) {
   if (typeof id === 'undefined' || id === null) return;
   const numId = Number(id);
   const list = window.allClasses || (typeof allClasses !== 'undefined' && Array.isArray(allClasses) ? allClasses : null);
@@ -25,7 +25,7 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
-window.openModal = function(c) {
+window.openModal = function (c) {
   if (!c) return;
   const modal = document.getElementById('detailModal');
   if (!modal) return;
@@ -108,7 +108,7 @@ window.openModal = function(c) {
   modal.style.pointerEvents = 'auto';
 };
 
-window.closeModal = function(e) {
+window.closeModal = function (e) {
   if (e) {
     if (typeof e.preventDefault === 'function') e.preventDefault();
     if (typeof e.stopPropagation === 'function') e.stopPropagation();
@@ -123,13 +123,13 @@ window.closeModal = function(e) {
   }
 };
 
-window.closeModalOnOverlay = function(e) {
+window.closeModalOnOverlay = function (e) {
   if (e && e.target && e.target.id === 'detailModal') {
     window.closeModal(e);
   }
 };
 
-window.closeGvModal = function(e) {
+window.closeGvModal = function (e) {
   if (e) {
     if (typeof e.preventDefault === 'function') e.preventDefault();
     if (typeof e.stopPropagation === 'function') e.stopPropagation();
@@ -144,14 +144,14 @@ window.closeGvModal = function(e) {
   }
 };
 
-window.closeGvModalOnOverlay = function(e) {
+window.closeGvModalOnOverlay = function (e) {
   if (e && e.target && e.target.id === 'lecturerDetailModal') {
     window.closeGvModal(e);
   }
 };
 
 // NDDT Detail Modal Handlers
-window.openNddtModalById = function(id) {
+window.openNddtModalById = function (id) {
   if (typeof id === 'undefined' || id === null) return;
   const numId = Number(id);
   const list = window.allNddtItems || (typeof allNddtItems !== 'undefined' && Array.isArray(allNddtItems) ? allNddtItems : null);
@@ -161,7 +161,7 @@ window.openNddtModalById = function(id) {
   }
 };
 
-window.openNddtModal = function(r) {
+window.openNddtModal = function (r) {
   if (!r) return;
   const modal = document.getElementById('nddtDetailModal');
   if (!modal) return;
@@ -286,7 +286,7 @@ window.openNddtModal = function(r) {
   modal.style.pointerEvents = 'auto';
 };
 
-window.closeNddtModal = function(e) {
+window.closeNddtModal = function (e) {
   if (e) {
     if (typeof e.preventDefault === 'function') e.preventDefault();
     if (typeof e.stopPropagation === 'function') e.stopPropagation();
@@ -301,7 +301,7 @@ window.closeNddtModal = function(e) {
   }
 };
 
-window.closeNddtModalOnOverlay = function(e) {
+window.closeNddtModalOnOverlay = function (e) {
   if (e && e.target && e.target.id === 'nddtDetailModal') {
     window.closeNddtModal(e);
   }
@@ -388,7 +388,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       if (typeof atob === 'function') return atob(str);
       if (typeof Buffer !== 'undefined') return Buffer.from(str, 'base64').toString('utf-8');
-    } catch (e) {}
+    } catch (e) { }
     return '';
   }
 
@@ -623,6 +623,57 @@ document.addEventListener('DOMContentLoaded', () => {
     'CNTT15': 'An toàn thông tin mạng và chuyển đổi số trong ngân hàng'
   };
 
+  // Standardize class code format across all modules (e.g. 'QHTĐV/26-03 HP1' -> 'QHTĐV/26-03-HP1')
+  function normalizeClassCode(c) {
+    if (!c) return '';
+    return c.toString().trim()
+      .replace(/\s*\/\s*/g, '/')
+      .replace(/\s*-\s*/g, '-')
+      .replace(/\s+(HP\d+|P\d+)/gi, '-$1')
+      .replace(/\s{2,}/g, ' ');
+  }
+
+  // Deduplicate CSVC survey class items, prioritizing complete evaluations
+  function deduplicateCsvcItems(rawItems) {
+    if (!Array.isArray(rawItems) || rawItems.length === 0) return [];
+    const map = new Map();
+
+    rawItems.forEach(item => {
+      if (!item) return;
+      const cleanCode = normalizeClassCode(item.ma_lop);
+      item.ma_lop = cleanCode;
+
+      // Unique survey cohort key by class code + format + location
+      const normKey = cleanCode.toLowerCase() + '__' +
+        (item.hinh_thuc_hoc || '').toLowerCase().trim() + '__' +
+        (item.dia_diem || '').toLowerCase().trim();
+
+      if (!map.has(normKey)) {
+        map.set(normKey, item);
+      } else {
+        const ex = map.get(normKey);
+        const itemHasCttc = item.cttc_score !== null && (item.cttc_tot || 0) > 0;
+        const exHasCttc = ex.cttc_score !== null && (ex.cttc_tot || 0) > 0;
+
+        if (itemHasCttc && !exHasCttc) {
+          map.set(normKey, item);
+        } else if (!itemHasCttc && exHasCttc) {
+          // Keep existing complete record
+        } else {
+          if ((item.total_crit_votes || item.tong_phieu || 0) > (ex.total_crit_votes || ex.tong_phieu || 0)) {
+            map.set(normKey, item);
+          }
+        }
+      }
+    });
+
+    const result = Array.from(map.values());
+    result.forEach((it, idx) => {
+      it.id = idx + 1;
+    });
+    return result;
+  }
+
   function normalizeAllModuleData() {
     const progMap = new Map(Object.entries(MANUAL_PROGRAM_NAMES));
     const classFullMap = new Map();
@@ -721,6 +772,7 @@ document.addEventListener('DOMContentLoaded', () => {
       list.forEach((item, idx) => {
         if (!item) return;
         if (!item.id) item.id = idx + 1;
+        item.ma_lop = normalizeClassCode(item.ma_lop);
         const ml = (item.ma_lop || '').trim();
         const mlLower = ml.toLowerCase();
         const ct = (item.chuong_trinh || '').trim();
@@ -803,6 +855,13 @@ document.addEventListener('DOMContentLoaded', () => {
     normalizeList(allCsvcItems, 'csvc');
     normalizeList(allGvItems, 'gv');
     normalizeList(allDgcItems, 'dgc');
+
+    // Deduplicate allCsvcItems and sync back to window and localStorage
+    allCsvcItems = deduplicateCsvcItems(allCsvcItems);
+    window.allCsvcItems = allCsvcItems;
+    try {
+      localStorage.setItem(STORAGE_KEY_CSVC_DATA, JSON.stringify(allCsvcItems));
+    } catch (e) { }
   }
 
   let isSyncing = false;
@@ -824,7 +883,7 @@ document.addEventListener('DOMContentLoaded', () => {
         'dashboard_google_sheet_pphtdt_url',
         'dashboard_google_sheet_csvc_url'
       ].forEach(k => localStorage.removeItem(k));
-    } catch (e) {}
+    } catch (e) { }
 
     let loadedClasses = null;
     let loadedGvItems = null;
@@ -881,7 +940,7 @@ document.addEventListener('DOMContentLoaded', () => {
           loadedNewItems = parsed;
         }
       }
-    } catch (e) {}
+    } catch (e) { }
     if (!loadedNewItems && typeof RAW_NDDT_DATA !== 'undefined' && Array.isArray(RAW_NDDT_DATA)) {
       loadedNewItems = RAW_NDDT_DATA;
     }
@@ -896,7 +955,7 @@ document.addEventListener('DOMContentLoaded', () => {
           loadedOldItems = parsedOld;
         }
       }
-    } catch (e) {}
+    } catch (e) { }
     if (!loadedOldItems && typeof RAW_NDDT_OLD_DATA !== 'undefined' && Array.isArray(RAW_NDDT_OLD_DATA)) {
       loadedOldItems = RAW_NDDT_OLD_DATA;
     }
@@ -915,7 +974,7 @@ document.addEventListener('DOMContentLoaded', () => {
           loadedPphtdtItems = parsed;
         }
       }
-    } catch (e) {}
+    } catch (e) { }
     if (!loadedPphtdtItems && typeof RAW_PPHTDT_DATA !== 'undefined' && Array.isArray(RAW_PPHTDT_DATA)) {
       loadedPphtdtItems = RAW_PPHTDT_DATA;
     }
@@ -932,7 +991,7 @@ document.addEventListener('DOMContentLoaded', () => {
           loadedCsvcItems = parsed;
         }
       }
-    } catch (e) {}
+    } catch (e) { }
     if (!loadedCsvcItems && typeof RAW_CSVC_DATA !== 'undefined' && Array.isArray(RAW_CSVC_DATA)) {
       loadedCsvcItems = RAW_CSVC_DATA;
     }
@@ -949,7 +1008,7 @@ document.addEventListener('DOMContentLoaded', () => {
           loadedDgcItems = parsed;
         }
       }
-    } catch (e) {}
+    } catch (e) { }
     if (!loadedDgcItems && typeof RAW_DGC_DATA !== 'undefined' && Array.isArray(RAW_DGC_DATA)) {
       loadedDgcItems = RAW_DGC_DATA;
     }
@@ -1686,7 +1745,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // --- GOOGLE SHEET SYNCING LOGIC ---
 
-  
+
   function showToast(message, type = 'info') {
     const container = document.getElementById('toastContainer');
     if (!container) return;
@@ -1727,7 +1786,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const targetUrl = sheetUrl || getDefaultClassUrl();
       const csvUrl = getGoogleSheetCsvExportUrl(targetUrl);
       const fetchUrl = `${csvUrl}${csvUrl.includes('?') ? '&' : '?'}_t=${Date.now()}`;
-      
+
       const res = await fetch(fetchUrl, { cache: 'no-store' });
       if (!res.ok) throw new Error(`HTTP error ${res.status}`);
       const csvText = await res.text();
@@ -2377,7 +2436,7 @@ document.addEventListener('DOMContentLoaded', () => {
             padding: 10,
             cornerRadius: 6,
             callbacks: {
-              label: function(context) {
+              label: function (context) {
                 const datasetLabel = context.dataset.label || '';
                 const pct = context.parsed.x.toFixed(1) + '%';
                 const critIdx = context.dataIndex;
@@ -2570,13 +2629,13 @@ document.addEventListener('DOMContentLoaded', () => {
             padding: 10,
             cornerRadius: 6,
             callbacks: {
-              title: function(items) {
+              title: function (items) {
                 if (!items || items.length === 0) return '';
                 const idx = items[0].dataIndex;
                 const prog = progList[idx];
                 return 'Chương trình: ' + prog.name + ' (' + prog.classes + ' lớp - ' + prog.votes + ' phiếu)';
               },
-              label: function(context) {
+              label: function (context) {
                 const label = context.dataset.label || '';
                 const val = context.parsed.y;
                 return label + ': ' + val.toFixed(2) + ' / 4.0';
@@ -2662,15 +2721,15 @@ document.addEventListener('DOMContentLoaded', () => {
       return '<tr onclick="window.openNddtModalById(' + r.id + ')" style="cursor: pointer;">' +
         '<td style="text-align: center; color: var(--text-muted); font-size: 0.76rem;">' + (idx + 1) + '</td>' +
         '<td>' +
-          '<div style="font-weight: 800; color: var(--brand-primary); font-size: 0.82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="' + r.ma_lop + '">' + r.ma_lop + '</div>' +
-          '<div style="font-size: 0.74rem; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.25;" title="' + (r.ten_ct_full || r.chuong_trinh) + '">' +
-            (r.ten_ct_full || r.chuong_trinh) +
-          '</div>' +
+        '<div style="font-weight: 800; color: var(--brand-primary); font-size: 0.82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="' + r.ma_lop + '">' + r.ma_lop + '</div>' +
+        '<div style="font-size: 0.74rem; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.25;" title="' + (r.ten_ct_full || r.chuong_trinh) + '">' +
+        (r.ten_ct_full || r.chuong_trinh) +
+        '</div>' +
         '</td>' +
         '<td style="text-align: center;">' + badgeHtml + '</td>' +
         '<td style="font-size: 0.76rem; line-height: 1.3; overflow: hidden;">' +
-          '<div style="white-space: nowrap;">' + (r.ngay_bd_raw || '') + (r.ngay_kt_raw ? ' — ' + r.ngay_kt_raw : '') + '</div>' +
-          '<div style="font-size: 0.71rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="' + (r.cbql || '') + '"><i class="fa-solid fa-user-tie"></i> ' + (r.cbql || 'Chưa cập nhật') + '</div>' +
+        '<div style="white-space: nowrap;">' + (r.ngay_bd_raw || '') + (r.ngay_kt_raw ? ' — ' + r.ngay_kt_raw : '') + '</div>' +
+        '<div style="font-size: 0.71rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="' + (r.cbql || '') + '"><i class="fa-solid fa-user-tie"></i> ' + (r.cbql || 'Chưa cập nhật') + '</div>' +
         '</td>' +
         '<td style="text-align: center; font-weight: 800; color: #0284C7; font-size: 0.84rem;">' + r.tong_phieu + '</td>' +
         '<td>' + renderMiniBar(r.c1_score) + '</td>' +
@@ -2678,14 +2737,14 @@ document.addEventListener('DOMContentLoaded', () => {
         '<td>' + renderMiniBar(r.c3_score) + '</td>' +
         '<td style="text-align: center; font-size: 0.88rem; font-weight: 800; color: var(--brand-primary);">' + r.diem_tb.toFixed(2) + '</td>' +
         '<td style="text-align: center;">' +
-          '<span class="badge" style="background: #ECFDF5; color: #0F5132; font-weight: 700; font-size: 0.74rem; padding: 0.15rem 0.35rem;">' + r.ty_le_tich_cuc.toFixed(1) + '%</span>' +
+        '<span class="badge" style="background: #ECFDF5; color: #0F5132; font-weight: 700; font-size: 0.74rem; padding: 0.15rem 0.35rem;">' + r.ty_le_tich_cuc.toFixed(1) + '%</span>' +
         '</td>' +
         '<td style="text-align: center;" onclick="event.stopPropagation(); window.openNddtModalById(' + r.id + ');">' +
-          '<button class="btn-detail-nddt" type="button" title="Xem phân rã 4 mức đánh giá">' +
-            '<i class="fa-solid fa-chart-pie"></i> Chi tiết' +
-          '</button>' +
+        '<button class="btn-detail-nddt" type="button" title="Xem phân rã 4 mức đánh giá">' +
+        '<i class="fa-solid fa-chart-pie"></i> Chi tiết' +
+        '</button>' +
         '</td>' +
-      '</tr>';
+        '</tr>';
     }).join('');
 
     tbody.innerHTML = html;
@@ -2774,7 +2833,7 @@ document.addEventListener('DOMContentLoaded', () => {
         normalizeAllModuleData();
         try {
           localStorage.setItem(STORAGE_KEY_NDDT_OLD_DATA, JSON.stringify(nddtOldItems));
-        } catch (stErr) {}
+        } catch (stErr) { }
 
         if (nddtActiveTemplate === 'old') {
           allNddtItems = nddtOldItems;
@@ -2858,7 +2917,7 @@ document.addEventListener('DOMContentLoaded', () => {
       for (let i = 0; i < text.length; i++) {
         const c = text[i];
         if (c === '"') {
-          if (inQuotes && text[i+1] === '"') { cur += '"'; i++; }
+          if (inQuotes && text[i + 1] === '"') { cur += '"'; i++; }
           else { inQuotes = !inQuotes; }
         } else if (c === ',' && !inQuotes) {
           p.push(cur.trim());
@@ -3371,7 +3430,7 @@ document.addEventListener('DOMContentLoaded', () => {
             padding: 10,
             cornerRadius: 6,
             callbacks: {
-              label: function(context) {
+              label: function (context) {
                 const datasetLabel = context.dataset.label || '';
                 const pct = context.parsed.x.toFixed(1) + '%';
                 const critIdx = context.dataIndex;
@@ -3536,13 +3595,13 @@ document.addEventListener('DOMContentLoaded', () => {
             padding: 10,
             cornerRadius: 6,
             callbacks: {
-              title: function(items) {
+              title: function (items) {
                 if (!items || items.length === 0) return '';
                 const idx = items[0].dataIndex;
                 const prog = progList[idx];
                 return 'Chương trình: ' + prog.name + ' (' + prog.classes + ' lớp - ' + prog.votes + ' phiếu)';
               },
-              label: function(context) {
+              label: function (context) {
                 const label = context.dataset.label || '';
                 const val = context.parsed.y;
                 return label + ': ' + val.toFixed(2) + ' / 4.0';
@@ -3745,7 +3804,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     if (criteriaContent) {
-      criteriaContent.innerHTML = 
+      criteriaContent.innerHTML =
         renderCriteriaBox(1, 'Đánh giá hoạt động học tập (Phương pháp đào tạo)', row.c1_score, row.c1_pos, row.c1_4, row.c1_3, row.c1_2, row.c1_1, row.c1_n) +
         renderCriteriaBox(2, 'Đánh giá tính phù hợp & hiệu quả của hình thức đào tạo', row.c2_score, row.c2_pos, row.c2_4, row.c2_3, row.c2_2, row.c2_1, row.c2_n);
     }
@@ -3882,7 +3941,7 @@ document.addEventListener('DOMContentLoaded', () => {
       for (let i = 0; i < text.length; i++) {
         const c = text[i];
         if (c === '"') {
-          if (inQuotes && text[i+1] === '"') { cur += '"'; i++; }
+          if (inQuotes && text[i + 1] === '"') { cur += '"'; i++; }
           else { inQuotes = !inQuotes; }
         } else if (c === ',' && !inQuotes) {
           p.push(cur.trim());
@@ -4013,14 +4072,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     return items;
   }
-  
+
 
   // ==========================================================================
   // PHÂN HỆ: ĐÁNH GIÁ VỀ CÔNG TÁC TỔ CHỨC, CƠ SỞ VẬT CHẤT (CSVC)
   // ==========================================================================
 
   // Expose global modal functions immediately
-  window.openCsvcModalById = function(id) {
+  window.openCsvcModalById = function (id) {
     const list = window.allCsvcItems || allCsvcItems;
     if (!list || list.length === 0) return;
     const item = list.find(x => x.id === Number(id));
@@ -4174,13 +4233,13 @@ document.addEventListener('DOMContentLoaded', () => {
     modal.classList.add('active');
   };
 
-  window.closeCsvcModal = function(e) {
+  window.closeCsvcModal = function (e) {
     if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
     const modal = document.getElementById('csvcDetailModal');
     if (modal) modal.classList.remove('active');
   };
 
-  window.closeCsvcModalOnOverlay = function(e) {
+  window.closeCsvcModalOnOverlay = function (e) {
     if (e.target && e.target.id === 'csvcDetailModal') {
       window.closeCsvcModal(e);
     }
@@ -4544,14 +4603,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (filteredCsvcItems.length === 0) return;
 
-    let c1 = { 4:0, 3:0, 2:0, 1:0, tot: 0 };
-    let c2 = { 4:0, 3:0, 2:0, 1:0, tot: 0 };
-    let c3 = { 4:0, 3:0, 2:0, 1:0, tot: 0 };
+    let c1 = { 4: 0, 3: 0, 2: 0, 1: 0, tot: 0 };
+    let c2 = { 4: 0, 3: 0, 2: 0, 1: 0, tot: 0 };
+    let c3 = { 4: 0, 3: 0, 2: 0, 1: 0, tot: 0 };
 
     filteredCsvcItems.forEach(item => {
       c1[4] += item.cttc_4 || 0; c1[3] += item.cttc_3 || 0; c1[2] += item.cttc_2 || 0; c1[1] += item.cttc_1 || 0; c1.tot += (item.cttc_tot || 0);
       c2[4] += item.csvc_4 || 0; c2[3] += item.csvc_3 || 0; c2[2] += item.csvc_2 || 0; c2[1] += item.csvc_1 || 0; c2.tot += (item.csvc_tot || 0);
-      c3[4] += item.hc_4 || 0;   c3[3] += item.hc_3 || 0;   c3[2] += item.hc_2 || 0;   c3[1] += item.hc_1 || 0;   c3.tot += (item.hc_tot || 0);
+      c3[4] += item.hc_4 || 0; c3[3] += item.hc_3 || 0; c3[2] += item.hc_2 || 0; c3[1] += item.hc_1 || 0; c3.tot += (item.hc_tot || 0);
     });
 
     const p1_4 = c1.tot ? ((c1[4] / c1.tot) * 100) : 0;
@@ -4663,7 +4722,7 @@ document.addEventListener('DOMContentLoaded', () => {
             padding: 10,
             cornerRadius: 6,
             callbacks: {
-              label: function(context) {
+              label: function (context) {
                 const dataset = context.dataset;
                 const idx = context.dataIndex;
                 const pct = context.parsed.x.toFixed(1);
@@ -4874,14 +4933,14 @@ document.addEventListener('DOMContentLoaded', () => {
             },
             ticks: {
               stepSize: 0.2,
-              callback: function(v) {
+              callback: function (v) {
                 if (v > 4.0) return '';
                 return v.toFixed(1).replace('.', ',');
               },
               font: { family: 'Plus Jakarta Sans', weight: '600', size: 10.5 }
             },
             grid: {
-              color: function(context) {
+              color: function (context) {
                 if (context.tick && context.tick.value > 4.0) return 'transparent';
                 return '#E2E8F0';
               }
@@ -4935,14 +4994,14 @@ document.addEventListener('DOMContentLoaded', () => {
             padding: 10,
             cornerRadius: 6,
             callbacks: {
-              title: function(items) {
+              title: function (items) {
                 if (!items || items.length === 0) return '';
                 const idx = items[0].dataIndex;
                 const it = itemList[idx];
                 const prefix = isByLoc ? 'Địa điểm: ' : 'Chương trình: ';
                 return prefix + it.full_name + ' (' + it.classes + ' lớp - ' + it.votes + ' phiếu)';
               },
-              label: function(context) {
+              label: function (context) {
                 const label = context.dataset.label || '';
                 const val = context.parsed.y;
                 if (context.dataset.yAxisID === 'yClasses') {
@@ -5136,7 +5195,7 @@ document.addEventListener('DOMContentLoaded', () => {
         window.allCsvcItems = allCsvcItems;
         try {
           localStorage.setItem(STORAGE_KEY_CSVC_DATA, JSON.stringify(allCsvcItems));
-        } catch(e) {}
+        } catch (e) { }
         populateCsvcFilterDropdowns();
         if (activeView === 'csvc' && typeof applyCsvcFilters === 'function') {
           applyCsvcFilters();
@@ -5166,7 +5225,7 @@ document.addEventListener('DOMContentLoaded', () => {
       for (let i = 0; i < text.length; i++) {
         const c = text[i];
         if (c === '"') {
-          if (inQuotes && text[i+1] === '"') { cur += '"'; i++; }
+          if (inQuotes && text[i + 1] === '"') { cur += '"'; i++; }
           else inQuotes = !inQuotes;
         } else if (c === ',' && !inQuotes) {
           result.push(cur); cur = '';
@@ -5200,28 +5259,28 @@ document.addEventListener('DOMContentLoaded', () => {
       const cttc_2 = Number(c[8]) || 0;
       const cttc_1 = Number(c[9]) || 0;
       const cttc_tot = cttc_4 + cttc_3 + cttc_2 + cttc_1;
-      const cttc_score = cttc_tot ? (4*cttc_4 + 3*cttc_3 + 2*cttc_2 + 1*cttc_1) / cttc_tot : null;
+      const cttc_score = cttc_tot ? (4 * cttc_4 + 3 * cttc_3 + 2 * cttc_2 + 1 * cttc_1) / cttc_tot : null;
 
       const csvc_4 = Number(c[10]) || 0;
       const csvc_3 = Number(c[11]) || 0;
       const csvc_2 = Number(c[12]) || 0;
       const csvc_1 = Number(c[13]) || 0;
       const csvc_tot = csvc_4 + csvc_3 + csvc_2 + csvc_1;
-      const csvc_score = csvc_tot ? (4*csvc_4 + 3*csvc_3 + 2*csvc_2 + 1*csvc_1) / csvc_tot : null;
+      const csvc_score = csvc_tot ? (4 * csvc_4 + 3 * csvc_3 + 2 * csvc_2 + 1 * csvc_1) / csvc_tot : null;
 
       const hc_4 = Number(c[14]) || 0;
       const hc_3 = Number(c[15]) || 0;
       const hc_2 = Number(c[16]) || 0;
       const hc_1 = Number(c[17]) || 0;
       const hc_tot = hc_4 + hc_3 + hc_2 + hc_1;
-      const hc_score = hc_tot ? (4*hc_4 + 3*hc_3 + 2*hc_2 + 1*hc_1) / hc_tot : null;
+      const hc_score = hc_tot ? (4 * hc_4 + 3 * hc_3 + 2 * hc_2 + 1 * hc_1) / hc_tot : null;
 
       const cbql = c[18];
       const rowVotes = Math.max(cttc_tot, csvc_tot, hc_tot);
 
-      const totalPoints = (4*cttc_4 + 3*cttc_3 + 2*cttc_2 + 1*cttc_1) +
-                          (4*csvc_4 + 3*csvc_3 + 2*csvc_2 + 1*csvc_1) +
-                          (4*hc_4 + 3*hc_3 + 2*hc_2 + 1*hc_1);
+      const totalPoints = (4 * cttc_4 + 3 * cttc_3 + 2 * cttc_2 + 1 * cttc_1) +
+        (4 * csvc_4 + 3 * csvc_3 + 2 * csvc_2 + 1 * csvc_1) +
+        (4 * hc_4 + 3 * hc_3 + 2 * hc_2 + 1 * hc_1);
       const totalCritVotes = cttc_tot + csvc_tot + hc_tot;
       const rowAvgScore = totalCritVotes ? (totalPoints / totalCritVotes) : null;
 
@@ -5256,7 +5315,7 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
 
-    return items;
+    return deduplicateCsvcItems(items);
   }
 
 
@@ -5597,12 +5656,12 @@ document.addEventListener('DOMContentLoaded', () => {
       const q = gvState.searchQuery.toLowerCase();
       filtered = filtered.filter(item => {
         return (item.ten_gv && item.ten_gv.toLowerCase().includes(q)) ||
-               (item.ma_lop && item.ma_lop.toLowerCase().includes(q)) ||
-               (item.chuong_trinh && item.chuong_trinh.toLowerCase().includes(q)) ||
-               (item.ten_ct_full && item.ten_ct_full.toLowerCase().includes(q)) ||
-               (item.don_vi && item.don_vi.toLowerCase().includes(q)) ||
-               (item.noi_dung_giang && item.noi_dung_giang.toLowerCase().includes(q)) ||
-               (item.cbql && item.cbql.toLowerCase().includes(q));
+          (item.ma_lop && item.ma_lop.toLowerCase().includes(q)) ||
+          (item.chuong_trinh && item.chuong_trinh.toLowerCase().includes(q)) ||
+          (item.ten_ct_full && item.ten_ct_full.toLowerCase().includes(q)) ||
+          (item.don_vi && item.don_vi.toLowerCase().includes(q)) ||
+          (item.noi_dung_giang && item.noi_dung_giang.toLowerCase().includes(q)) ||
+          (item.cbql && item.cbql.toLowerCase().includes(q));
       });
     }
 
@@ -5681,9 +5740,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const distinctClasses = new Set(filteredGvItems.map(x => x.ma_lop).filter(Boolean)).size;
 
     // 2. Votes aggregation
-    let totKTCM = { 5:0, 4:0, 3:0, 2:0, 1:0 };
-    let totKNSP = { 5:0, 4:0, 3:0, 2:0, 1:0 };
-    let totTDTP = { 5:0, 4:0, 3:0, 2:0, 1:0 };
+    let totKTCM = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+    let totKNSP = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+    let totTDTP = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
     let totalVotes = 0;
 
     filteredGvItems.forEach(item => {
@@ -5709,13 +5768,13 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     const sumVotes1 = totKTCM[5] + totKTCM[4] + totKTCM[3] + totKTCM[2] + totKTCM[1];
-    const score1 = sumVotes1 > 0 ? (5*totKTCM[5] + 4*totKTCM[4] + 3*totKTCM[3] + 2*totKTCM[2] + 1*totKTCM[1]) / sumVotes1 : 0;
+    const score1 = sumVotes1 > 0 ? (5 * totKTCM[5] + 4 * totKTCM[4] + 3 * totKTCM[3] + 2 * totKTCM[2] + 1 * totKTCM[1]) / sumVotes1 : 0;
 
     const sumVotes2 = totKNSP[5] + totKNSP[4] + totKNSP[3] + totKNSP[2] + totKNSP[1];
-    const score2 = sumVotes2 > 0 ? (5*totKNSP[5] + 4*totKNSP[4] + 3*totKNSP[3] + 2*totKNSP[2] + 1*totKNSP[1]) / sumVotes2 : 0;
+    const score2 = sumVotes2 > 0 ? (5 * totKNSP[5] + 4 * totKNSP[4] + 3 * totKNSP[3] + 2 * totKNSP[2] + 1 * totKNSP[1]) / sumVotes2 : 0;
 
     const sumVotes3 = totTDTP[5] + totTDTP[4] + totTDTP[3] + totTDTP[2] + totTDTP[1];
-    const score3 = sumVotes3 > 0 ? (5*totTDTP[5] + 4*totTDTP[4] + 3*totTDTP[3] + 2*totTDTP[2] + 1*totTDTP[1]) / sumVotes3 : 0;
+    const score3 = sumVotes3 > 0 ? (5 * totTDTP[5] + 4 * totTDTP[4] + 3 * totTDTP[3] + 2 * totTDTP[2] + 1 * totTDTP[1]) / sumVotes3 : 0;
 
     let validCritCount = 0;
     let sumScores = 0;
@@ -5773,9 +5832,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (filteredGvItems.length === 0) return;
 
     // Aggregate counts for the 3 criteria
-    let c1 = { 5:0, 4:0, 3:0, 2:0, 1:0 };
-    let c2 = { 5:0, 4:0, 3:0, 2:0, 1:0 };
-    let c3 = { 5:0, 4:0, 3:0, 2:0, 1:0 };
+    let c1 = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+    let c2 = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+    let c3 = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
 
     filteredGvItems.forEach(item => {
       c1[5] += item.c5_ktcm || 0; c1[4] += item.c4_ktcm || 0; c1[3] += item.c3_ktcm || 0; c1[2] += item.c2_ktcm || 0; c1[1] += item.c1_ktcm || 0;
@@ -5875,7 +5934,7 @@ document.addEventListener('DOMContentLoaded', () => {
           },
           tooltip: {
             callbacks: {
-              label: function(context) {
+              label: function (context) {
                 const ds = context.dataset;
                 const vote = ds.rawVotes ? ds.rawVotes[context.dataIndex] : 0;
                 return ds.label + ': ' + context.parsed.x + '% (' + vote.toLocaleString('vi-VN') + ' phiếu)';
@@ -5888,7 +5947,7 @@ document.addEventListener('DOMContentLoaded', () => {
             stacked: true,
             max: 100,
             ticks: {
-              callback: function(v) { return v + '%'; },
+              callback: function (v) { return v + '%'; },
               font: { size: 10 }
             },
             grid: { color: '#F1F5F9' }
@@ -6243,7 +6302,7 @@ document.addEventListener('DOMContentLoaded', () => {
             mode: 'index',
             intersect: false,
             callbacks: {
-              title: function(items) {
+              title: function (items) {
                 if (!items || items.length === 0) return '';
                 const idx = items[0].dataIndex;
                 const it = displayList[idx];
@@ -6254,7 +6313,7 @@ document.addEventListener('DOMContentLoaded', () => {
                   return it.key + ' (' + it.gvCount + ' GV)';
                 }
               },
-              beforeBody: function(items) {
+              beforeBody: function (items) {
                 if (!items || items.length === 0) return [];
                 const idx = items[0].dataIndex;
                 const it = displayList[idx];
@@ -6266,7 +6325,7 @@ document.addEventListener('DOMContentLoaded', () => {
                   '--------------------------------'
                 ];
               },
-              label: function(context) {
+              label: function (context) {
                 const ds = context.dataset;
                 const val = context.parsed.y;
                 if (val === null || val === undefined) return '';
@@ -6289,7 +6348,7 @@ document.addEventListener('DOMContentLoaded', () => {
             max: 5.0,
             ticks: {
               stepSize: 0.25,
-              callback: function(v) { return Number(v).toFixed(2); },
+              callback: function (v) { return Number(v).toFixed(2); },
               font: { size: 10.5, weight: '700' },
               color: '#8C1D40'
             },
@@ -6309,7 +6368,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ticks: {
               font: { size: 10, weight: '600' },
               color: '#475569',
-              callback: function(v) { return Number.isInteger(v) ? v : ''; }
+              callback: function (v) { return Number.isInteger(v) ? v : ''; }
             },
             title: {
               display: true,
@@ -6391,8 +6450,8 @@ document.addEventListener('DOMContentLoaded', () => {
       };
 
       const titleDegree = item.hoc_ham_hoc_vi ? '<span style="font-size: 0.72rem; color: #64748B; font-weight: 600; margin-right: 0.25rem;">(' + item.hoc_ham_hoc_vi + ')</span>' : '';
-      const nguonTag = item.nguon_gv === 'Agribank' ? 
-        '<span style="background: #FEE2E2; color: var(--brand-crimson); font-size: 0.68rem; font-weight: 700; padding: 1px 5px; border-radius: 3px;">Agribank</span>' : 
+      const nguonTag = item.nguon_gv === 'Agribank' ?
+        '<span style="background: #FEE2E2; color: var(--brand-crimson); font-size: 0.68rem; font-weight: 700; padding: 1px 5px; border-radius: 3px;">Agribank</span>' :
         '<span style="background: #E0F2FE; color: #0369A1; font-size: 0.68rem; font-weight: 700; padding: 1px 5px; border-radius: 3px;">Mời ngoài</span>';
 
       const fullProg = String(item.ten_ct_full || item.chuong_trinh || '');
@@ -6401,25 +6460,25 @@ document.addEventListener('DOMContentLoaded', () => {
       return '<tr onclick="window.openGvModalById(' + item.id + ')" style="cursor: pointer;">' +
         '<td style="text-align: center; color: var(--text-muted); font-weight: 600;">' + (idx + 1) + '</td>' +
         '<td>' +
-          '<div style="font-weight: 800; color: #1E293B;">' + titleDegree + (item.ten_gv || '') + '</div>' +
-          (item.chuc_danh ? '<div style="font-size: 0.72rem; color: #64748B;">' + item.chuc_danh + '</div>' : '') +
+        '<div style="font-weight: 800; color: #1E293B;">' + titleDegree + (item.ten_gv || '') + '</div>' +
+        (item.chuc_danh ? '<div style="font-size: 0.72rem; color: #64748B;">' + item.chuc_danh + '</div>' : '') +
         '</td>' +
         '<td>' +
-          '<div style="display: flex; align-items: center; gap: 0.35rem; margin-bottom: 0.15rem;">' + nguonTag + '</div>' +
-          '<div style="font-size: 0.75rem; color: #334155; font-weight: 600;">' + (item.don_vi || 'Chưa cập nhật') + '</div>' +
+        '<div style="display: flex; align-items: center; gap: 0.35rem; margin-bottom: 0.15rem;">' + nguonTag + '</div>' +
+        '<div style="font-size: 0.75rem; color: #334155; font-weight: 600;">' + (item.don_vi || 'Chưa cập nhật') + '</div>' +
         '</td>' +
         '<td>' +
-          '<div style="font-weight: 800; color: var(--brand-primary);">' + (item.ma_lop || '') + '</div>' +
-          '<div style="font-size: 0.73rem; color: #64748B; line-height: 1.25;" title="' + fullProg + '">' + 
-            (fullProg.length > 55 ? fullProg.slice(0, 52) + '...' : fullProg) + 
-          '</div>' +
+        '<div style="font-weight: 800; color: var(--brand-primary);">' + (item.ma_lop || '') + '</div>' +
+        '<div style="font-size: 0.73rem; color: #64748B; line-height: 1.25;" title="' + fullProg + '">' +
+        (fullProg.length > 55 ? fullProg.slice(0, 52) + '...' : fullProg) +
+        '</div>' +
         '</td>' +
         '<td style="text-align: center;">' +
-          fmtBadge +
+        fmtBadge +
         '</td>' +
         '<td style="text-align: center; font-size: 0.74rem;">' +
-          '<div>' + (item.ngay_bd || '—') + '</div>' +
-          (item.cbql ? '<div style="font-size: 0.7rem; color: #64748B;">QL: ' + item.cbql + '</div>' : '') +
+        '<div>' + (item.ngay_bd || '—') + '</div>' +
+        (item.cbql ? '<div style="font-size: 0.7rem; color: #64748B;">QL: ' + item.cbql + '</div>' : '') +
         '</td>' +
         '<td style="text-align: center; font-weight: 700;">' + (item.so_tiet || '—') + '</td>' +
         '<td style="text-align: center; font-weight: 700; color: #475569;">' + (item.tong_phieu || 0) + '</td>' +
@@ -6428,18 +6487,18 @@ document.addEventListener('DOMContentLoaded', () => {
         '<td style="text-align: center;">' + scoreBadge(item.diem_tdtp) + '</td>' +
         '<td style="text-align: center;">' + scoreBadge(item.diem_tb) + '</td>' +
         '<td style="text-align: center;" onclick="event.stopPropagation(); window.openGvModalById(' + item.id + ');">' +
-          '<button type="button" class="btn btn-sm btn-outline-primary" style="padding: 0.2rem 0.55rem; font-size: 0.75rem; font-weight: 700; border-radius: 4px; cursor: pointer;">' +
-            '<i class="fa-solid fa-eye"></i> Xem' +
-          '</button>' +
+        '<button type="button" class="btn btn-sm btn-outline-primary" style="padding: 0.2rem 0.55rem; font-size: 0.75rem; font-weight: 700; border-radius: 4px; cursor: pointer;">' +
+        '<i class="fa-solid fa-eye"></i> Xem' +
+        '</button>' +
         '</td>' +
-      '</tr>';
+        '</tr>';
     }).join('');
 
     tbody.innerHTML = html;
   }
 
   // Detail Modal Handlers
-  window.openGvModalById = function(id) {
+  window.openGvModalById = function (id) {
     if (!id) return;
     const item = allGvItems.find(x => x.id === Number(id));
     if (!item) return;
@@ -6459,44 +6518,44 @@ document.addEventListener('DOMContentLoaded', () => {
     // Set Info Grid
     const infoGrid = document.getElementById('modalGvInfoGrid');
     if (infoGrid) {
-      infoGrid.innerHTML = 
+      infoGrid.innerHTML =
         '<div class="modal-item">' +
-          '<label><i class="fa-solid fa-user-tie"></i> Giảng viên</label>' +
-          '<span style="font-weight: 800; color: #1E293B;">' + item.ten_gv + '</span>' +
+        '<label><i class="fa-solid fa-user-tie"></i> Giảng viên</label>' +
+        '<span style="font-weight: 800; color: #1E293B;">' + item.ten_gv + '</span>' +
         '</div>' +
         '<div class="modal-item">' +
-          '<label><i class="fa-solid fa-building-columns"></i> Đơn vị công tác / Đối tác</label>' +
-          '<span>' + (item.don_vi || 'Chưa cập nhật') + ' (' + item.nguon_gv + ')</span>' +
+        '<label><i class="fa-solid fa-building-columns"></i> Đơn vị công tác / Đối tác</label>' +
+        '<span>' + (item.don_vi || 'Chưa cập nhật') + ' (' + item.nguon_gv + ')</span>' +
         '</div>' +
         '<div class="modal-item full-width">' +
-          '<label><i class="fa-solid fa-book-open"></i> Chương trình đào tạo</label>' +
-          '<span style="font-weight: 700; color: var(--brand-primary);">' + item.ten_ct_full + '</span>' +
+        '<label><i class="fa-solid fa-book-open"></i> Chương trình đào tạo</label>' +
+        '<span style="font-weight: 700; color: var(--brand-primary);">' + item.ten_ct_full + '</span>' +
         '</div>' +
         '<div class="modal-item">' +
-          '<label><i class="fa-solid fa-shapes"></i> Hình thức đào tạo</label>' +
-          '<span>' + item.hinh_thuc_hoc + '</span>' +
+        '<label><i class="fa-solid fa-shapes"></i> Hình thức đào tạo</label>' +
+        '<span>' + item.hinh_thuc_hoc + '</span>' +
         '</div>' +
         '<div class="modal-item">' +
-          '<label><i class="fa-regular fa-calendar-days"></i> Thời gian tổ chức</label>' +
-          '<span>' + item.ngay_bd + (item.ngay_kt ? ' — ' + item.ngay_kt : '') + '</span>' +
+        '<label><i class="fa-regular fa-calendar-days"></i> Thời gian tổ chức</label>' +
+        '<span>' + item.ngay_bd + (item.ngay_kt ? ' — ' + item.ngay_kt : '') + '</span>' +
         '</div>' +
         '<div class="modal-item">' +
-          '<label><i class="fa-solid fa-clock"></i> Số tiết giảng dạy</label>' +
-          '<span style="font-weight: 800; color: #0284C7;">' + (item.so_tiet || 0) + ' tiết</span>' +
+        '<label><i class="fa-solid fa-clock"></i> Số tiết giảng dạy</label>' +
+        '<span style="font-weight: 800; color: #0284C7;">' + (item.so_tiet || 0) + ' tiết</span>' +
         '</div>' +
         '<div class="modal-item">' +
-          '<label><i class="fa-solid fa-square-poll-vertical"></i> Tổng phiếu khảo sát</label>' +
-          '<span style="font-weight: 800; color: #0F5132;">' + (item.tong_phieu || 0) + ' phiếu hợp lệ</span>' +
+        '<label><i class="fa-solid fa-square-poll-vertical"></i> Tổng phiếu khảo sát</label>' +
+        '<span style="font-weight: 800; color: #0F5132;">' + (item.tong_phieu || 0) + ' phiếu hợp lệ</span>' +
         '</div>' +
-        (item.cbql ? 
+        (item.cbql ?
           '<div class="modal-item">' +
-            '<label><i class="fa-solid fa-user-shield"></i> Cán bộ quản lý</label>' +
-            '<span>' + item.cbql + '</span>' +
+          '<label><i class="fa-solid fa-user-shield"></i> Cán bộ quản lý</label>' +
+          '<span>' + item.cbql + '</span>' +
           '</div>' : '') +
-        (item.noi_dung_giang ? 
+        (item.noi_dung_giang ?
           '<div class="modal-item full-width">' +
-            '<label><i class="fa-solid fa-graduation-cap"></i> Nội dung / Chuyên đề giảng dạy</label>' +
-            '<span style="white-space: pre-line; font-size: 0.82rem; line-height: 1.5; color: #334155;">' + item.noi_dung_giang + '</span>' +
+          '<label><i class="fa-solid fa-graduation-cap"></i> Nội dung / Chuyên đề giảng dạy</label>' +
+          '<span style="white-space: pre-line; font-size: 0.82rem; line-height: 1.5; color: #334155;">' + item.noi_dung_giang + '</span>' +
           '</div>' : '');
     }
 
@@ -6512,50 +6571,50 @@ document.addEventListener('DOMContentLoaded', () => {
 
         return '<div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 1rem;">' +
           '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">' +
-            '<div style="display: flex; align-items: center; gap: 0.5rem;">' +
-              '<i class="' + icon + '" style="color: ' + color + '; font-size: 1.1rem;"></i>' +
-              '<strong style="font-size: 0.95rem; color: #1E293B;">' + title + '</strong>' +
-            '</div>' +
-            '<div style="display: flex; align-items: center; gap: 0.75rem;">' +
-              '<span style="font-size: 0.8rem; font-weight: 700; color: #0F5132; background: #ECFDF5; padding: 2px 8px; border-radius: 4px;">Tích cực: ' + posRate + '%</span>' +
-              '<span style="font-size: 1.1rem; font-weight: 800; color: ' + color + ';">' + (score ? score.toFixed(2) : '0.00') + ' <span style="font-size: 0.75rem; font-weight: 600; color: #64748B;">/ 5.0</span></span>' +
-            '</div>' +
+          '<div style="display: flex; align-items: center; gap: 0.5rem;">' +
+          '<i class="' + icon + '" style="color: ' + color + '; font-size: 1.1rem;"></i>' +
+          '<strong style="font-size: 0.95rem; color: #1E293B;">' + title + '</strong>' +
+          '</div>' +
+          '<div style="display: flex; align-items: center; gap: 0.75rem;">' +
+          '<span style="font-size: 0.8rem; font-weight: 700; color: #0F5132; background: #ECFDF5; padding: 2px 8px; border-radius: 4px;">Tích cực: ' + posRate + '%</span>' +
+          '<span style="font-size: 1.1rem; font-weight: 800; color: ' + color + ';">' + (score ? score.toFixed(2) : '0.00') + ' <span style="font-size: 0.75rem; font-weight: 600; color: #64748B;">/ 5.0</span></span>' +
+          '</div>' +
           '</div>' +
           // 5-level stacked bar visual
           '<div style="height: 14px; display: flex; border-radius: 4px; overflow: hidden; background: #E2E8F0; margin-bottom: 0.75rem;">' +
-            '<div style="width: ' + p5 + '%; background: #0F5132;" title="Xuất sắc: ' + c5 + ' (' + p5 + '%)"></div>' +
-            '<div style="width: ' + p4 + '%; background: #22C55E;" title="Tốt: ' + c4 + ' (' + p4 + '%)"></div>' +
-            '<div style="width: ' + p3 + '%; background: #EAB308;" title="Khá: ' + c3 + ' (' + p3 + '%)"></div>' +
-            '<div style="width: ' + p2 + '%; background: #F97316;" title="Bình thường: ' + c2 + ' (' + p2 + '%)"></div>' +
-            '<div style="width: ' + p1 + '%; background: #EF4444;" title="Hạn chế: ' + c1 + ' (' + p1 + '%)"></div>' +
+          '<div style="width: ' + p5 + '%; background: #0F5132;" title="Xuất sắc: ' + c5 + ' (' + p5 + '%)"></div>' +
+          '<div style="width: ' + p4 + '%; background: #22C55E;" title="Tốt: ' + c4 + ' (' + p4 + '%)"></div>' +
+          '<div style="width: ' + p3 + '%; background: #EAB308;" title="Khá: ' + c3 + ' (' + p3 + '%)"></div>' +
+          '<div style="width: ' + p2 + '%; background: #F97316;" title="Bình thường: ' + c2 + ' (' + p2 + '%)"></div>' +
+          '<div style="width: ' + p1 + '%; background: #EF4444;" title="Hạn chế: ' + c1 + ' (' + p1 + '%)"></div>' +
           '</div>' +
           // 5 stats pill row
           '<div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.5rem; text-align: center; font-size: 0.75rem;">' +
-            '<div style="background: white; border: 1px solid #E2E8F0; padding: 4px; border-radius: 4px;">' +
-              '<div style="color: #0F5132; font-weight: 700;">5 - Xuất sắc</div>' +
-              '<div style="font-weight: 800;">' + c5 + ' <span style="font-size: 0.68rem; font-weight: 600; color: #64748B;">(' + p5 + '%)</span></div>' +
-            '</div>' +
-            '<div style="background: white; border: 1px solid #E2E8F0; padding: 4px; border-radius: 4px;">' +
-              '<div style="color: #22C55E; font-weight: 700;">4 - Tốt</div>' +
-              '<div style="font-weight: 800;">' + c4 + ' <span style="font-size: 0.68rem; font-weight: 600; color: #64748B;">(' + p4 + '%)</span></div>' +
-            '</div>' +
-            '<div style="background: white; border: 1px solid #E2E8F0; padding: 4px; border-radius: 4px;">' +
-              '<div style="color: #EAB308; font-weight: 700;">3 - Khá</div>' +
-              '<div style="font-weight: 800;">' + c3 + ' <span style="font-size: 0.68rem; font-weight: 600; color: #64748B;">(' + p3 + '%)</span></div>' +
-            '</div>' +
-            '<div style="background: white; border: 1px solid #E2E8F0; padding: 4px; border-radius: 4px;">' +
-              '<div style="color: #F97316; font-weight: 700;">2 - Bình thường</div>' +
-              '<div style="font-weight: 800;">' + c2 + ' <span style="font-size: 0.68rem; font-weight: 600; color: #64748B;">(' + p2 + '%)</span></div>' +
-            '</div>' +
-            '<div style="background: white; border: 1px solid #E2E8F0; padding: 4px; border-radius: 4px;">' +
-              '<div style="color: #EF4444; font-weight: 700;">1 - Hạn chế</div>' +
-              '<div style="font-weight: 800;">' + c1 + ' <span style="font-size: 0.68rem; font-weight: 600; color: #64748B;">(' + p1 + '%)</span></div>' +
-            '</div>' +
+          '<div style="background: white; border: 1px solid #E2E8F0; padding: 4px; border-radius: 4px;">' +
+          '<div style="color: #0F5132; font-weight: 700;">5 - Xuất sắc</div>' +
+          '<div style="font-weight: 800;">' + c5 + ' <span style="font-size: 0.68rem; font-weight: 600; color: #64748B;">(' + p5 + '%)</span></div>' +
           '</div>' +
-        '</div>';
+          '<div style="background: white; border: 1px solid #E2E8F0; padding: 4px; border-radius: 4px;">' +
+          '<div style="color: #22C55E; font-weight: 700;">4 - Tốt</div>' +
+          '<div style="font-weight: 800;">' + c4 + ' <span style="font-size: 0.68rem; font-weight: 600; color: #64748B;">(' + p4 + '%)</span></div>' +
+          '</div>' +
+          '<div style="background: white; border: 1px solid #E2E8F0; padding: 4px; border-radius: 4px;">' +
+          '<div style="color: #EAB308; font-weight: 700;">3 - Khá</div>' +
+          '<div style="font-weight: 800;">' + c3 + ' <span style="font-size: 0.68rem; font-weight: 600; color: #64748B;">(' + p3 + '%)</span></div>' +
+          '</div>' +
+          '<div style="background: white; border: 1px solid #E2E8F0; padding: 4px; border-radius: 4px;">' +
+          '<div style="color: #F97316; font-weight: 700;">2 - Bình thường</div>' +
+          '<div style="font-weight: 800;">' + c2 + ' <span style="font-size: 0.68rem; font-weight: 600; color: #64748B;">(' + p2 + '%)</span></div>' +
+          '</div>' +
+          '<div style="background: white; border: 1px solid #E2E8F0; padding: 4px; border-radius: 4px;">' +
+          '<div style="color: #EF4444; font-weight: 700;">1 - Hạn chế</div>' +
+          '<div style="font-weight: 800;">' + c1 + ' <span style="font-size: 0.68rem; font-weight: 600; color: #64748B;">(' + p1 + '%)</span></div>' +
+          '</div>' +
+          '</div>' +
+          '</div>';
       };
 
-      critContent.innerHTML = 
+      critContent.innerHTML =
         renderCritBox('Tiêu chí 1: Kiến thức chuyên môn', 'fa-solid fa-graduation-cap', '#0F5132', item.c5_ktcm, item.c4_ktcm, item.c3_ktcm, item.c2_ktcm, item.c1_ktcm, item.diem_ktcm, item.ty_le_tich_cuc_ktcm, item.tong_phieu_ktcm) +
         renderCritBox('Tiêu chí 2: Kỹ năng sư phạm / Phương pháp giảng dạy', 'fa-solid fa-chalkboard-user', '#0284C7', item.c5_knsp, item.c4_knsp, item.c3_knsp, item.c2_knsp, item.c1_knsp, item.diem_knsp, item.ty_le_tich_cuc_knsp, item.tong_phieu_knsp) +
         renderCritBox('Tiêu chí 3: Thái độ và tác phong chuyên nghiệp', 'fa-solid fa-user-check', '#D97706', item.c5_tdtp, item.c4_tdtp, item.c3_tdtp, item.c2_tdtp, item.c1_tdtp, item.diem_tdtp, item.ty_le_tich_cuc_tdtp, item.tong_phieu_tdtp);
@@ -6564,13 +6623,13 @@ document.addEventListener('DOMContentLoaded', () => {
     modal.classList.add('active');
   };
 
-  window.closeGvModal = function(e) {
+  window.closeGvModal = function (e) {
     if (e && e.preventDefault) e.preventDefault();
     const modal = document.getElementById('gvDetailModal');
     if (modal) modal.classList.remove('active');
   };
 
-  window.closeGvModalOnOverlay = function(e) {
+  window.closeGvModalOnOverlay = function (e) {
     if (e.target && e.target.id === 'gvDetailModal') {
       window.closeGvModal(e);
     }
@@ -6659,7 +6718,7 @@ document.addEventListener('DOMContentLoaded', () => {
         '<td class="center">' + (item.diem_tdtp ? item.diem_tdtp.toFixed(2) : '') + '</td>' +
         '<td class="center badge">' + (item.diem_tb ? item.diem_tb.toFixed(2) : '') + '</td>' +
         '<td>' + (item.cbql || '') + '</td>' +
-      '</tr>';
+        '</tr>';
     });
 
     tableHtml += '</tbody></table></body></html>';
@@ -6695,7 +6754,7 @@ document.addEventListener('DOMContentLoaded', () => {
         window.allGvItems = allGvItems;
         try {
           localStorage.setItem(STORAGE_KEY_GV_DATA, JSON.stringify(allGvItems));
-        } catch (e) {}
+        } catch (e) { }
 
         populateGvFilterDropdowns();
         if (activeView === 'gv') applyGvFilters();
@@ -7186,10 +7245,10 @@ document.addEventListener('DOMContentLoaded', () => {
       const q = dgcState.searchQuery.trim().toLowerCase();
       filtered = filtered.filter(item => {
         return (item.ma_lop && item.ma_lop.toLowerCase().includes(q)) ||
-               (item.chuong_trinh && item.chuong_trinh.toLowerCase().includes(q)) ||
-               (item.ten_ct_full && item.ten_ct_full.toLowerCase().includes(q)) ||
-               (item.cbql && item.cbql.toLowerCase().includes(q)) ||
-               (item.dia_diem && item.dia_diem.toLowerCase().includes(q));
+          (item.chuong_trinh && item.chuong_trinh.toLowerCase().includes(q)) ||
+          (item.ten_ct_full && item.ten_ct_full.toLowerCase().includes(q)) ||
+          (item.cbql && item.cbql.toLowerCase().includes(q)) ||
+          (item.dia_diem && item.dia_diem.toLowerCase().includes(q));
       });
     }
 
@@ -7470,7 +7529,7 @@ document.addEventListener('DOMContentLoaded', () => {
           },
           tooltip: {
             callbacks: {
-              label: function(context) {
+              label: function (context) {
                 const ds = context.dataset;
                 const vote = ds.rawVotes ? ds.rawVotes[context.dataIndex] : 0;
                 return ds.label + ': ' + context.parsed.x + '% (' + vote.toLocaleString('vi-VN') + ' phiếu)';
@@ -7483,7 +7542,7 @@ document.addEventListener('DOMContentLoaded', () => {
             stacked: true,
             max: 100,
             ticks: {
-              callback: function(v) { return v + '%'; },
+              callback: function (v) { return v + '%'; },
               font: { size: 10 }
             },
             grid: { color: '#F1F5F9' }
@@ -7682,13 +7741,13 @@ document.addEventListener('DOMContentLoaded', () => {
           },
           tooltip: {
             callbacks: {
-              title: function(items) {
+              title: function (items) {
                 if (!items || items.length === 0) return '';
                 const idx = items[0].dataIndex;
                 const it = displayList[idx];
                 return it ? (it.label + (it.subLabel ? ' - ' + it.subLabel : '')) : '';
               },
-              label: function(context) {
+              label: function (context) {
                 if (context.dataset.yAxisID === 'y1') {
                   return context.dataset.label + ': ' + context.parsed.y.toLocaleString('vi-VN') + ' phiếu';
                 }
@@ -7715,7 +7774,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ticks: {
               stepSize: 0.25,
               font: { size: 10 },
-              callback: function(v) { return v.toFixed(2); }
+              callback: function (v) { return v.toFixed(2); }
             },
             title: {
               display: true,
@@ -7732,7 +7791,7 @@ document.addEventListener('DOMContentLoaded', () => {
             grid: { display: false },
             ticks: {
               font: { size: 10 },
-              callback: function(v) { return v.toLocaleString('vi-VN'); }
+              callback: function (v) { return v.toLocaleString('vi-VN'); }
             },
             title: {
               display: true,
@@ -7773,7 +7832,7 @@ document.addEventListener('DOMContentLoaded', () => {
       html += '<div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed #E2E8F0; padding-bottom: 2px;">' +
         '<span style="color: #475569; font-weight: 600;">' + k + ':</span>' +
         '<span style="font-weight: 700; color: #1E293B;">' + d.votes.toLocaleString('vi-VN') + ' phiếu <span style="font-size: 0.72rem; color: #64748B;">(' + pct + '% - ' + d.classes + ' lớp)</span></span>' +
-      '</div>';
+        '</div>';
     });
     container.innerHTML = html;
   }
@@ -7803,8 +7862,8 @@ document.addEventListener('DOMContentLoaded', () => {
       rowsHtml += '<tr>' +
         '<td style="text-align: center; font-weight: 600; color: var(--text-muted);">' + (idx + 1) + '</td>' +
         '<td>' +
-          '<strong style="color: var(--brand-primary); font-size: 0.85rem;">' + (item.ma_lop || '') + '</strong>' +
-          '<div style="font-size: 0.75rem; color: #64748B; margin-top: 2px;">' + (item.ten_ct_full || item.chuong_trinh || '') + '</div>' +
+        '<strong style="color: var(--brand-primary); font-size: 0.85rem;">' + (item.ma_lop || '') + '</strong>' +
+        '<div style="font-size: 0.75rem; color: #64748B; margin-top: 2px;">' + (item.ten_ct_full || item.chuong_trinh || '') + '</div>' +
         '</td>' +
         '<td style="text-align: center;"><span class="badge ' + fmtBadgeClass + '" style="font-size: 0.72rem;">' + (item.hinh_thuc_hoc || 'Trực tiếp') + '</span></td>' +
         '<td style="text-align: center; font-size: 0.78rem; color: #475569;">' + dateStr + '</td>' +
@@ -7815,18 +7874,18 @@ document.addEventListener('DOMContentLoaded', () => {
         '<td style="text-align: center; font-weight: 800; color: var(--brand-primary);">' + dTb + '</td>' +
         '<td style="text-align: center;"><span style="color: #0F5132; font-weight: 700; background: #ECFDF5; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem;">' + posRate + '%</span></td>' +
         '<td style="text-align: center;">' +
-          '<button type="button" class="btn btn-sm" onclick="window.openDgcClassModal(' + item.id + ')" style="padding: 2px 8px; font-size: 0.75rem; background: #F1F5F9; color: var(--brand-primary); border: 1px solid #CBD5E1; border-radius: 4px; font-weight: 700; cursor: pointer;" title="Xem chi tiết phân bố tự đánh giá">' +
-            '<i class="fa-solid fa-eye"></i> Xem' +
-          '</button>' +
+        '<button type="button" class="btn btn-sm" onclick="window.openDgcClassModal(' + item.id + ')" style="padding: 2px 8px; font-size: 0.75rem; background: #F1F5F9; color: var(--brand-primary); border: 1px solid #CBD5E1; border-radius: 4px; font-weight: 700; cursor: pointer;" title="Xem chi tiết phân bố tự đánh giá">' +
+        '<i class="fa-solid fa-eye"></i> Xem' +
+        '</button>' +
         '</td>' +
-      '</tr>';
+        '</tr>';
     });
 
     tbody.innerHTML = rowsHtml;
   }
 
   // --- DGC DETAIL MODAL ---
-  window.openDgcClassModal = function(id) {
+  window.openDgcClassModal = function (id) {
     const item = allDgcItems.find(c => c.id === id);
     if (!item) return;
 
@@ -7893,47 +7952,47 @@ document.addEventListener('DOMContentLoaded', () => {
 
         return '<div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 1rem;">' +
           '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">' +
-            '<div style="display: flex; align-items: center; gap: 0.5rem;">' +
-              '<i class="' + icon + '" style="color: ' + color + '; font-size: 1.1rem;"></i>' +
-              '<strong style="font-size: 0.95rem; color: #1E293B;">' + title + '</strong>' +
-            '</div>' +
-            '<div style="display: flex; align-items: center; gap: 0.75rem;">' +
-              '<span style="font-size: 0.8rem; font-weight: 700; color: #0F5132; background: #ECFDF5; padding: 2px 8px; border-radius: 4px;">Tích cực: ' + posRate + '%</span>' +
-              '<span style="font-size: 1.1rem; font-weight: 800; color: ' + color + ';">' + (score ? score.toFixed(2) : '0.00') + ' <span style="font-size: 0.75rem; font-weight: 600; color: #64748B;">/ 5.0</span></span>' +
-            '</div>' +
+          '<div style="display: flex; align-items: center; gap: 0.5rem;">' +
+          '<i class="' + icon + '" style="color: ' + color + '; font-size: 1.1rem;"></i>' +
+          '<strong style="font-size: 0.95rem; color: #1E293B;">' + title + '</strong>' +
+          '</div>' +
+          '<div style="display: flex; align-items: center; gap: 0.75rem;">' +
+          '<span style="font-size: 0.8rem; font-weight: 700; color: #0F5132; background: #ECFDF5; padding: 2px 8px; border-radius: 4px;">Tích cực: ' + posRate + '%</span>' +
+          '<span style="font-size: 1.1rem; font-weight: 800; color: ' + color + ';">' + (score ? score.toFixed(2) : '0.00') + ' <span style="font-size: 0.75rem; font-weight: 600; color: #64748B;">/ 5.0</span></span>' +
+          '</div>' +
           '</div>' +
           // 5-level stacked bar visual
           '<div style="height: 14px; display: flex; border-radius: 4px; overflow: hidden; background: #E2E8F0; margin-bottom: 0.75rem;">' +
-            '<div style="width: ' + p5 + '%; background: #0F5132;" title="Rất rõ rệt: ' + c5 + ' (' + p5 + '%)"></div>' +
-            '<div style="width: ' + p4 + '%; background: #22C55E;" title="Rõ rệt: ' + c4 + ' (' + p4 + '%)"></div>' +
-            '<div style="width: ' + p3 + '%; background: #EAB308;" title="Khá: ' + c3 + ' (' + p3 + '%)"></div>' +
-            '<div style="width: ' + p2 + '%; background: #F97316;" title="Ít: ' + c2 + ' (' + p2 + '%)"></div>' +
-            '<div style="width: ' + p1 + '%; background: #EF4444;" title="Rất ít: ' + c1 + ' (' + p1 + '%)"></div>' +
+          '<div style="width: ' + p5 + '%; background: #0F5132;" title="Rất rõ rệt: ' + c5 + ' (' + p5 + '%)"></div>' +
+          '<div style="width: ' + p4 + '%; background: #22C55E;" title="Rõ rệt: ' + c4 + ' (' + p4 + '%)"></div>' +
+          '<div style="width: ' + p3 + '%; background: #EAB308;" title="Khá: ' + c3 + ' (' + p3 + '%)"></div>' +
+          '<div style="width: ' + p2 + '%; background: #F97316;" title="Ít: ' + c2 + ' (' + p2 + '%)"></div>' +
+          '<div style="width: ' + p1 + '%; background: #EF4444;" title="Rất ít: ' + c1 + ' (' + p1 + '%)"></div>' +
           '</div>' +
           // 5 stats pill row
           '<div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.5rem; text-align: center; font-size: 0.75rem;">' +
-            '<div style="background: white; border: 1px solid #E2E8F0; padding: 4px; border-radius: 4px;">' +
-              '<div style="color: #0F5132; font-weight: 700;">5 - Rất rõ rệt</div>' +
-              '<div style="font-weight: 800;">' + c5 + ' <span style="font-size: 0.68rem; font-weight: 600; color: #64748B;">(' + p5 + '%)</span></div>' +
-            '</div>' +
-            '<div style="background: white; border: 1px solid #E2E8F0; padding: 4px; border-radius: 4px;">' +
-              '<div style="color: #22C55E; font-weight: 700;">4 - Rõ rệt</div>' +
-              '<div style="font-weight: 800;">' + c4 + ' <span style="font-size: 0.68rem; font-weight: 600; color: #64748B;">(' + p4 + '%)</span></div>' +
-            '</div>' +
-            '<div style="background: white; border: 1px solid #E2E8F0; padding: 4px; border-radius: 4px;">' +
-              '<div style="color: #EAB308; font-weight: 700;">3 - Khá</div>' +
-              '<div style="font-weight: 800;">' + c3 + ' <span style="font-size: 0.68rem; font-weight: 600; color: #64748B;">(' + p3 + '%)</span></div>' +
-            '</div>' +
-            '<div style="background: white; border: 1px solid #E2E8F0; padding: 4px; border-radius: 4px;">' +
-              '<div style="color: #F97316; font-weight: 700;">2 - Ít</div>' +
-              '<div style="font-weight: 800;">' + c2 + ' <span style="font-size: 0.68rem; font-weight: 600; color: #64748B;">(' + p2 + '%)</span></div>' +
-            '</div>' +
-            '<div style="background: white; border: 1px solid #E2E8F0; padding: 4px; border-radius: 4px;">' +
-              '<div style="color: #EF4444; font-weight: 700;">1 - Rất ít</div>' +
-              '<div style="font-weight: 800;">' + c1 + ' <span style="font-size: 0.68rem; font-weight: 600; color: #64748B;">(' + p1 + '%)</span></div>' +
-            '</div>' +
+          '<div style="background: white; border: 1px solid #E2E8F0; padding: 4px; border-radius: 4px;">' +
+          '<div style="color: #0F5132; font-weight: 700;">5 - Rất rõ rệt</div>' +
+          '<div style="font-weight: 800;">' + c5 + ' <span style="font-size: 0.68rem; font-weight: 600; color: #64748B;">(' + p5 + '%)</span></div>' +
           '</div>' +
-        '</div>';
+          '<div style="background: white; border: 1px solid #E2E8F0; padding: 4px; border-radius: 4px;">' +
+          '<div style="color: #22C55E; font-weight: 700;">4 - Rõ rệt</div>' +
+          '<div style="font-weight: 800;">' + c4 + ' <span style="font-size: 0.68rem; font-weight: 600; color: #64748B;">(' + p4 + '%)</span></div>' +
+          '</div>' +
+          '<div style="background: white; border: 1px solid #E2E8F0; padding: 4px; border-radius: 4px;">' +
+          '<div style="color: #EAB308; font-weight: 700;">3 - Khá</div>' +
+          '<div style="font-weight: 800;">' + c3 + ' <span style="font-size: 0.68rem; font-weight: 600; color: #64748B;">(' + p3 + '%)</span></div>' +
+          '</div>' +
+          '<div style="background: white; border: 1px solid #E2E8F0; padding: 4px; border-radius: 4px;">' +
+          '<div style="color: #F97316; font-weight: 700;">2 - Ít</div>' +
+          '<div style="font-weight: 800;">' + c2 + ' <span style="font-size: 0.68rem; font-weight: 600; color: #64748B;">(' + p2 + '%)</span></div>' +
+          '</div>' +
+          '<div style="background: white; border: 1px solid #E2E8F0; padding: 4px; border-radius: 4px;">' +
+          '<div style="color: #EF4444; font-weight: 700;">1 - Rất ít</div>' +
+          '<div style="font-weight: 800;">' + c1 + ' <span style="font-size: 0.68rem; font-weight: 600; color: #64748B;">(' + p1 + '%)</span></div>' +
+          '</div>' +
+          '</div>' +
+          '</div>';
       };
 
       critContent.innerHTML =
@@ -7944,13 +8003,13 @@ document.addEventListener('DOMContentLoaded', () => {
     modal.classList.add('active');
   };
 
-  window.closeDgcModal = function(e) {
+  window.closeDgcModal = function (e) {
     if (e && e.preventDefault) e.preventDefault();
     const modal = document.getElementById('dgcDetailModal');
     if (modal) modal.classList.remove('active');
   };
 
-  window.closeDgcModalOnOverlay = function(e) {
+  window.closeDgcModalOnOverlay = function (e) {
     if (e.target && e.target.id === 'dgcDetailModal') {
       window.closeDgcModal(e);
     }
@@ -8186,10 +8245,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (tong_phieu_kt === 0 && tong_phieu_kn === 0) return;
 
-      const diem_kt = tong_phieu_kt > 0 ? (5*c5_kt + 4*c4_kt + 3*c3_kt + 2*c2_kt + 1*c1_kt) / tong_phieu_kt : 0;
+      const diem_kt = tong_phieu_kt > 0 ? (5 * c5_kt + 4 * c4_kt + 3 * c3_kt + 2 * c2_kt + 1 * c1_kt) / tong_phieu_kt : 0;
       const ty_le_tich_cuc_kt = tong_phieu_kt > 0 ? ((c5_kt + c4_kt) / tong_phieu_kt) * 100 : 0;
 
-      const diem_kn = tong_phieu_kn > 0 ? (5*c5_kn + 4*c4_kn + 3*c3_kn + 2*c2_kn + 1*c1_kn) / tong_phieu_kn : 0;
+      const diem_kn = tong_phieu_kn > 0 ? (5 * c5_kn + 4 * c4_kn + 3 * c3_kn + 2 * c2_kn + 1 * c1_kn) / tong_phieu_kn : 0;
       const ty_le_tich_cuc_kn = tong_phieu_kn > 0 ? ((c5_kn + c4_kn) / tong_phieu_kn) * 100 : 0;
 
       const tong_phieu = Math.max(tong_phieu_kt, tong_phieu_kn);
@@ -8242,8 +8301,8 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   // End of DGC Module
 
-// ==========================================
-// ==========================================
+  // ==========================================
+  // ==========================================
   // GENERAL REPORT (BAO CAO CHUNG) MODULE LOGIC
   // Smart Training Management Dashboard System - Agribank
   // ==========================================
@@ -8819,8 +8878,8 @@ document.addEventListener('DOMContentLoaded', () => {
     matches.forEach(g => {
       if (!g) return;
       const rawName = (g.ten_gv || g.name || 'Chưa rõ').trim();
-      const gvKey = (typeof normalizeLecturerKey === 'function') 
-        ? normalizeLecturerKey(rawName) 
+      const gvKey = (typeof normalizeLecturerKey === 'function')
+        ? normalizeLecturerKey(rawName)
         : rawName.toLowerCase().replace(/^(pgs\.?\s*ts\.?|gs\.?\s*ts\.?|ths\.?|ts\.?|pgs\.?|gs\.?)\s+/i, '').replace(/\s+/g, ' ').trim();
       if (!gvKey) return;
 
@@ -9404,7 +9463,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const normClassSet = new Set(distinctClassCodes.map(c => normalizeReportClassKey(c)));
 
     const pphtMatches = getRepPphtdt().filter(p => normClassSet.has(normalizeReportClassKey(p.ma_lop)));
-    
+
     // Deduplicate NDDT items between new and old format sheets (prefer new)
     const seenNddtKeys = new Set();
     const nddtMatches = [];
@@ -9879,7 +9938,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const kpiElem = document.getElementById('reportKpiGrid');
 
     if (badgeElem) {
-      badgeElem.innerHTML = isProgram 
+      badgeElem.innerHTML = isProgram
         ? '<i class="fa-solid fa-graduation-cap"></i> BÁO CÁO CHƯƠNG TRÌNH ĐÀO TẠO'
         : '<i class="fa-solid fa-chalkboard-user"></i> BÁO CÁO LỚP HỌC';
     }
@@ -9905,49 +9964,49 @@ document.addEventListener('DOMContentLoaded', () => {
     if (metaElem) {
       let metaHtml = '';
       if (isProgram) {
-        metaHtml = 
+        metaHtml =
           '<div class="meta-item">' +
-            '<span class="meta-label">Tên chương trình đào tạo:</span>' +
-            '<span class="meta-val" style="font-weight: 700; color: #1E293B;">' + (data.programName || data.programCode) + '</span>' +
+          '<span class="meta-label">Tên chương trình đào tạo:</span>' +
+          '<span class="meta-val" style="font-weight: 700; color: #1E293B;">' + (data.programName || data.programCode) + '</span>' +
           '</div>' +
           '<div class="meta-item">' +
-            '<span class="meta-label">Mã chương trình:</span>' +
-            '<span class="meta-val" style="font-weight: 800; color: var(--brand-primary);">' + data.programCode + '</span>' +
+          '<span class="meta-label">Mã chương trình:</span>' +
+          '<span class="meta-val" style="font-weight: 800; color: var(--brand-primary);">' + data.programCode + '</span>' +
           '</div>' +
           '<div class="meta-item">' +
-            '<span class="meta-label">Quy mô tổ chức:</span>' +
-            '<span class="meta-val" style="font-weight: 600;">' + data.classesCount + ' lớp học (' + data.classes.filter(c => c.votes > 0).length + ' lớp có khảo sát)</span>' +
+          '<span class="meta-label">Quy mô tổ chức:</span>' +
+          '<span class="meta-val" style="font-weight: 600;">' + data.classesCount + ' lớp học (' + data.classes.filter(c => c.votes > 0).length + ' lớp có khảo sát)</span>' +
           '</div>' +
           '<div class="meta-item">' +
-            '<span class="meta-label">Thời gian tổng hợp:</span>' +
-            '<span class="meta-val">Năm kế hoạch 2026</span>' +
+          '<span class="meta-label">Thời gian tổng hợp:</span>' +
+          '<span class="meta-val">Năm kế hoạch 2026</span>' +
           '</div>';
       } else {
         const fmtBadge = getReportFormatBadge(data.format);
-        metaHtml = 
+        metaHtml =
           '<div class="meta-item">' +
-            '<span class="meta-label">Lớp học:</span>' +
-            '<span class="meta-val" style="font-weight: 800; color: var(--brand-primary);">' + data.classCode + '</span>' +
+          '<span class="meta-label">Lớp học:</span>' +
+          '<span class="meta-val" style="font-weight: 800; color: var(--brand-primary);">' + data.classCode + '</span>' +
           '</div>' +
           '<div class="meta-item">' +
-            '<span class="meta-label">Chương trình:</span>' +
-            '<span class="meta-val" style="font-weight: 700;">' + (data.className || data.programCode) + '</span>' +
+          '<span class="meta-label">Chương trình:</span>' +
+          '<span class="meta-val" style="font-weight: 700;">' + (data.className || data.programCode) + '</span>' +
           '</div>' +
           '<div class="meta-item">' +
-            '<span class="meta-label">Hình thức đào tạo:</span>' +
-            '<span class="meta-val">' + fmtBadge + '</span>' +
+          '<span class="meta-label">Hình thức đào tạo:</span>' +
+          '<span class="meta-val">' + fmtBadge + '</span>' +
           '</div>' +
           '<div class="meta-item">' +
-            '<span class="meta-label">Thời gian tổ chức:</span>' +
-            '<span class="meta-val">' + (typeof formatReportDateRange === 'function' ? formatReportDateRange(data.startDate, data.endDate, 'Theo kế hoạch 2026') : (data.startDate ? (data.startDate + (data.endDate ? ' - ' + data.endDate : '')) : 'Theo kế hoạch 2026')) + '</span>' +
+          '<span class="meta-label">Thời gian tổ chức:</span>' +
+          '<span class="meta-val">' + (typeof formatReportDateRange === 'function' ? formatReportDateRange(data.startDate, data.endDate, 'Theo kế hoạch 2026') : (data.startDate ? (data.startDate + (data.endDate ? ' - ' + data.endDate : '')) : 'Theo kế hoạch 2026')) + '</span>' +
           '</div>' +
           '<div class="meta-item">' +
-            '<span class="meta-label">Địa điểm:</span>' +
-            '<span class="meta-val">' + (data.location || 'Trường ĐT&BDNV') + '</span>' +
+          '<span class="meta-label">Địa điểm:</span>' +
+          '<span class="meta-val">' + (data.location || 'Trường ĐT&BDNV') + '</span>' +
           '</div>' +
           '<div class="meta-item">' +
-            '<span class="meta-label">Cán bộ quản lý:</span>' +
-            '<span class="meta-val">' + (data.cbql || 'Ban Quản lý Đào tạo') + '</span>' +
+          '<span class="meta-label">Cán bộ quản lý:</span>' +
+          '<span class="meta-val">' + (data.cbql || 'Ban Quản lý Đào tạo') + '</span>' +
           '</div>';
       }
       metaElem.innerHTML = metaHtml;
@@ -9974,14 +10033,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
         return '<div style="display: flex; flex-direction: column; align-items: center; justify-content: center; margin: 0.15rem 0;">' +
           '<div style="position: relative; width: 92px; height: 48px;">' +
-            '<svg viewBox="0 0 96 52" style="width: 92px; height: 48px; overflow: visible;">' +
-              '<path d="M 12 48 A 36 36 0 0 1 84 48" fill="none" stroke="#E2E8F0" stroke-width="7" stroke-linecap="round" />' +
-              '<path d="M 12 48 A 36 36 0 0 1 84 48" fill="none" stroke="' + strokeColor + '" stroke-width="7" stroke-linecap="round" stroke-dasharray="113.1" stroke-dashoffset="' + dashOffset + '" />' +
-              '<text x="48" y="44" text-anchor="middle" font-family=\"\'Plus Jakarta Sans\', sans-serif\" font-size=\"14.5\" font-weight=\"800\" fill=\"#1E293B\">' + displayStr + '</text>' +
-            '</svg>' +
+          '<svg viewBox="0 0 96 52" style="width: 92px; height: 48px; overflow: visible;">' +
+          '<path d="M 12 48 A 36 36 0 0 1 84 48" fill="none" stroke="#E2E8F0" stroke-width="7" stroke-linecap="round" />' +
+          '<path d="M 12 48 A 36 36 0 0 1 84 48" fill="none" stroke="' + strokeColor + '" stroke-width="7" stroke-linecap="round" stroke-dasharray="113.1" stroke-dashoffset="' + dashOffset + '" />' +
+          '<text x="48" y="44" text-anchor="middle" font-family=\"\'Plus Jakarta Sans\', sans-serif\" font-size=\"14.5\" font-weight=\"800\" fill=\"#1E293B\">' + displayStr + '</text>' +
+          '</svg>' +
           '</div>' +
-        '</div>' +
-        '<div style="font-size: 0.72rem; color: #64748B; margin-top: 0.25rem; text-align: center; white-space: nowrap;">' + subtitleStr + '</div>';
+          '</div>' +
+          '<div style="font-size: 0.72rem; color: #64748B; margin-top: 0.25rem; text-align: center; white-space: nowrap;">' + subtitleStr + '</div>';
       };
 
       if (isProgram) {
@@ -9992,55 +10051,55 @@ document.addEventListener('DOMContentLoaded', () => {
         const attRate = hvKh > 0 ? ((hvTt / hvKh) * 100).toFixed(1) : (hvTt > 0 ? '100.0' : '0.0');
         const respRate = Number(data.responseRate || 0).toFixed(1);
 
-        kpiHtml = 
+        kpiHtml =
           '<div class="report-kpi-grid" style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.85rem;">' +
-            // KPI 1: TỔNG SỐ LỚP HỌC (Strict Distinct Count)
-            '<div class="kpi-card" style="border-left: 3px solid var(--brand-primary); padding: 0.85rem; display: flex; flex-direction: column; justify-content: space-between; min-height: 118px;">' +
-              '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">' +
-                '<span style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">TỔNG SỐ LỚP HỌC</span>' +
-                '<div style="width: 28px; height: 28px; border-radius: 50%; background: #FFF1F2; display: flex; align-items: center; justify-content: center; color: var(--brand-primary);"><i class="fa-solid fa-chalkboard"></i></div>' +
-              '</div>' +
-              '<div style="font-size: 1.65rem; font-weight: 800; color: #1E293B; line-height: 1.1; margin: 0.25rem 0;">' + distinctClasses + '</div>' +
-              '<div style="font-size: 0.72rem; color: #64748B;">' + data.classes.filter(c => c.votes > 0).length + ' lớp có khảo sát</div>' +
-            '</div>' +
+          // KPI 1: TỔNG SỐ LỚP HỌC (Strict Distinct Count)
+          '<div class="kpi-card" style="border-left: 3px solid var(--brand-primary); padding: 0.85rem; display: flex; flex-direction: column; justify-content: space-between; min-height: 118px;">' +
+          '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">' +
+          '<span style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">TỔNG SỐ LỚP HỌC</span>' +
+          '<div style="width: 28px; height: 28px; border-radius: 50%; background: #FFF1F2; display: flex; align-items: center; justify-content: center; color: var(--brand-primary);"><i class="fa-solid fa-chalkboard"></i></div>' +
+          '</div>' +
+          '<div style="font-size: 1.65rem; font-weight: 800; color: #1E293B; line-height: 1.1; margin: 0.25rem 0;">' + distinctClasses + '</div>' +
+          '<div style="font-size: 0.72rem; color: #64748B;">' + data.classes.filter(c => c.votes > 0).length + ' lớp có khảo sát</div>' +
+          '</div>' +
 
-            // KPI 2: HỌC VIÊN KẾ HOẠCH
-            '<div class="kpi-card" style="border-left: 3px solid #8C1D40; padding: 0.85rem; display: flex; flex-direction: column; justify-content: space-between; min-height: 118px;">' +
-              '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">' +
-                '<span style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">HỌC VIÊN KẾ HOẠCH</span>' +
-                '<div style="width: 28px; height: 28px; border-radius: 50%; background: #FFF1F2; display: flex; align-items: center; justify-content: center; color: #8C1D40;"><i class="fa-solid fa-users"></i></div>' +
-              '</div>' +
-              '<div style="font-size: 1.65rem; font-weight: 800; color: #1E293B; line-height: 1.1; margin: 0.25rem 0;">' + formatNumber(hvKh) + '</div>' +
-              '<div style="font-size: 0.72rem; color: #64748B;">Chỉ tiêu toàn chương trình</div>' +
-            '</div>' +
+          // KPI 2: HỌC VIÊN KẾ HOẠCH
+          '<div class="kpi-card" style="border-left: 3px solid #8C1D40; padding: 0.85rem; display: flex; flex-direction: column; justify-content: space-between; min-height: 118px;">' +
+          '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">' +
+          '<span style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">HỌC VIÊN KẾ HOẠCH</span>' +
+          '<div style="width: 28px; height: 28px; border-radius: 50%; background: #FFF1F2; display: flex; align-items: center; justify-content: center; color: #8C1D40;"><i class="fa-solid fa-users"></i></div>' +
+          '</div>' +
+          '<div style="font-size: 1.65rem; font-weight: 800; color: #1E293B; line-height: 1.1; margin: 0.25rem 0;">' + formatNumber(hvKh) + '</div>' +
+          '<div style="font-size: 0.72rem; color: #64748B;">Chỉ tiêu toàn chương trình</div>' +
+          '</div>' +
 
-            // KPI 3: HỌC VIÊN THỰC TẾ
-            '<div class="kpi-card" style="border-left: 3px solid #0284C7; padding: 0.85rem; display: flex; flex-direction: column; justify-content: space-between; min-height: 118px;">' +
-              '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">' +
-                '<span style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">HỌC VIÊN THỰC TẾ</span>' +
-                '<div style="width: 28px; height: 28px; border-radius: 50%; background: #E0F2FE; display: flex; align-items: center; justify-content: center; color: #0284C7;"><i class="fa-solid fa-user-check"></i></div>' +
-              '</div>' +
-              '<div style="font-size: 1.65rem; font-weight: 800; color: #0284C7; line-height: 1.1; margin: 0.25rem 0;">' + formatNumber(hvTt) + '</div>' +
-              '<div style="font-size: 0.72rem; color: #64748B;">' + (data.isMultiFormat ? ('Trực tiếp: ' + formatNumber(data.directHvTt) + ' • Trực tuyến: ' + formatNumber(data.onlineHvTt)) : 'Học viên tham gia thực tế') + '</div>' +
-            '</div>' +
+          // KPI 3: HỌC VIÊN THỰC TẾ
+          '<div class="kpi-card" style="border-left: 3px solid #0284C7; padding: 0.85rem; display: flex; flex-direction: column; justify-content: space-between; min-height: 118px;">' +
+          '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">' +
+          '<span style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">HỌC VIÊN THỰC TẾ</span>' +
+          '<div style="width: 28px; height: 28px; border-radius: 50%; background: #E0F2FE; display: flex; align-items: center; justify-content: center; color: #0284C7;"><i class="fa-solid fa-user-check"></i></div>' +
+          '</div>' +
+          '<div style="font-size: 1.65rem; font-weight: 800; color: #0284C7; line-height: 1.1; margin: 0.25rem 0;">' + formatNumber(hvTt) + '</div>' +
+          '<div style="font-size: 0.72rem; color: #64748B;">' + (data.isMultiFormat ? ('Trực tiếp: ' + formatNumber(data.directHvTt) + ' • Trực tuyến: ' + formatNumber(data.onlineHvTt)) : 'Học viên tham gia thực tế') + '</div>' +
+          '</div>' +
 
-            // KPI 4: TỶ LỆ THAM DỰ THEO KẾ HOẠCH (Visual Gauge)
-            '<div class="kpi-card" style="border-left: 3px solid #059669; padding: 0.85rem; display: flex; flex-direction: column; justify-content: space-between; min-height: 118px;">' +
-              '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">' +
-                '<span style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">TỶ LỆ THAM DỰ THEO KH</span>' +
-                '<div style="width: 28px; height: 28px; border-radius: 50%; background: #D1FAE5; display: flex; align-items: center; justify-content: center; color: #059669;"><i class="fa-solid fa-gauge-high"></i></div>' +
-              '</div>' +
-              renderGaugeKpiHtml(parseFloat(attRate), attRate + '%', 'Thực tế / Kế hoạch', 'green') +
-            '</div>' +
+          // KPI 4: TỶ LỆ THAM DỰ THEO KẾ HOẠCH (Visual Gauge)
+          '<div class="kpi-card" style="border-left: 3px solid #059669; padding: 0.85rem; display: flex; flex-direction: column; justify-content: space-between; min-height: 118px;">' +
+          '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">' +
+          '<span style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">TỶ LỆ THAM DỰ THEO KH</span>' +
+          '<div style="width: 28px; height: 28px; border-radius: 50%; background: #D1FAE5; display: flex; align-items: center; justify-content: center; color: #059669;"><i class="fa-solid fa-gauge-high"></i></div>' +
+          '</div>' +
+          renderGaugeKpiHtml(parseFloat(attRate), attRate + '%', 'Thực tế / Kế hoạch', 'green') +
+          '</div>' +
 
-            // KPI 5: TỶ LỆ PHẢN HỒI (Visual Gauge)
-            '<div class="kpi-card" style="border-left: 3px solid #7E22CE; padding: 0.85rem; display: flex; flex-direction: column; justify-content: space-between; min-height: 118px;">' +
-              '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">' +
-                '<span style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">TỶ LỆ PHẢN HỒI</span>' +
-                '<div style="width: 28px; height: 28px; border-radius: 50%; background: #F3E8FF; display: flex; align-items: center; justify-content: center; color: #7E22CE;"><i class="fa-solid fa-square-poll-vertical"></i></div>' +
-              '</div>' +
-              renderGaugeKpiHtml(parseFloat(respRate), respRate + '%', formatNumber(data.votes) + ' phiếu khảo sát hợp lệ', 'purple') +
-            '</div>' +
+          // KPI 5: TỶ LỆ PHẢN HỒI (Visual Gauge)
+          '<div class="kpi-card" style="border-left: 3px solid #7E22CE; padding: 0.85rem; display: flex; flex-direction: column; justify-content: space-between; min-height: 118px;">' +
+          '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">' +
+          '<span style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">TỶ LỆ PHẢN HỒI</span>' +
+          '<div style="width: 28px; height: 28px; border-radius: 50%; background: #F3E8FF; display: flex; align-items: center; justify-content: center; color: #7E22CE;"><i class="fa-solid fa-square-poll-vertical"></i></div>' +
+          '</div>' +
+          renderGaugeKpiHtml(parseFloat(respRate), respRate + '%', formatNumber(data.votes) + ' phiếu khảo sát hợp lệ', 'purple') +
+          '</div>' +
           '</div>';
 
       } else {
@@ -10050,55 +10109,55 @@ document.addEventListener('DOMContentLoaded', () => {
         const attRate = hvKh > 0 ? ((hvTt / hvKh) * 100).toFixed(1) : (hvTt > 0 ? '100.0' : '0.0');
         const respRate = Number(data.responseRate || 0).toFixed(1);
 
-        kpiHtml = 
+        kpiHtml =
           '<div class="report-kpi-grid" style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.85rem;">' +
-            // KPI 1: HÌNH THỨC ĐÀO TẠO
-            '<div class="kpi-card" style="border-left: 3px solid var(--brand-primary); padding: 0.85rem; display: flex; flex-direction: column; justify-content: space-between; min-height: 118px;">' +
-              '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">' +
-                '<span style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">HÌNH THỨC ĐÀO TẠO</span>' +
-                '<div style="width: 28px; height: 28px; border-radius: 50%; background: #FFF1F2; display: flex; align-items: center; justify-content: center; color: var(--brand-primary);"><i class="fa-solid fa-chalkboard-user"></i></div>' +
-              '</div>' +
-              '<div style="margin: 0.25rem 0;">' + getReportFormatBadge(data.format) + '</div>' +
-              '<div style="font-size: 0.72rem; color: #64748B;">Quy cách lớp học</div>' +
-            '</div>' +
+          // KPI 1: HÌNH THỨC ĐÀO TẠO
+          '<div class="kpi-card" style="border-left: 3px solid var(--brand-primary); padding: 0.85rem; display: flex; flex-direction: column; justify-content: space-between; min-height: 118px;">' +
+          '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">' +
+          '<span style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">HÌNH THỨC ĐÀO TẠO</span>' +
+          '<div style="width: 28px; height: 28px; border-radius: 50%; background: #FFF1F2; display: flex; align-items: center; justify-content: center; color: var(--brand-primary);"><i class="fa-solid fa-chalkboard-user"></i></div>' +
+          '</div>' +
+          '<div style="margin: 0.25rem 0;">' + getReportFormatBadge(data.format) + '</div>' +
+          '<div style="font-size: 0.72rem; color: #64748B;">Quy cách lớp học</div>' +
+          '</div>' +
 
-            // KPI 2: HỌC VIÊN KẾ HOẠCH
-            '<div class="kpi-card" style="border-left: 3px solid #8C1D40; padding: 0.85rem; display: flex; flex-direction: column; justify-content: space-between; min-height: 118px;">' +
-              '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">' +
-                '<span style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">HỌC VIÊN KẾ HOẠCH</span>' +
-                '<div style="width: 28px; height: 28px; border-radius: 50%; background: #FFF1F2; display: flex; align-items: center; justify-content: center; color: #8C1D40;"><i class="fa-solid fa-users"></i></div>' +
-              '</div>' +
-              '<div style="font-size: 1.65rem; font-weight: 800; color: #1E293B; line-height: 1.1; margin: 0.25rem 0;">' + formatNumber(hvKh) + '</div>' +
-              '<div style="font-size: 0.72rem; color: #64748B;">' + (data.isMultiFormat ? ('Trực tiếp: ' + formatNumber(data.directHvKh) + ' • Trực tuyến: ' + formatNumber(data.onlineHvKh)) : 'Chỉ tiêu giao') + '</div>' +
-            '</div>' +
+          // KPI 2: HỌC VIÊN KẾ HOẠCH
+          '<div class="kpi-card" style="border-left: 3px solid #8C1D40; padding: 0.85rem; display: flex; flex-direction: column; justify-content: space-between; min-height: 118px;">' +
+          '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">' +
+          '<span style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">HỌC VIÊN KẾ HOẠCH</span>' +
+          '<div style="width: 28px; height: 28px; border-radius: 50%; background: #FFF1F2; display: flex; align-items: center; justify-content: center; color: #8C1D40;"><i class="fa-solid fa-users"></i></div>' +
+          '</div>' +
+          '<div style="font-size: 1.65rem; font-weight: 800; color: #1E293B; line-height: 1.1; margin: 0.25rem 0;">' + formatNumber(hvKh) + '</div>' +
+          '<div style="font-size: 0.72rem; color: #64748B;">' + (data.isMultiFormat ? ('Trực tiếp: ' + formatNumber(data.directHvKh) + ' • Trực tuyến: ' + formatNumber(data.onlineHvKh)) : 'Chỉ tiêu giao') + '</div>' +
+          '</div>' +
 
-            // KPI 3: HỌC VIÊN THỰC TẾ
-            '<div class="kpi-card" style="border-left: 3px solid #0284C7; padding: 0.85rem; display: flex; flex-direction: column; justify-content: space-between; min-height: 118px;">' +
-              '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">' +
-                '<span style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">HỌC VIÊN THỰC TẾ</span>' +
-                '<div style="width: 28px; height: 28px; border-radius: 50%; background: #E0F2FE; display: flex; align-items: center; justify-content: center; color: #0284C7;"><i class="fa-solid fa-user-check"></i></div>' +
-              '</div>' +
-              '<div style="font-size: 1.65rem; font-weight: 800; color: #0284C7; line-height: 1.1; margin: 0.25rem 0;">' + formatNumber(hvTt) + '</div>' +
-              '<div style="font-size: 0.72rem; color: #64748B;">Học viên tham gia thực tế</div>' +
-            '</div>' +
+          // KPI 3: HỌC VIÊN THỰC TẾ
+          '<div class="kpi-card" style="border-left: 3px solid #0284C7; padding: 0.85rem; display: flex; flex-direction: column; justify-content: space-between; min-height: 118px;">' +
+          '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">' +
+          '<span style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">HỌC VIÊN THỰC TẾ</span>' +
+          '<div style="width: 28px; height: 28px; border-radius: 50%; background: #E0F2FE; display: flex; align-items: center; justify-content: center; color: #0284C7;"><i class="fa-solid fa-user-check"></i></div>' +
+          '</div>' +
+          '<div style="font-size: 1.65rem; font-weight: 800; color: #0284C7; line-height: 1.1; margin: 0.25rem 0;">' + formatNumber(hvTt) + '</div>' +
+          '<div style="font-size: 0.72rem; color: #64748B;">Học viên tham gia thực tế</div>' +
+          '</div>' +
 
-            // KPI 4: TỶ LỆ THAM DỰ (Visual Gauge)
-            '<div class="kpi-card" style="border-left: 3px solid #059669; padding: 0.85rem; display: flex; flex-direction: column; justify-content: space-between; min-height: 118px;">' +
-              '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">' +
-                '<span style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">TỶ LỆ THAM DỰ</span>' +
-                '<div style="width: 28px; height: 28px; border-radius: 50%; background: #D1FAE5; display: flex; align-items: center; justify-content: center; color: #059669;"><i class="fa-solid fa-gauge-high"></i></div>' +
-              '</div>' +
-              renderGaugeKpiHtml(parseFloat(attRate), attRate + '%', 'Thực tế / Kế hoạch', 'green') +
-            '</div>' +
+          // KPI 4: TỶ LỆ THAM DỰ (Visual Gauge)
+          '<div class="kpi-card" style="border-left: 3px solid #059669; padding: 0.85rem; display: flex; flex-direction: column; justify-content: space-between; min-height: 118px;">' +
+          '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">' +
+          '<span style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">TỶ LỆ THAM DỰ</span>' +
+          '<div style="width: 28px; height: 28px; border-radius: 50%; background: #D1FAE5; display: flex; align-items: center; justify-content: center; color: #059669;"><i class="fa-solid fa-gauge-high"></i></div>' +
+          '</div>' +
+          renderGaugeKpiHtml(parseFloat(attRate), attRate + '%', 'Thực tế / Kế hoạch', 'green') +
+          '</div>' +
 
-            // KPI 5: TỶ LỆ PHẢN HỒI (Visual Gauge)
-            '<div class="kpi-card" style="border-left: 3px solid #7E22CE; padding: 0.85rem; display: flex; flex-direction: column; justify-content: space-between; min-height: 118px;">' +
-              '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">' +
-                '<span style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">TỶ LỆ PHẢN HỒI</span>' +
-                '<div style="width: 28px; height: 28px; border-radius: 50%; background: #F3E8FF; display: flex; align-items: center; justify-content: center; color: #7E22CE;"><i class="fa-solid fa-square-poll-vertical"></i></div>' +
-              '</div>' +
-              renderGaugeKpiHtml(parseFloat(respRate), respRate + '%', formatNumber(data.votes) + ' phiếu khảo sát hợp lệ', 'purple') +
-            '</div>' +
+          // KPI 5: TỶ LỆ PHẢN HỒI (Visual Gauge)
+          '<div class="kpi-card" style="border-left: 3px solid #7E22CE; padding: 0.85rem; display: flex; flex-direction: column; justify-content: space-between; min-height: 118px;">' +
+          '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">' +
+          '<span style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">TỶ LỆ PHẢN HỒI</span>' +
+          '<div style="width: 28px; height: 28px; border-radius: 50%; background: #F3E8FF; display: flex; align-items: center; justify-content: center; color: #7E22CE;"><i class="fa-solid fa-square-poll-vertical"></i></div>' +
+          '</div>' +
+          renderGaugeKpiHtml(parseFloat(respRate), respRate + '%', formatNumber(data.votes) + ' phiếu khảo sát hợp lệ', 'purple') +
+          '</div>' +
           '</div>';
       }
       kpiElem.innerHTML = kpiHtml;
@@ -10129,13 +10188,13 @@ document.addEventListener('DOMContentLoaded', () => {
       const pct = Math.min(100, Math.max(0, (sNum / ceiling) * 100)).toFixed(1);
       return '<td style="padding: 0.45rem 0.65rem; min-width: 95px;">' +
         '<div style="display: flex; justify-content: space-between; align-items: baseline; font-size: 0.8rem; margin-bottom: 0.25rem;">' +
-          '<strong style="color: ' + textColor + ';">' + sNum.toFixed(2) + '</strong>' +
-          '<span style="font-size: 0.68rem; color: #64748B;">/' + ceiling.toFixed(1) + '</span>' +
+        '<strong style="color: ' + textColor + ';">' + sNum.toFixed(2) + '</strong>' +
+        '<span style="font-size: 0.68rem; color: #64748B;">/' + ceiling.toFixed(1) + '</span>' +
         '</div>' +
         '<div style="height: 6px; background: #E2E8F0; border-radius: 3px; overflow: hidden;" title="' + sNum.toFixed(2) + ' / ' + ceiling.toFixed(1) + ' (' + pct + '%)">' +
-          '<div style="width: ' + pct + '%; height: 100%; border-radius: 3px; background: ' + gradColors + '; transition: width 0.3s;"></div>' +
+        '<div style="width: ' + pct + '%; height: 100%; border-radius: 3px; background: ' + gradColors + '; transition: width 0.3s;"></div>' +
         '</div>' +
-      '</td>';
+        '</td>';
     }
 
     // Helper to render mini gauge for Table 2 (Zero overlap, perfectly visible)
@@ -10145,13 +10204,13 @@ document.addEventListener('DOMContentLoaded', () => {
       const color = attNum >= 100 ? '#059669' : (attNum >= 80 ? '#10B981' : (attNum >= 50 ? '#F59E0B' : '#EF4444'));
       return '<td style="text-align: center; padding: 0.35rem 0.4rem; min-width: 75px;">' +
         '<div style="display: inline-flex; align-items: center; justify-content: center;">' +
-          '<svg viewBox="0 0 68 36" style="width: 64px; height: 34px; overflow: visible;">' +
-            '<path d="M 8 32 A 26 26 0 0 1 60 32" fill="none" stroke="#E2E8F0" stroke-width="4.2" stroke-linecap="round" />' +
-            '<path d="M 8 32 A 26 26 0 0 1 60 32" fill="none" stroke="' + color + '" stroke-width="4.2" stroke-linecap="round" stroke-dasharray="81.68" stroke-dashoffset="' + dashOffset + '" />' +
-            '<text x="34" y="30" text-anchor="middle" font-family=\"\'Plus Jakarta Sans\', sans-serif\" font-size=\"9.5\" font-weight=\"800\" fill=\"#1E293B\">' + attDisplay + '</text>' +
-          '</svg>' +
+        '<svg viewBox="0 0 68 36" style="width: 64px; height: 34px; overflow: visible;">' +
+        '<path d="M 8 32 A 26 26 0 0 1 60 32" fill="none" stroke="#E2E8F0" stroke-width="4.2" stroke-linecap="round" />' +
+        '<path d="M 8 32 A 26 26 0 0 1 60 32" fill="none" stroke="' + color + '" stroke-width="4.2" stroke-linecap="round" stroke-dasharray="81.68" stroke-dashoffset="' + dashOffset + '" />' +
+        '<text x="34" y="30" text-anchor="middle" font-family=\"\'Plus Jakarta Sans\', sans-serif\" font-size=\"9.5\" font-weight=\"800\" fill=\"#1E293B\">' + attDisplay + '</text>' +
+        '</svg>' +
         '</div>' +
-      '</td>';
+        '</td>';
     }
 
     // Table 1: Cross-Class 5-Module Score Comparison with Gradient Fill Bars
@@ -10164,27 +10223,27 @@ document.addEventListener('DOMContentLoaded', () => {
           const nddtScore = c.nddt ? (Number(c.nddt.score || c.nddt.diem_tb || 0).toFixed(2)) : '—';
           const pphtScore = c.ppht ? (Number(c.ppht.score || c.ppht.diem_tb || 0).toFixed(2)) : '—';
           const csvcScore = c.csvc ? (Number(c.csvc.score || c.csvc.diem_tb || 0).toFixed(2)) : '—';
-          const gvScore = (c.gvList && c.gvList.length > 0) 
+          const gvScore = (c.gvList && c.gvList.length > 0)
             ? (c.gvList.reduce((acc, g) => acc + (g.diem_tb || 0), 0) / c.gvList.length).toFixed(2)
             : '—';
           const dgcScore = c.dgc ? (Number(c.dgc.score || c.dgc.diem_tb || 0).toFixed(2)) : '—';
 
-          const timeRangeStr = (typeof formatReportDateRange === 'function') 
-            ? formatReportDateRange(c.startDate, c.endDate) 
+          const timeRangeStr = (typeof formatReportDateRange === 'function')
+            ? formatReportDateRange(c.startDate, c.endDate)
             : (c.startDate || '—');
 
-          t1Html += 
+          t1Html +=
             '<tr>' +
-              '<td style="text-align: center; color: #64748B;">' + (idx + 1) + '</td>' +
-              '<td style="font-weight: 700; color: var(--brand-primary);">' + c.classCode + '</td>' +
-              '<td style="text-align: center;">' + getReportFormatBadge(c.format) + '</td>' +
-              '<td style="text-align: center; font-size: 0.8rem; color: #475569; white-space: nowrap;">' + timeRangeStr + '</td>' +
-              '<td style="text-align: center; font-weight: 700; color: #1E293B;">' + (c.votes || 0) + '</td>' +
-              renderGradientScoreCell(nddtScore, 4.0, 'linear-gradient(90deg, #059669, #10B981)', '#0F5132') +
-              renderGradientScoreCell(pphtScore, 4.0, 'linear-gradient(90deg, #0284C7, #38BDF8)', '#0369A1') +
-              renderGradientScoreCell(csvcScore, 4.0, 'linear-gradient(90deg, #D97706, #F59E0B)', '#B45309') +
-              renderGradientScoreCell(gvScore, 5.0, 'linear-gradient(90deg, #8C1D40, #BE123C)', '#8C1D40') +
-              renderGradientScoreCell(dgcScore, 5.0, 'linear-gradient(90deg, #7E22CE, #A855F7)', '#6B21A8') +
+            '<td style="text-align: center; color: #64748B;">' + (idx + 1) + '</td>' +
+            '<td style="font-weight: 700; color: var(--brand-primary);">' + c.classCode + '</td>' +
+            '<td style="text-align: center;">' + getReportFormatBadge(c.format) + '</td>' +
+            '<td style="text-align: center; font-size: 0.8rem; color: #475569; white-space: nowrap;">' + timeRangeStr + '</td>' +
+            '<td style="text-align: center; font-weight: 700; color: #1E293B;">' + (c.votes || 0) + '</td>' +
+            renderGradientScoreCell(nddtScore, 4.0, 'linear-gradient(90deg, #059669, #10B981)', '#0F5132') +
+            renderGradientScoreCell(pphtScore, 4.0, 'linear-gradient(90deg, #0284C7, #38BDF8)', '#0369A1') +
+            renderGradientScoreCell(csvcScore, 4.0, 'linear-gradient(90deg, #D97706, #F59E0B)', '#B45309') +
+            renderGradientScoreCell(gvScore, 5.0, 'linear-gradient(90deg, #8C1D40, #BE123C)', '#8C1D40') +
+            renderGradientScoreCell(dgcScore, 5.0, 'linear-gradient(90deg, #7E22CE, #A855F7)', '#6B21A8') +
             '</tr>';
         });
         t1Body.innerHTML = t1Html;
@@ -10199,29 +10258,29 @@ document.addEventListener('DOMContentLoaded', () => {
         let t2Html = '';
         programData.classes.forEach((c, idx) => {
           const rRate = c.responseRate > 0 ? (c.responseRate.toFixed(1) + '%') : '0.0%';
-          const timeRangeStr = (typeof formatReportDateRange === 'function') 
-            ? formatReportDateRange(c.startDate, c.endDate, 'Năm 2026') 
+          const timeRangeStr = (typeof formatReportDateRange === 'function')
+            ? formatReportDateRange(c.startDate, c.endDate, 'Năm 2026')
             : (c.startDate ? (c.startDate + (c.endDate ? ' - ' + c.endDate : '')) : 'Năm 2026');
           const attNum = c.hvKh > 0 ? ((c.hvThucTe / c.hvKh) * 100) : (c.hvThucTe > 0 ? 100 : 0);
           const attDisplay = attNum.toFixed(1) + '%';
 
-          t2Html += 
+          t2Html +=
             '<tr>' +
-              '<td style="text-align: center; color: #64748B;">' + (idx + 1) + '</td>' +
-              '<td style="font-weight: 800; color: #1E293B;">' + c.classCode + '</td>' +
-              '<td style="text-align: center;">' + getReportFormatBadge(c.format) + '</td>' +
-              '<td style="text-align: center; font-size: 0.8rem; color: #475569; white-space: nowrap;">' + timeRangeStr + '</td>' +
-              '<td>' + (c.location || 'Trường ĐT&BDNV') + '</td>' +
-              '<td>' + (c.cbql || '—') + '</td>' +
-              '<td style="text-align: center; font-weight: 700; color: #64748B;">' + (c.hvKh || 0) + '</td>' +
-              '<td style="text-align: center; font-weight: 700; color: #0284C7;">' + (c.hvThucTe || 0) + '</td>' +
-              renderMiniGaugeCell(attNum, attDisplay) +
-              '<td style="text-align: center; font-weight: 700; color: #059669;">' + rRate + '</td>' +
-              '<td style="text-align: center;" class="no-print">' +
-                '<button type="button" class="btn btn-sm" onclick="reportDrillDownToClass(\'' + c.classCode + '\', \'' + (c.rawFormat || c.format) + '\')" style="background: #FFF1F2; color: var(--brand-primary); border: 1px solid #FECDD3; font-weight: 700; border-radius: 4px; padding: 0.25rem 0.6rem; cursor: pointer; transition: all 0.2s;">' +
-                  '<i class="fa-solid fa-arrow-right"></i> Xem lớp' +
-                '</button>' +
-              '</td>' +
+            '<td style="text-align: center; color: #64748B;">' + (idx + 1) + '</td>' +
+            '<td style="font-weight: 800; color: #1E293B;">' + c.classCode + '</td>' +
+            '<td style="text-align: center;">' + getReportFormatBadge(c.format) + '</td>' +
+            '<td style="text-align: center; font-size: 0.8rem; color: #475569; white-space: nowrap;">' + timeRangeStr + '</td>' +
+            '<td>' + (c.location || 'Trường ĐT&BDNV') + '</td>' +
+            '<td>' + (c.cbql || '—') + '</td>' +
+            '<td style="text-align: center; font-weight: 700; color: #64748B;">' + (c.hvKh || 0) + '</td>' +
+            '<td style="text-align: center; font-weight: 700; color: #0284C7;">' + (c.hvThucTe || 0) + '</td>' +
+            renderMiniGaugeCell(attNum, attDisplay) +
+            '<td style="text-align: center; font-weight: 700; color: #059669;">' + rRate + '</td>' +
+            '<td style="text-align: center;" class="no-print">' +
+            '<button type="button" class="btn btn-sm" onclick="reportDrillDownToClass(\'' + c.classCode + '\', \'' + (c.rawFormat || c.format) + '\')" style="background: #FFF1F2; color: var(--brand-primary); border: 1px solid #FECDD3; font-weight: 700; border-radius: 4px; padding: 0.25rem 0.6rem; cursor: pointer; transition: all 0.2s;">' +
+            '<i class="fa-solid fa-arrow-right"></i> Xem lớp' +
+            '</button>' +
+            '</td>' +
             '</tr>';
         });
         t2Body.innerHTML = t2Html;
@@ -10299,15 +10358,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const hasData = nddtData && ((isProgram && (nddtData.votes || 0) > 0) || (!isProgram && ((nddtData.votes || nddtData.tong_phieu || 0) > 0)));
 
     if (!hasData) {
-      containerElem.innerHTML = 
+      containerElem.innerHTML =
         '<div style="border-bottom: 1px solid #E2E8F0; padding-bottom: 0.65rem; margin-bottom: 0.85rem;">' +
-          '<h3 style="margin: 0; font-size: 1.05rem; font-weight: 800; color: var(--brand-primary); display: flex; align-items: center; gap: 0.5rem;">' +
-            '<i class="fa-solid fa-book-open"></i> ' + title +
-          '</h3>' +
+        '<h3 style="margin: 0; font-size: 1.05rem; font-weight: 800; color: var(--brand-primary); display: flex; align-items: center; gap: 0.5rem;">' +
+        '<i class="fa-solid fa-book-open"></i> ' + title +
+        '</h3>' +
         '</div>' +
         '<div style="padding: 1.5rem; background: #F8FAFC; border: 1px dashed #CBD5E1; border-radius: 8px; text-align: center; color: var(--text-muted); font-style: italic;">' +
-          '<i class="fa-solid fa-circle-exclamation" style="margin-right: 0.4rem; color: #94A3B8;"></i> ' +
-          'Chưa có dữ liệu đánh giá nội dung đào tạo' +
+        '<i class="fa-solid fa-circle-exclamation" style="margin-right: 0.4rem; color: #94A3B8;"></i> ' +
+        'Chưa có dữ liệu đánh giá nội dung đào tạo' +
         '</div>';
       return;
     }
@@ -10352,143 +10411,143 @@ document.addEventListener('DOMContentLoaded', () => {
     // Header with Slicer Filter (if multi-format)
     let headerSlicerHtml = '';
     if (isMulti) {
-      headerSlicerHtml = 
+      headerSlicerHtml =
         '<div class="report-slicer-group" style="display: flex; gap: 0.35rem; align-items: center; background: #F8FAFC; padding: 0.2rem 0.4rem; border-radius: 6px; border: 1px solid #E2E8F0;">' +
-          '<span style="font-size: 0.72rem; font-weight: 700; color: #64748B; margin-right: 0.2rem;"><i class="fa-solid fa-filter"></i> Lọc hình thức:</span>' +
-          '<button type="button" class="btn-slicer active" data-filter="all" onclick="filterReportNddtFormat(this, \'all\')">Tất cả</button>' +
-          '<button type="button" class="btn-slicer" data-filter="direct" onclick="filterReportNddtFormat(this, \'direct\')">Trực tiếp</button>' +
-          '<button type="button" class="btn-slicer" data-filter="online" onclick="filterReportNddtFormat(this, \'online\')">Trực tiếp kết hợp Trực tuyến</button>' +
+        '<span style="font-size: 0.72rem; font-weight: 700; color: #64748B; margin-right: 0.2rem;"><i class="fa-solid fa-filter"></i> Lọc hình thức:</span>' +
+        '<button type="button" class="btn-slicer active" data-filter="all" onclick="filterReportNddtFormat(this, \'all\')">Tất cả</button>' +
+        '<button type="button" class="btn-slicer" data-filter="direct" onclick="filterReportNddtFormat(this, \'direct\')">Trực tiếp</button>' +
+        '<button type="button" class="btn-slicer" data-filter="online" onclick="filterReportNddtFormat(this, \'online\')">Trực tiếp kết hợp Trực tuyến</button>' +
         '</div>';
     }
 
     // Build Executive Layout: Tầng 1 (KPI) + Tầng 2 (Stacked Chart) + Tầng 3 (Collapsible Table)
-    let sectionHtml = 
+    let sectionHtml =
       '<div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #E2E8F0; padding-bottom: 0.65rem; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">' +
-        '<div>' +
-          '<h3 style="margin: 0; font-size: 1.05rem; font-weight: 800; color: var(--brand-primary); display: flex; align-items: center; gap: 0.5rem;">' +
-            '<i class="fa-solid fa-book-open"></i> ' + title +
-          '</h3>' +
-          '<div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.15rem; display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;">' +
-            'Đánh giá đa chiều 3 tiêu chí cốt lõi • Thang điểm chuẩn hóa 4.00' +
-            (isOld 
-              ? '<span style="font-size: 0.68rem; font-weight: 700; color: #9A3412; background: #FFEDD5; border: 1px solid #FED7AA; border-radius: 4px; padding: 0.05rem 0.45rem;">Mẫu cũ</span>' 
-              : '<span style="font-size: 0.68rem; font-weight: 700; color: #166534; background: #DCFCE7; border: 1px solid #BBF7D0; border-radius: 4px; padding: 0.05rem 0.45rem;">Mẫu mới</span>') +
-          '</div>' +
-        '</div>' +
-        '<div style="display: flex; align-items: center; gap: 0.6rem;">' +
-          headerSlicerHtml +
-          '<div style="font-size: 0.8rem; font-weight: 700; color: #64748B; background: #F1F5F9; padding: 0.25rem 0.65rem; border-radius: 6px;">' +
-            'Thang điểm: 4.00' +
-          '</div>' +
-        '</div>' +
+      '<div>' +
+      '<h3 style="margin: 0; font-size: 1.05rem; font-weight: 800; color: var(--brand-primary); display: flex; align-items: center; gap: 0.5rem;">' +
+      '<i class="fa-solid fa-book-open"></i> ' + title +
+      '</h3>' +
+      '<div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.15rem; display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;">' +
+      'Đánh giá đa chiều 3 tiêu chí cốt lõi • Thang điểm chuẩn hóa 4.00' +
+      (isOld
+        ? '<span style="font-size: 0.68rem; font-weight: 700; color: #9A3412; background: #FFEDD5; border: 1px solid #FED7AA; border-radius: 4px; padding: 0.05rem 0.45rem;">Mẫu cũ</span>'
+        : '<span style="font-size: 0.68rem; font-weight: 700; color: #166534; background: #DCFCE7; border: 1px solid #BBF7D0; border-radius: 4px; padding: 0.05rem 0.45rem;">Mẫu mới</span>') +
+      '</div>' +
+      '</div>' +
+      '<div style="display: flex; align-items: center; gap: 0.6rem;">' +
+      headerSlicerHtml +
+      '<div style="font-size: 0.8rem; font-weight: 700; color: #64748B; background: #F1F5F9; padding: 0.25rem 0.65rem; border-radius: 6px;">' +
+      'Thang điểm: 4.00' +
+      '</div>' +
+      '</div>' +
       '</div>' +
 
       // TẦNG 1: EXECUTIVE KPI SUMMARY & STORYTELLING CALLOUT
       '<div style="margin-bottom: 1.15rem;">' +
-        '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.85rem; margin-bottom: 0.85rem;">' +
-          // KPI 1: Điểm trung bình chung
-          '<div style="background: white; border: 1px solid #E2E8F0; border-left: 4px solid var(--brand-primary); border-radius: 8px; padding: 0.85rem 1rem;">' +
-            '<div style="display: flex; justify-content: space-between; align-items: center;">' +
-              '<span style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">ĐIỂM TRUNG BÌNH CHUNG</span>' +
-              '<div style="width: 26px; height: 26px; border-radius: 50%; background: #FFF1F2; display: flex; align-items: center; justify-content: center; color: var(--brand-primary);"><i class="fa-solid fa-award"></i></div>' +
-            '</div>' +
-            '<div id="nddtKpiScore" style="font-size: 1.7rem; font-weight: 800; color: var(--brand-primary); line-height: 1.2; margin-top: 0.25rem;">' +
-              overallScore.toFixed(2) + ' <span style="font-size: 0.85rem; font-weight: 600; color: #64748B;">/ 4.00</span>' +
-            '</div>' +
-            '<div id="nddtKpiRating" style="font-size: 0.75rem; font-weight: 600; color: #15803D; margin-top: 0.25rem; display: flex; align-items: center; gap: 0.3rem;">' +
-              '<i class="fa-solid fa-circle-check"></i> ' + ratingText +
-            '</div>' +
-          '</div>' +
+      '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.85rem; margin-bottom: 0.85rem;">' +
+      // KPI 1: Điểm trung bình chung
+      '<div style="background: white; border: 1px solid #E2E8F0; border-left: 4px solid var(--brand-primary); border-radius: 8px; padding: 0.85rem 1rem;">' +
+      '<div style="display: flex; justify-content: space-between; align-items: center;">' +
+      '<span style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">ĐIỂM TRUNG BÌNH CHUNG</span>' +
+      '<div style="width: 26px; height: 26px; border-radius: 50%; background: #FFF1F2; display: flex; align-items: center; justify-content: center; color: var(--brand-primary);"><i class="fa-solid fa-award"></i></div>' +
+      '</div>' +
+      '<div id="nddtKpiScore" style="font-size: 1.7rem; font-weight: 800; color: var(--brand-primary); line-height: 1.2; margin-top: 0.25rem;">' +
+      overallScore.toFixed(2) + ' <span style="font-size: 0.85rem; font-weight: 600; color: #64748B;">/ 4.00</span>' +
+      '</div>' +
+      '<div id="nddtKpiRating" style="font-size: 0.75rem; font-weight: 600; color: #15803D; margin-top: 0.25rem; display: flex; align-items: center; gap: 0.3rem;">' +
+      '<i class="fa-solid fa-circle-check"></i> ' + ratingText +
+      '</div>' +
+      '</div>' +
 
-          // KPI 2: Tỷ lệ đánh giá tích cực
-          '<div style="background: white; border: 1px solid #E2E8F0; border-left: 4px solid #15803D; border-radius: 8px; padding: 0.85rem 1rem;">' +
-            '<div style="display: flex; justify-content: space-between; align-items: center;">' +
-              '<span style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">TỶ LỆ TÍCH CỰC (TỐT + KHÁ)</span>' +
-              '<div style="width: 26px; height: 26px; border-radius: 50%; background: #DCFCE7; display: flex; align-items: center; justify-content: center; color: #15803D;"><i class="fa-solid fa-thumbs-up"></i></div>' +
-            '</div>' +
-            '<div id="nddtKpiPosRate" style="font-size: 1.7rem; font-weight: 800; color: #15803D; line-height: 1.2; margin-top: 0.25rem;">' +
-              posRate.toFixed(1) + '%' +
-            '</div>' +
-            '<div id="nddtKpiPosDetail" style="font-size: 0.75rem; color: #64748B; margin-top: 0.25rem;">' +
-              (c1.n4 + c1.n3 + c2.n4 + c2.n3 + c3.n4 + c3.n3) + ' / ' + (c1.total + c2.total + c3.total) + ' lượt đánh giá tích cực' +
-            '</div>' +
-          '</div>' +
+      // KPI 2: Tỷ lệ đánh giá tích cực
+      '<div style="background: white; border: 1px solid #E2E8F0; border-left: 4px solid #15803D; border-radius: 8px; padding: 0.85rem 1rem;">' +
+      '<div style="display: flex; justify-content: space-between; align-items: center;">' +
+      '<span style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">TỶ LỆ TÍCH CỰC (TỐT + KHÁ)</span>' +
+      '<div style="width: 26px; height: 26px; border-radius: 50%; background: #DCFCE7; display: flex; align-items: center; justify-content: center; color: #15803D;"><i class="fa-solid fa-thumbs-up"></i></div>' +
+      '</div>' +
+      '<div id="nddtKpiPosRate" style="font-size: 1.7rem; font-weight: 800; color: #15803D; line-height: 1.2; margin-top: 0.25rem;">' +
+      posRate.toFixed(1) + '%' +
+      '</div>' +
+      '<div id="nddtKpiPosDetail" style="font-size: 0.75rem; color: #64748B; margin-top: 0.25rem;">' +
+      (c1.n4 + c1.n3 + c2.n4 + c2.n3 + c3.n4 + c3.n3) + ' / ' + (c1.total + c2.total + c3.total) + ' lượt đánh giá tích cực' +
+      '</div>' +
+      '</div>' +
 
-          // KPI 3: Tổng lượt đánh giá hợp lệ
-          '<div style="background: white; border: 1px solid #E2E8F0; border-left: 4px solid #0284C7; border-radius: 8px; padding: 0.85rem 1rem;">' +
-            '<div style="display: flex; justify-content: space-between; align-items: center;">' +
-              '<span style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">TỔNG LƯỢT ĐÁNH GIÁ HỢP LỆ</span>' +
-              '<div style="width: 26px; height: 26px; border-radius: 50%; background: #E0F2FE; display: flex; align-items: center; justify-content: center; color: #0284C7;"><i class="fa-solid fa-square-poll-horizontal"></i></div>' +
-            '</div>' +
-            '<div id="nddtKpiVotes" style="font-size: 1.7rem; font-weight: 800; color: #0284C7; line-height: 1.2; margin-top: 0.25rem;">' +
-              totalVotes.toLocaleString('vi-VN') + ' <span style="font-size: 0.85rem; font-weight: 600; color: #64748B;">phiếu</span>' +
-            '</div>' +
-            '<div id="nddtKpiVotesDetail" style="font-size: 0.75rem; color: #64748B; margin-top: 0.25rem;">' +
-              (isProgram ? (options.evaluatedClassesCount || '') + ' lớp tham gia đánh giá' : '100% phản hồi được kiểm định') +
-            '</div>' +
-          '</div>' +
-        '</div>' +
+      // KPI 3: Tổng lượt đánh giá hợp lệ
+      '<div style="background: white; border: 1px solid #E2E8F0; border-left: 4px solid #0284C7; border-radius: 8px; padding: 0.85rem 1rem;">' +
+      '<div style="display: flex; justify-content: space-between; align-items: center;">' +
+      '<span style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">TỔNG LƯỢT ĐÁNH GIÁ HỢP LỆ</span>' +
+      '<div style="width: 26px; height: 26px; border-radius: 50%; background: #E0F2FE; display: flex; align-items: center; justify-content: center; color: #0284C7;"><i class="fa-solid fa-square-poll-horizontal"></i></div>' +
+      '</div>' +
+      '<div id="nddtKpiVotes" style="font-size: 1.7rem; font-weight: 800; color: #0284C7; line-height: 1.2; margin-top: 0.25rem;">' +
+      totalVotes.toLocaleString('vi-VN') + ' <span style="font-size: 0.85rem; font-weight: 600; color: #64748B;">phiếu</span>' +
+      '</div>' +
+      '<div id="nddtKpiVotesDetail" style="font-size: 0.75rem; color: #64748B; margin-top: 0.25rem;">' +
+      (isProgram ? (options.evaluatedClassesCount || '') + ' lớp tham gia đánh giá' : '100% phản hồi được kiểm định') +
+      '</div>' +
+      '</div>' +
+      '</div>' +
 
-        // Storytelling callout pill
-        '<div id="nddtStorytellingCallout" style="display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 0.6rem 0.9rem; font-size: 0.8rem;">' +
-          '<div style="display: flex; align-items: center; gap: 0.4rem; color: #15803D; font-weight: 700;">' +
-            '<i class="fa-solid fa-arrow-trend-up"></i> Tiêu chí cao nhất: ' +
-            '<span style="color: #1E293B; font-weight: 600;">' + highestCrit.name + ' (' + highestCrit.score.toFixed(2) + '/4.00)</span>' +
-          '</div>' +
-          '<div style="width: 1px; height: 16px; background: #CBD5E1;" class="no-mobile"></div>' +
-          '<div style="display: flex; align-items: center; gap: 0.4rem; color: #B45309; font-weight: 700;">' +
-            '<i class="fa-solid fa-triangle-exclamation"></i> Cần quan tâm: ' +
-            '<span style="color: #1E293B; font-weight: 600;">' + lowestCrit.name + ' (' + lowestCrit.score.toFixed(2) + '/4.00)</span>' +
-          '</div>' +
-          '<div style="margin-left: auto; font-size: 0.75rem; color: #64748B; font-style: italic;">' +
-            '<i class="fa-solid fa-hand-pointer"></i> Di chuột hoặc nhấp vào biểu đồ/chú giải để tương tác phân tích' +
-          '</div>' +
-        '</div>' +
+      // Storytelling callout pill
+      '<div id="nddtStorytellingCallout" style="display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 0.6rem 0.9rem; font-size: 0.8rem;">' +
+      '<div style="display: flex; align-items: center; gap: 0.4rem; color: #15803D; font-weight: 700;">' +
+      '<i class="fa-solid fa-arrow-trend-up"></i> Tiêu chí cao nhất: ' +
+      '<span style="color: #1E293B; font-weight: 600;">' + highestCrit.name + ' (' + highestCrit.score.toFixed(2) + '/4.00)</span>' +
+      '</div>' +
+      '<div style="width: 1px; height: 16px; background: #CBD5E1;" class="no-mobile"></div>' +
+      '<div style="display: flex; align-items: center; gap: 0.4rem; color: #B45309; font-weight: 700;">' +
+      '<i class="fa-solid fa-triangle-exclamation"></i> Cần quan tâm: ' +
+      '<span style="color: #1E293B; font-weight: 600;">' + lowestCrit.name + ' (' + lowestCrit.score.toFixed(2) + '/4.00)</span>' +
+      '</div>' +
+      '<div style="margin-left: auto; font-size: 0.75rem; color: #64748B; font-style: italic;">' +
+      '<i class="fa-solid fa-hand-pointer"></i> Di chuột hoặc nhấp vào biểu đồ/chú giải để tương tác phân tích' +
+      '</div>' +
+      '</div>' +
       '</div>' +
 
       // TẦNG 2: 100% HORIZONTAL STACKED BAR CHART
       '<div style="background: white; border: 1px solid #E2E8F0; border-radius: 8px; padding: 1.15rem; margin-bottom: 1.15rem;">' +
-        '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.85rem; flex-wrap: wrap; gap: 0.5rem;">' +
-          '<div style="font-size: 0.88rem; font-weight: 800; color: #1E293B; display: flex; align-items: center; gap: 0.4rem;">' +
-            '<i class="fa-solid fa-chart-column" style="color: var(--brand-primary);"></i> PHÂN BỐ TỶ LỆ 4 MỨC ĐÁNH GIÁ THEO TIÊU CHÍ (100%)' +
-          '</div>' +
-          '<div style="display: flex; gap: 0.75rem; align-items: center; font-size: 0.75rem; font-weight: 700;">' +
-            '<span style="display: inline-flex; align-items: center; gap: 0.3rem;"><span style="width: 12px; height: 12px; border-radius: 3px; background: #137333;"></span> Tốt</span>' +
-            '<span style="display: inline-flex; align-items: center; gap: 0.3rem;"><span style="width: 12px; height: 12px; border-radius: 3px; background: #34A853;"></span> Khá</span>' +
-            '<span style="display: inline-flex; align-items: center; gap: 0.3rem;"><span style="width: 12px; height: 12px; border-radius: 3px; background: #F59E0B;"></span> Bình thường</span>' +
-            '<span style="display: inline-flex; align-items: center; gap: 0.3rem;"><span style="width: 12px; height: 12px; border-radius: 3px; background: #EF4444;"></span> Hạn chế</span>' +
-          '</div>' +
-        '</div>' +
-        '<div style="height: 220px; position: relative;">' +
-          '<canvas id="reportNddtStackedBarChart"></canvas>' +
-        '</div>' +
+      '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.85rem; flex-wrap: wrap; gap: 0.5rem;">' +
+      '<div style="font-size: 0.88rem; font-weight: 800; color: #1E293B; display: flex; align-items: center; gap: 0.4rem;">' +
+      '<i class="fa-solid fa-chart-column" style="color: var(--brand-primary);"></i> PHÂN BỐ TỶ LỆ 4 MỨC ĐÁNH GIÁ THEO TIÊU CHÍ (100%)' +
+      '</div>' +
+      '<div style="display: flex; gap: 0.75rem; align-items: center; font-size: 0.75rem; font-weight: 700;">' +
+      '<span style="display: inline-flex; align-items: center; gap: 0.3rem;"><span style="width: 12px; height: 12px; border-radius: 3px; background: #137333;"></span> Tốt</span>' +
+      '<span style="display: inline-flex; align-items: center; gap: 0.3rem;"><span style="width: 12px; height: 12px; border-radius: 3px; background: #34A853;"></span> Khá</span>' +
+      '<span style="display: inline-flex; align-items: center; gap: 0.3rem;"><span style="width: 12px; height: 12px; border-radius: 3px; background: #F59E0B;"></span> Bình thường</span>' +
+      '<span style="display: inline-flex; align-items: center; gap: 0.3rem;"><span style="width: 12px; height: 12px; border-radius: 3px; background: #EF4444;"></span> Hạn chế</span>' +
+      '</div>' +
+      '</div>' +
+      '<div style="height: 220px; position: relative;">' +
+      '<canvas id="reportNddtStackedBarChart"></canvas>' +
+      '</div>' +
       '</div>' +
 
       // TẦNG 3: BẢNG CHI TIẾT TỔNG HỢP
       '<div style="background: white; border: 1px solid #E2E8F0; border-radius: 8px; overflow: hidden;">' +
-        '<div style="padding: 0.75rem 1rem; background: #F8FAFC; display: flex; justify-content: space-between; align-items: center; cursor: pointer; border-bottom: 1px solid #E2E8F0;" onclick="toggleNddtTableDetails()">' +
-          '<div style="font-size: 0.85rem; font-weight: 800; color: #1E293B; display: flex; align-items: center; gap: 0.4rem;">' +
-            '<i class="fa-solid fa-table-list" style="color: var(--brand-primary);"></i> BẢNG DỮ LIỆU CHI TIẾT SỐ LƯỢNG VÀ TỶ LỆ ĐÁNH GIÁ NỘI DUNG' +
-          '</div>' +
-          '<div style="font-size: 0.78rem; font-weight: 700; color: var(--brand-primary); display: flex; align-items: center; gap: 0.3rem;" id="nddtTableToggleText">' +
-            '<i class="fa-solid fa-chevron-up" id="nddtTableToggleIcon"></i> Thu gọn' +
-          '</div>' +
-        '</div>' +
-        '<div id="reportNddtTableContainer" class="table-container" style="padding: 0; margin: 0; display: block;">' +
-          '<table class="data-table" style="margin: 0; font-size: 0.82rem;">' +
-            '<thead>' +
-              '<tr>' +
-                '<th style="width: 5%; text-align: center;">STT</th>' +
-                '<th style="width: 32%; text-align: left;">TIÊU CHÍ ĐÁNH GIÁ</th>' +
-                '<th style="width: 11%; text-align: center;" style="color: #137333;">TỐT (4)</th>' +
-                '<th style="width: 11%; text-align: center;" style="color: #34A853;">KHÁ (3)</th>' +
-                '<th style="width: 11%; text-align: center;" style="color: #F59E0B;">BÌNH THƯỜNG (2)</th>' +
-                '<th style="width: 11%; text-align: center;" style="color: #EF4444;">HẠN CHẾ (1)</th>' +
-                '<th style="width: 9%; text-align: center;">TỔNG SỐ</th>' +
-                '<th style="width: 10%; text-align: center;">ĐIỂM TB (4.0)</th>' +
-              '</tr>' +
-            '</thead>' +
-            '<tbody>';
+      '<div style="padding: 0.75rem 1rem; background: #F8FAFC; display: flex; justify-content: space-between; align-items: center; cursor: pointer; border-bottom: 1px solid #E2E8F0;" onclick="toggleNddtTableDetails()">' +
+      '<div style="font-size: 0.85rem; font-weight: 800; color: #1E293B; display: flex; align-items: center; gap: 0.4rem;">' +
+      '<i class="fa-solid fa-table-list" style="color: var(--brand-primary);"></i> BẢNG DỮ LIỆU CHI TIẾT SỐ LƯỢNG VÀ TỶ LỆ ĐÁNH GIÁ NỘI DUNG' +
+      '</div>' +
+      '<div style="font-size: 0.78rem; font-weight: 700; color: var(--brand-primary); display: flex; align-items: center; gap: 0.3rem;" id="nddtTableToggleText">' +
+      '<i class="fa-solid fa-chevron-up" id="nddtTableToggleIcon"></i> Thu gọn' +
+      '</div>' +
+      '</div>' +
+      '<div id="reportNddtTableContainer" class="table-container" style="padding: 0; margin: 0; display: block;">' +
+      '<table class="data-table" style="margin: 0; font-size: 0.82rem;">' +
+      '<thead>' +
+      '<tr>' +
+      '<th style="width: 5%; text-align: center;">STT</th>' +
+      '<th style="width: 32%; text-align: left;">TIÊU CHÍ ĐÁNH GIÁ</th>' +
+      '<th style="width: 11%; text-align: center;" style="color: #137333;">TỐT (4)</th>' +
+      '<th style="width: 11%; text-align: center;" style="color: #34A853;">KHÁ (3)</th>' +
+      '<th style="width: 11%; text-align: center;" style="color: #F59E0B;">BÌNH THƯỜNG (2)</th>' +
+      '<th style="width: 11%; text-align: center;" style="color: #EF4444;">HẠN CHẾ (1)</th>' +
+      '<th style="width: 9%; text-align: center;">TỔNG SỐ</th>' +
+      '<th style="width: 10%; text-align: center;">ĐIỂM TB (4.0)</th>' +
+      '</tr>' +
+      '</thead>' +
+      '<tbody>';
 
     let tableRowsHtml = '';
 
@@ -10520,7 +10579,7 @@ document.addEventListener('DOMContentLoaded', () => {
           '<td style="text-align: center;"><strong style="color: #EF4444;">' + r1 + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + (c.n1 || 0) + ')</span></td>' +
           '<td style="text-align: center; font-weight: 700;">' + tot + '</td>' +
           '<td style="text-align: center; font-weight: 800; color: ' + colorTheme + ';">' + Number(c.score || 0).toFixed(2) + '</td>' +
-        '</tr>';
+          '</tr>';
       }).join('');
     }
 
@@ -10529,69 +10588,69 @@ document.addEventListener('DOMContentLoaded', () => {
       const dir = nddtData.direct;
       const onl = nddtData.online;
       const ovr = nddtData.overall || activeItem;
-      const subDir = dir.subtotal || { n4: dir.c1.n4+dir.c2.n4+dir.c3.n4, n3: dir.c1.n3+dir.c2.n3+dir.c3.n3, n2: dir.c1.n2+dir.c2.n2+dir.c3.n2, n1: dir.c1.n1+dir.c2.n1+dir.c3.n1, total: dir.c1.total+dir.c2.total+dir.c3.total, score: dir.score };
-      const subOnl = onl.subtotal || { n4: onl.c1.n4+onl.c2.n4+onl.c3.n4, n3: onl.c1.n3+onl.c2.n3+onl.c3.n3, n2: onl.c1.n2+onl.c2.n2+onl.c3.n2, n1: onl.c1.n1+onl.c2.n1+onl.c3.n1, total: onl.c1.total+onl.c2.total+onl.c3.total, score: onl.score };
+      const subDir = dir.subtotal || { n4: dir.c1.n4 + dir.c2.n4 + dir.c3.n4, n3: dir.c1.n3 + dir.c2.n3 + dir.c3.n3, n2: dir.c1.n2 + dir.c2.n2 + dir.c3.n2, n1: dir.c1.n1 + dir.c2.n1 + dir.c3.n1, total: dir.c1.total + dir.c2.total + dir.c3.total, score: dir.score };
+      const subOnl = onl.subtotal || { n4: onl.c1.n4 + onl.c2.n4 + onl.c3.n4, n3: onl.c1.n3 + onl.c2.n3 + onl.c3.n3, n2: onl.c1.n2 + onl.c2.n2 + onl.c3.n2, n1: onl.c1.n1 + onl.c2.n1 + onl.c3.n1, total: onl.c1.total + onl.c2.total + onl.c3.total, score: onl.score };
       const subOvr = ovr.subtotal || { n4: subDir.n4 + subOnl.n4, n3: subDir.n3 + subOnl.n3, n2: subDir.n2 + subOnl.n2, n1: subDir.n1 + subOnl.n1, total: subDir.total + subOnl.total, score: ovr.score };
 
-      tableRowsHtml += 
+      tableRowsHtml +=
         // Group Header A
         '<tr style="background: #F1F5F9; font-weight: 800; color: #1E293B;">' +
-          '<td colspan="8" style="padding: 0.55rem 0.85rem;"><i class="fa-solid fa-user-group" style="color: #137333; margin-right: 0.35rem;"></i> A. HÌNH THỨC TRỰC TIẾP</td>' +
+        '<td colspan="8" style="padding: 0.55rem 0.85rem;"><i class="fa-solid fa-user-group" style="color: #137333; margin-right: 0.35rem;"></i> A. HÌNH THỨC TRỰC TIẾP</td>' +
         '</tr>' +
         buildCohortCriteriaRows(dir, '#137333') +
         // Subtotal Direct Row
         '<tr style="background: #F8FAFC; font-weight: 800; border-top: 1px solid #CBD5E1; border-bottom: 2px solid #CBD5E1;">' +
-          '<td></td>' +
-          '<td style="color: #137333;">Cộng hình thức Trực tiếp</td>' +
-          '<td style="text-align: center; color: #137333;"><strong>' + (subDir.total > 0 ? (((subDir.n4) / subDir.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (subDir.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + subDir.n4 + ')</span>' : '') + '</td>' +
-          '<td style="text-align: center; color: #34A853;"><strong>' + (subDir.total > 0 ? (((subDir.n3) / subDir.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (subDir.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + subDir.n3 + ')</span>' : '') + '</td>' +
-          '<td style="text-align: center; color: #F59E0B;"><strong>' + (subDir.total > 0 ? (((subDir.n2) / subDir.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (subDir.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + subDir.n2 + ')</span>' : '') + '</td>' +
-          '<td style="text-align: center; color: #EF4444;"><strong>' + (subDir.total > 0 ? (((subDir.n1) / subDir.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (subDir.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + subDir.n1 + ')</span>' : '') + '</td>' +
-          '<td style="text-align: center; font-weight: 800;">' + subDir.total + '</td>' +
-          '<td style="text-align: center; font-weight: 800; color: #137333; font-size: 0.95rem;">' + subDir.score.toFixed(2) + '</td>' +
+        '<td></td>' +
+        '<td style="color: #137333;">Cộng hình thức Trực tiếp</td>' +
+        '<td style="text-align: center; color: #137333;"><strong>' + (subDir.total > 0 ? (((subDir.n4) / subDir.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (subDir.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + subDir.n4 + ')</span>' : '') + '</td>' +
+        '<td style="text-align: center; color: #34A853;"><strong>' + (subDir.total > 0 ? (((subDir.n3) / subDir.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (subDir.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + subDir.n3 + ')</span>' : '') + '</td>' +
+        '<td style="text-align: center; color: #F59E0B;"><strong>' + (subDir.total > 0 ? (((subDir.n2) / subDir.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (subDir.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + subDir.n2 + ')</span>' : '') + '</td>' +
+        '<td style="text-align: center; color: #EF4444;"><strong>' + (subDir.total > 0 ? (((subDir.n1) / subDir.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (subDir.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + subDir.n1 + ')</span>' : '') + '</td>' +
+        '<td style="text-align: center; font-weight: 800;">' + subDir.total + '</td>' +
+        '<td style="text-align: center; font-weight: 800; color: #137333; font-size: 0.95rem;">' + subDir.score.toFixed(2) + '</td>' +
         '</tr>' +
 
         // Group Header B
         '<tr style="background: #F1F5F9; font-weight: 800; color: #1E293B;">' +
-          '<td colspan="8" style="padding: 0.55rem 0.85rem;"><i class="fa-solid fa-shapes" style="color: #7E22CE; margin-right: 0.35rem;"></i> B. HÌNH THỨC TRỰC TIẾP KẾT HỢP TRỰC TUYẾN</td>' +
+        '<td colspan="8" style="padding: 0.55rem 0.85rem;"><i class="fa-solid fa-shapes" style="color: #7E22CE; margin-right: 0.35rem;"></i> B. HÌNH THỨC TRỰC TIẾP KẾT HỢP TRỰC TUYẾN</td>' +
         '</tr>' +
         buildCohortCriteriaRows(onl, '#7E22CE') +
         // Subtotal Online Row
         '<tr style="background: #F8FAFC; font-weight: 800; border-top: 1px solid #CBD5E1; border-bottom: 2px solid #CBD5E1;">' +
-          '<td></td>' +
-          '<td style="color: #7E22CE;">Cộng hình thức Trực tiếp kết hợp Trực tuyến</td>' +
-          '<td style="text-align: center; color: #137333;"><strong>' + (subOnl.total > 0 ? (((subOnl.n4) / subOnl.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (subOnl.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + subOnl.n4 + ')</span>' : '') + '</td>' +
-          '<td style="text-align: center; color: #34A853;"><strong>' + (subOnl.total > 0 ? (((subOnl.n3) / subOnl.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (subOnl.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + subOnl.n3 + ')</span>' : '') + '</td>' +
-          '<td style="text-align: center; color: #F59E0B;"><strong>' + (subOnl.total > 0 ? (((subOnl.n2) / subOnl.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (subOnl.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + subOnl.n2 + ')</span>' : '') + '</td>' +
-          '<td style="text-align: center; color: #EF4444;"><strong>' + (subOnl.total > 0 ? (((subOnl.n1) / subOnl.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (subOnl.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + subOnl.n1 + ')</span>' : '') + '</td>' +
-          '<td style="text-align: center; font-weight: 800;">' + subOnl.total + '</td>' +
-          '<td style="text-align: center; font-weight: 800; color: #7E22CE; font-size: 0.95rem;">' + subOnl.score.toFixed(2) + '</td>' +
+        '<td></td>' +
+        '<td style="color: #7E22CE;">Cộng hình thức Trực tiếp kết hợp Trực tuyến</td>' +
+        '<td style="text-align: center; color: #137333;"><strong>' + (subOnl.total > 0 ? (((subOnl.n4) / subOnl.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (subOnl.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + subOnl.n4 + ')</span>' : '') + '</td>' +
+        '<td style="text-align: center; color: #34A853;"><strong>' + (subOnl.total > 0 ? (((subOnl.n3) / subOnl.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (subOnl.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + subOnl.n3 + ')</span>' : '') + '</td>' +
+        '<td style="text-align: center; color: #F59E0B;"><strong>' + (subOnl.total > 0 ? (((subOnl.n2) / subOnl.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (subOnl.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + subOnl.n2 + ')</span>' : '') + '</td>' +
+        '<td style="text-align: center; color: #EF4444;"><strong>' + (subOnl.total > 0 ? (((subOnl.n1) / subOnl.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (subOnl.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + subOnl.n1 + ')</span>' : '') + '</td>' +
+        '<td style="text-align: center; font-weight: 800;">' + subOnl.total + '</td>' +
+        '<td style="text-align: center; font-weight: 800; color: #7E22CE; font-size: 0.95rem;">' + subOnl.score.toFixed(2) + '</td>' +
         '</tr>' +
 
         // GRAND AVERAGE ROW
         '<tr style="background: #FFF1F2; font-weight: 800; border-top: 2px solid var(--brand-primary);">' +
-          '<td></td>' +
-          '<td style="color: var(--brand-primary); text-transform: uppercase;">ĐIỂM TRUNG BÌNH CHUNG NỘI DUNG ĐÀO TẠO</td>' +
-          '<td style="text-align: center; color: #137333;"><strong>' + (subOvr.total > 0 ? (((subOvr.n4) / subOvr.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (subOvr.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + subOvr.n4 + ')</span>' : '') + '</td>' +
-          '<td style="text-align: center; color: #34A853;"><strong>' + (subOvr.total > 0 ? (((subOvr.n3) / subOvr.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (subOvr.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + subOvr.n3 + ')</span>' : '') + '</td>' +
-          '<td style="text-align: center; color: #F59E0B;"><strong>' + (subOvr.total > 0 ? (((subOvr.n2) / subOvr.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (subOvr.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + subOvr.n2 + ')</span>' : '') + '</td>' +
-          '<td style="text-align: center; color: #EF4444;"><strong>' + (subOvr.total > 0 ? (((subOvr.n1) / subOvr.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (subOvr.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + subOvr.n1 + ')</span>' : '') + '</td>' +
-          '<td style="text-align: center; font-weight: 800; color: var(--brand-primary);">' + subOvr.total + '</td>' +
-          '<td style="text-align: center; font-weight: 800; color: var(--brand-primary); font-size: 1.05rem;">' + subOvr.score.toFixed(2) + '</td>' +
+        '<td></td>' +
+        '<td style="color: var(--brand-primary); text-transform: uppercase;">ĐIỂM TRUNG BÌNH CHUNG NỘI DUNG ĐÀO TẠO</td>' +
+        '<td style="text-align: center; color: #137333;"><strong>' + (subOvr.total > 0 ? (((subOvr.n4) / subOvr.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (subOvr.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + subOvr.n4 + ')</span>' : '') + '</td>' +
+        '<td style="text-align: center; color: #34A853;"><strong>' + (subOvr.total > 0 ? (((subOvr.n3) / subOvr.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (subOvr.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + subOvr.n3 + ')</span>' : '') + '</td>' +
+        '<td style="text-align: center; color: #F59E0B;"><strong>' + (subOvr.total > 0 ? (((subOvr.n2) / subOvr.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (subOvr.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + subOvr.n2 + ')</span>' : '') + '</td>' +
+        '<td style="text-align: center; color: #EF4444;"><strong>' + (subOvr.total > 0 ? (((subOvr.n1) / subOvr.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (subOvr.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + subOvr.n1 + ')</span>' : '') + '</td>' +
+        '<td style="text-align: center; font-weight: 800; color: var(--brand-primary);">' + subOvr.total + '</td>' +
+        '<td style="text-align: center; font-weight: 800; color: var(--brand-primary); font-size: 1.05rem;">' + subOvr.score.toFixed(2) + '</td>' +
         '</tr>';
     } else {
       // SINGLE-FORMAT MODE
-      tableRowsHtml += 
+      tableRowsHtml +=
         buildCohortCriteriaRows(activeItem, 'var(--brand-primary)') +
         '<tr style="background: #FFF1F2; font-weight: 800; border-top: 2px solid var(--brand-primary);">' +
-          '<td></td>' +
-          '<td style="color: var(--brand-primary); text-transform: uppercase;">ĐIỂM TRUNG BÌNH CHUNG NỘI DUNG ĐÀO TẠO</td>' +
-          '<td style="text-align: center; color: #137333;"><strong>' + (((c1.n4+c2.n4+c3.n4) / (c1.total+c2.total+c3.total || 1)) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + (c1.n4+c2.n4+c3.n4) + ')</span></td>' +
-          '<td style="text-align: center; color: #34A853;"><strong>' + (((c1.n3+c2.n3+c3.n3) / (c1.total+c2.total+c3.total || 1)) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + (c1.n3+c2.n3+c3.n3) + ')</span></td>' +
-          '<td style="text-align: center; color: #F59E0B;"><strong>' + (((c1.n2+c2.n2+c3.n2) / (c1.total+c2.total+c3.total || 1)) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + (c1.n2+c2.n2+c3.n2) + ')</span></td>' +
-          '<td style="text-align: center; color: #EF4444;"><strong>' + (((c1.n1+c2.n1+c3.n1) / (c1.total+c2.total+c3.total || 1)) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + (c1.n1+c2.n1+c3.n1) + ')</span></td>' +
-          '<td style="text-align: center; font-weight: 800; color: var(--brand-primary);">' + (c1.total+c2.total+c3.total) + '</td>' +
-          '<td style="text-align: center; font-weight: 800; color: var(--brand-primary); font-size: 1.05rem;">' + overallScore.toFixed(2) + '</td>' +
+        '<td></td>' +
+        '<td style="color: var(--brand-primary); text-transform: uppercase;">ĐIỂM TRUNG BÌNH CHUNG NỘI DUNG ĐÀO TẠO</td>' +
+        '<td style="text-align: center; color: #137333;"><strong>' + (((c1.n4 + c2.n4 + c3.n4) / (c1.total + c2.total + c3.total || 1)) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + (c1.n4 + c2.n4 + c3.n4) + ')</span></td>' +
+        '<td style="text-align: center; color: #34A853;"><strong>' + (((c1.n3 + c2.n3 + c3.n3) / (c1.total + c2.total + c3.total || 1)) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + (c1.n3 + c2.n3 + c3.n3) + ')</span></td>' +
+        '<td style="text-align: center; color: #F59E0B;"><strong>' + (((c1.n2 + c2.n2 + c3.n2) / (c1.total + c2.total + c3.total || 1)) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + (c1.n2 + c2.n2 + c3.n2) + ')</span></td>' +
+        '<td style="text-align: center; color: #EF4444;"><strong>' + (((c1.n1 + c2.n1 + c3.n1) / (c1.total + c2.total + c3.total || 1)) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + (c1.n1 + c2.n1 + c3.n1) + ')</span></td>' +
+        '<td style="text-align: center; font-weight: 800; color: var(--brand-primary);">' + (c1.total + c2.total + c3.total) + '</td>' +
+        '<td style="text-align: center; font-weight: 800; color: var(--brand-primary); font-size: 1.05rem;">' + overallScore.toFixed(2) + '</td>' +
         '</tr>';
     }
 
@@ -10606,7 +10665,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!ctx || typeof Chart === 'undefined') return;
 
     if (reportCharts.nddtStacked) {
-      try { reportCharts.nddtStacked.destroy(); } catch (e) {}
+      try { reportCharts.nddtStacked.destroy(); } catch (e) { }
     }
 
     const nddtData = containerElem._nddtData;
@@ -10720,7 +10779,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const pos = Number(targetItem.posRate || targetItem.ty_le_tich_cuc || 0);
       kpiPosElem.textContent = pos.toFixed(1) + '%';
       if (kpiPosDetailElem) {
-        kpiPosDetailElem.textContent = (c1.n4+c1.n3+c2.n4+c2.n3+c3.n4+c3.n3) + ' / ' + (c1.total+c2.total+c3.total) + ' lượt đánh giá tích cực';
+        kpiPosDetailElem.textContent = (c1.n4 + c1.n3 + c2.n4 + c2.n3 + c3.n4 + c3.n3) + ' / ' + (c1.total + c2.total + c3.total) + ' lượt đánh giá tích cực';
       }
     }
     if (kpiVotesElem) {
@@ -10739,18 +10798,18 @@ document.addEventListener('DOMContentLoaded', () => {
         if (Number(c.score || 0) > Number(highestCrit.score || 0)) highestCrit = c;
         if (Number(c.score || 0) < Number(lowestCrit.score || 0)) lowestCrit = c;
       });
-      calloutElem.innerHTML = 
+      calloutElem.innerHTML =
         '<div style="display: flex; align-items: center; gap: 0.4rem; color: #15803D; font-weight: 700;">' +
-          '<i class="fa-solid fa-arrow-trend-up"></i> Tiêu chí cao nhất: ' +
-          '<span style="color: #1E293B; font-weight: 600;">' + highestCrit.name + ' (' + Number(highestCrit.score || 0).toFixed(2) + '/4.00)</span>' +
+        '<i class="fa-solid fa-arrow-trend-up"></i> Tiêu chí cao nhất: ' +
+        '<span style="color: #1E293B; font-weight: 600;">' + highestCrit.name + ' (' + Number(highestCrit.score || 0).toFixed(2) + '/4.00)</span>' +
         '</div>' +
         '<div style="width: 1px; height: 16px; background: #CBD5E1;" class="no-mobile"></div>' +
         '<div style="display: flex; align-items: center; gap: 0.4rem; color: #B45309; font-weight: 700;">' +
-          '<i class="fa-solid fa-triangle-exclamation"></i> Cần quan tâm: ' +
-          '<span style="color: #1E293B; font-weight: 600;">' + lowestCrit.name + ' (' + Number(lowestCrit.score || 0).toFixed(2) + '/4.00)</span>' +
+        '<i class="fa-solid fa-triangle-exclamation"></i> Cần quan tâm: ' +
+        '<span style="color: #1E293B; font-weight: 600;">' + lowestCrit.name + ' (' + Number(lowestCrit.score || 0).toFixed(2) + '/4.00)</span>' +
         '</div>' +
         '<div style="margin-left: auto; font-size: 0.75rem; color: #64748B; font-style: italic;">' +
-          '<i class="fa-solid fa-hand-pointer"></i> Di chuột hoặc nhấp vào biểu đồ/chú giải để tương tác phân tích' +
+        '<i class="fa-solid fa-hand-pointer"></i> Di chuột hoặc nhấp vào biểu đồ/chú giải để tương tác phân tích' +
         '</div>';
     }
   }
@@ -10826,15 +10885,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const hasData = directItem || hybridItem || overallItem;
     if (!hasData) {
-      containerElem.innerHTML = 
+      containerElem.innerHTML =
         '<div style="border-bottom: 1px solid #E2E8F0; padding-bottom: 0.65rem; margin-bottom: 0.85rem;">' +
-          '<h3 style="margin: 0; font-size: 1.05rem; font-weight: 800; color: var(--brand-primary); display: flex; align-items: center; gap: 0.5rem;">' +
-            '<i class="fa-solid fa-chalkboard-user"></i> ' + title +
-          '</h3>' +
+        '<h3 style="margin: 0; font-size: 1.05rem; font-weight: 800; color: var(--brand-primary); display: flex; align-items: center; gap: 0.5rem;">' +
+        '<i class="fa-solid fa-chalkboard-user"></i> ' + title +
+        '</h3>' +
         '</div>' +
         '<div style="padding: 1.5rem; background: #F8FAFC; border: 1px dashed #CBD5E1; border-radius: 8px; text-align: center; color: var(--text-muted); font-style: italic;">' +
-          '<i class="fa-solid fa-circle-exclamation" style="margin-right: 0.4rem; color: #94A3B8;"></i> ' +
-          'Chưa có dữ liệu đánh giá phương pháp & hình thức' +
+        '<i class="fa-solid fa-circle-exclamation" style="margin-right: 0.4rem; color: #94A3B8;"></i> ' +
+        'Chưa có dữ liệu đánh giá phương pháp & hình thức' +
         '</div>';
       return;
     }
@@ -10851,114 +10910,114 @@ document.addEventListener('DOMContentLoaded', () => {
     containerElem._hybridItem = hybridItem;
     containerElem._overallItem = overallItem;
 
-    const sectionHtml = 
+    const sectionHtml =
       '<div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #E2E8F0; padding-bottom: 0.65rem; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">' +
-        '<div>' +
-          '<h3 style="margin: 0; font-size: 1.05rem; font-weight: 800; color: var(--brand-primary); display: flex; align-items: center; gap: 0.5rem;">' +
-            '<i class="fa-solid fa-chalkboard-user"></i> ' + title +
-          '</h3>' +
-          '<div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.15rem;">Đánh giá 2 tiêu chí cốt lõi: Hoạt động học tập & Hình thức đào tạo • Thang điểm chuẩn hóa 4.00</div>' +
-        '</div>' +
-        '<div style="font-size: 0.8rem; font-weight: 700; color: #64748B; background: #F1F5F9; padding: 0.25rem 0.65rem; border-radius: 6px;">' +
-          'Thang điểm: 4.00' +
-        '</div>' +
+      '<div>' +
+      '<h3 style="margin: 0; font-size: 1.05rem; font-weight: 800; color: var(--brand-primary); display: flex; align-items: center; gap: 0.5rem;">' +
+      '<i class="fa-solid fa-chalkboard-user"></i> ' + title +
+      '</h3>' +
+      '<div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.15rem;">Đánh giá 2 tiêu chí cốt lõi: Hoạt động học tập & Hình thức đào tạo • Thang điểm chuẩn hóa 4.00</div>' +
+      '</div>' +
+      '<div style="font-size: 0.8rem; font-weight: 700; color: #64748B; background: #F1F5F9; padding: 0.25rem 0.65rem; border-radius: 6px;">' +
+      'Thang điểm: 4.00' +
+      '</div>' +
       '</div>' +
 
       // TẦNG 1: EXECUTIVE KPI SUMMARY
       '<div style="margin-bottom: 1.15rem;">' +
-        '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.85rem; margin-bottom: 0.85rem;">' +
-          // KPI 1: Điểm trung bình chung
-          '<div style="background: white; border: 1px solid #E2E8F0; border-left: 4px solid var(--brand-primary); border-radius: 8px; padding: 0.85rem 1rem;">' +
-            '<div style="display: flex; justify-content: space-between; align-items: center;">' +
-              '<span style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">ĐIỂM TRUNG BÌNH CHUNG</span>' +
-              '<div style="width: 26px; height: 26px; border-radius: 50%; background: #FFF1F2; display: flex; align-items: center; justify-content: center; color: var(--brand-primary);"><i class="fa-solid fa-award"></i></div>' +
-            '</div>' +
-            '<div style="font-size: 1.7rem; font-weight: 800; color: var(--brand-primary); line-height: 1.2; margin-top: 0.25rem;">' +
-              Number(overallScore).toFixed(2) + ' <span style="font-size: 0.85rem; font-weight: 600; color: #64748B;">/ 4.00</span>' +
-            '</div>' +
-            '<div style="font-size: 0.75rem; font-weight: 600; color: #15803D; margin-top: 0.25rem; display: flex; align-items: center; gap: 0.3rem;">' +
-              '<i class="fa-solid fa-circle-check"></i> Đánh giá Xuất sắc' +
-            '</div>' +
-          '</div>' +
+      '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.85rem; margin-bottom: 0.85rem;">' +
+      // KPI 1: Điểm trung bình chung
+      '<div style="background: white; border: 1px solid #E2E8F0; border-left: 4px solid var(--brand-primary); border-radius: 8px; padding: 0.85rem 1rem;">' +
+      '<div style="display: flex; justify-content: space-between; align-items: center;">' +
+      '<span style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">ĐIỂM TRUNG BÌNH CHUNG</span>' +
+      '<div style="width: 26px; height: 26px; border-radius: 50%; background: #FFF1F2; display: flex; align-items: center; justify-content: center; color: var(--brand-primary);"><i class="fa-solid fa-award"></i></div>' +
+      '</div>' +
+      '<div style="font-size: 1.7rem; font-weight: 800; color: var(--brand-primary); line-height: 1.2; margin-top: 0.25rem;">' +
+      Number(overallScore).toFixed(2) + ' <span style="font-size: 0.85rem; font-weight: 600; color: #64748B;">/ 4.00</span>' +
+      '</div>' +
+      '<div style="font-size: 0.75rem; font-weight: 600; color: #15803D; margin-top: 0.25rem; display: flex; align-items: center; gap: 0.3rem;">' +
+      '<i class="fa-solid fa-circle-check"></i> Đánh giá Xuất sắc' +
+      '</div>' +
+      '</div>' +
 
-          // KPI 2: Tỷ lệ đánh giá tích cực
-          '<div style="background: white; border: 1px solid #E2E8F0; border-left: 4px solid #15803D; border-radius: 8px; padding: 0.85rem 1rem;">' +
-            '<div style="display: flex; justify-content: space-between; align-items: center;">' +
-              '<span style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">TỶ LỆ TÍCH CỰC (TỐT + KHÁ)</span>' +
-              '<div style="width: 26px; height: 26px; border-radius: 50%; background: #DCFCE7; display: flex; align-items: center; justify-content: center; color: #15803D;"><i class="fa-solid fa-thumbs-up"></i></div>' +
-            '</div>' +
-            '<div style="font-size: 1.7rem; font-weight: 800; color: #15803D; line-height: 1.2; margin-top: 0.25rem;">' +
-              Number(posRate).toFixed(1) + '%' +
-            '</div>' +
-            '<div style="font-size: 0.75rem; color: #64748B; margin-top: 0.25rem;">' +
-              'Tỷ lệ đồng thuận cao trên toàn bộ các hình thức' +
-            '</div>' +
-          '</div>' +
+      // KPI 2: Tỷ lệ đánh giá tích cực
+      '<div style="background: white; border: 1px solid #E2E8F0; border-left: 4px solid #15803D; border-radius: 8px; padding: 0.85rem 1rem;">' +
+      '<div style="display: flex; justify-content: space-between; align-items: center;">' +
+      '<span style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">TỶ LỆ TÍCH CỰC (TỐT + KHÁ)</span>' +
+      '<div style="width: 26px; height: 26px; border-radius: 50%; background: #DCFCE7; display: flex; align-items: center; justify-content: center; color: #15803D;"><i class="fa-solid fa-thumbs-up"></i></div>' +
+      '</div>' +
+      '<div style="font-size: 1.7rem; font-weight: 800; color: #15803D; line-height: 1.2; margin-top: 0.25rem;">' +
+      Number(posRate).toFixed(1) + '%' +
+      '</div>' +
+      '<div style="font-size: 0.75rem; color: #64748B; margin-top: 0.25rem;">' +
+      'Tỷ lệ đồng thuận cao trên toàn bộ các hình thức' +
+      '</div>' +
+      '</div>' +
 
-          // KPI 3: Tổng số phiếu khảo sát
-          '<div style="background: white; border: 1px solid #E2E8F0; border-left: 4px solid #0284C7; border-radius: 8px; padding: 0.85rem 1rem;">' +
-            '<div style="display: flex; justify-content: space-between; align-items: center;">' +
-              '<span style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">TỔNG LƯỢT ĐÁNH GIÁ HỢP LỆ</span>' +
-              '<div style="width: 26px; height: 26px; border-radius: 50%; background: #E0F2FE; display: flex; align-items: center; justify-content: center; color: #0284C7;"><i class="fa-solid fa-square-poll-horizontal"></i></div>' +
-            '</div>' +
-            '<div style="font-size: 1.7rem; font-weight: 800; color: #0284C7; line-height: 1.2; margin-top: 0.25rem;">' +
-              totalVotes.toLocaleString('vi-VN') + ' <span style="font-size: 0.85rem; font-weight: 600; color: #64748B;">phiếu</span>' +
-            '</div>' +
-            '<div style="font-size: 0.75rem; color: #64748B; margin-top: 0.25rem;">' +
-              (directItem && hybridItem ? 'Gồm cả Trực tiếp và Trực tiếp kết hợp Trực tuyến' : 'Dữ liệu khảo sát chuẩn hóa') +
-            '</div>' +
-          '</div>' +
-        '</div>' +
+      // KPI 3: Tổng số phiếu khảo sát
+      '<div style="background: white; border: 1px solid #E2E8F0; border-left: 4px solid #0284C7; border-radius: 8px; padding: 0.85rem 1rem;">' +
+      '<div style="display: flex; justify-content: space-between; align-items: center;">' +
+      '<span style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">TỔNG LƯỢT ĐÁNH GIÁ HỢP LỆ</span>' +
+      '<div style="width: 26px; height: 26px; border-radius: 50%; background: #E0F2FE; display: flex; align-items: center; justify-content: center; color: #0284C7;"><i class="fa-solid fa-square-poll-horizontal"></i></div>' +
+      '</div>' +
+      '<div style="font-size: 1.7rem; font-weight: 800; color: #0284C7; line-height: 1.2; margin-top: 0.25rem;">' +
+      totalVotes.toLocaleString('vi-VN') + ' <span style="font-size: 0.85rem; font-weight: 600; color: #64748B;">phiếu</span>' +
+      '</div>' +
+      '<div style="font-size: 0.75rem; color: #64748B; margin-top: 0.25rem;">' +
+      (directItem && hybridItem ? 'Gồm cả Trực tiếp và Trực tiếp kết hợp Trực tuyến' : 'Dữ liệu khảo sát chuẩn hóa') +
+      '</div>' +
+      '</div>' +
+      '</div>' +
       '</div>' +
 
       // TẦNG 2: FORMAT SLICERS & 100% HORIZONTAL STACKED BAR CHART
       '<div style="background: white; border: 1px solid #E2E8F0; border-radius: 8px; padding: 1.15rem; margin-bottom: 1.15rem;">' +
-        '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.85rem; flex-wrap: wrap; gap: 0.5rem;">' +
-          '<div style="font-size: 0.88rem; font-weight: 800; color: #1E293B; display: flex; align-items: center; gap: 0.4rem;">' +
-            '<i class="fa-solid fa-chart-column" style="color: var(--brand-primary);"></i> PHÂN BỐ TỶ LỆ 4 MỨC ĐÁNH GIÁ THEO TIÊU CHÍ (100%)' +
-          '</div>' +
+      '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.85rem; flex-wrap: wrap; gap: 0.5rem;">' +
+      '<div style="font-size: 0.88rem; font-weight: 800; color: #1E293B; display: flex; align-items: center; gap: 0.4rem;">' +
+      '<i class="fa-solid fa-chart-column" style="color: var(--brand-primary);"></i> PHÂN BỐ TỶ LỆ 4 MỨC ĐÁNH GIÁ THEO TIÊU CHÍ (100%)' +
+      '</div>' +
 
-          // Slicers: Tất cả, Trực tiếp, Trực tiếp kết hợp Trực tuyến
-          '<div style="display: inline-flex; gap: 0.4rem; align-items: center;" id="pphtFormatSlicersGroup">' +
-            '<button type="button" class="btn btn-sm ' + (curFilter === 'all' ? 'active' : '') + '" onclick="setReportPphtFormatFilter(\'all\')" style="padding: 0.25rem 0.65rem; font-size: 0.75rem; font-weight: 700; border-radius: 4px; ' + (curFilter === 'all' ? 'background: #1E293B; color: white;' : 'background: #F1F5F9; color: #475569;') + '">' +
-              'Tất cả hình thức' +
-            '</button>' +
-            (directItem ? 
-              '<button type="button" class="btn btn-sm ' + (curFilter === 'direct' ? 'active' : '') + '" onclick="setReportPphtFormatFilter(\'direct\')" style="padding: 0.25rem 0.65rem; font-size: 0.75rem; font-weight: 700; border-radius: 4px; ' + (curFilter === 'direct' ? 'background: #137333; color: white;' : 'background: #E6F4EA; color: #137333;') + '">' +
-                '<i class="fa-solid fa-user-group"></i> Trực tiếp' +
-              '</button>' : '') +
-            (hybridItem ? 
-              '<button type="button" class="btn btn-sm ' + (curFilter === 'hybrid' ? 'active' : '') + '" onclick="setReportPphtFormatFilter(\'hybrid\')" style="padding: 0.25rem 0.65rem; font-size: 0.75rem; font-weight: 700; border-radius: 4px; ' + (curFilter === 'hybrid' ? 'background: #7E22CE; color: white;' : 'background: #F3E8FF; color: #7E22CE;') + '">' +
-                '<i class="fa-solid fa-shapes"></i> Trực tiếp kết hợp Trực tuyến' +
-              '</button>' : '') +
-          '</div>' +
-        '</div>' +
+      // Slicers: Tất cả, Trực tiếp, Trực tiếp kết hợp Trực tuyến
+      '<div style="display: inline-flex; gap: 0.4rem; align-items: center;" id="pphtFormatSlicersGroup">' +
+      '<button type="button" class="btn btn-sm ' + (curFilter === 'all' ? 'active' : '') + '" onclick="setReportPphtFormatFilter(\'all\')" style="padding: 0.25rem 0.65rem; font-size: 0.75rem; font-weight: 700; border-radius: 4px; ' + (curFilter === 'all' ? 'background: #1E293B; color: white;' : 'background: #F1F5F9; color: #475569;') + '">' +
+      'Tất cả hình thức' +
+      '</button>' +
+      (directItem ?
+        '<button type="button" class="btn btn-sm ' + (curFilter === 'direct' ? 'active' : '') + '" onclick="setReportPphtFormatFilter(\'direct\')" style="padding: 0.25rem 0.65rem; font-size: 0.75rem; font-weight: 700; border-radius: 4px; ' + (curFilter === 'direct' ? 'background: #137333; color: white;' : 'background: #E6F4EA; color: #137333;') + '">' +
+        '<i class="fa-solid fa-user-group"></i> Trực tiếp' +
+        '</button>' : '') +
+      (hybridItem ?
+        '<button type="button" class="btn btn-sm ' + (curFilter === 'hybrid' ? 'active' : '') + '" onclick="setReportPphtFormatFilter(\'hybrid\')" style="padding: 0.25rem 0.65rem; font-size: 0.75rem; font-weight: 700; border-radius: 4px; ' + (curFilter === 'hybrid' ? 'background: #7E22CE; color: white;' : 'background: #F3E8FF; color: #7E22CE;') + '">' +
+        '<i class="fa-solid fa-shapes"></i> Trực tiếp kết hợp Trực tuyến' +
+        '</button>' : '') +
+      '</div>' +
+      '</div>' +
 
-        '<div style="height: 240px; position: relative;">' +
-          '<canvas id="reportPphtStackedBarChart"></canvas>' +
-        '</div>' +
+      '<div style="height: 240px; position: relative;">' +
+      '<canvas id="reportPphtStackedBarChart"></canvas>' +
+      '</div>' +
       '</div>' +
 
       // TẦNG 3: BẢNG CHI TIẾT TỔNG HỢP (IDENTICAL TO PART IV REFERENCE TABLE)
       '<div style="background: white; border: 1px solid #E2E8F0; border-radius: 8px; overflow: hidden;">' +
-        '<div style="padding: 0.75rem 1rem; background: #F8FAFC; border-bottom: 1px solid #E2E8F0; font-size: 0.85rem; font-weight: 800; color: #1E293B; display: flex; align-items: center; gap: 0.4rem;">' +
-          '<i class="fa-solid fa-table-list" style="color: var(--brand-primary);"></i> BẢNG TỔNG HỢP ĐÁNH GIÁ PHƯƠNG PHÁP & HÌNH THỨC ĐÀO TẠO' +
-        '</div>' +
-        '<div class="table-container" style="padding: 0; margin: 0;">' +
-          '<table class="data-table" style="margin: 0; font-size: 0.82rem;">' +
-            '<thead>' +
-              '<tr>' +
-                '<th style="width: 5%; text-align: center;">STT</th>' +
-                '<th style="width: 32%;">TIÊU CHÍ ĐÁNH GIÁ</th>' +
-                '<th style="width: 11%; text-align: center;" style="color: #137333;">TỐT (4)</th>' +
-                '<th style="width: 11%; text-align: center;" style="color: #34A853;">KHÁ (3)</th>' +
-                '<th style="width: 11%; text-align: center;" style="color: #F59E0B;">BÌNH THƯỜNG (2)</th>' +
-                '<th style="width: 11%; text-align: center;" style="color: #EF4444;">HẠN CHẾ (1)</th>' +
-                '<th style="width: 9%; text-align: center;">TỔNG SỐ</th>' +
-                '<th style="width: 10%; text-align: center;">ĐIỂM TB (4.0)</th>' +
-              '</tr>' +
-            '</thead>' +
-            '<tbody>';
+      '<div style="padding: 0.75rem 1rem; background: #F8FAFC; border-bottom: 1px solid #E2E8F0; font-size: 0.85rem; font-weight: 800; color: #1E293B; display: flex; align-items: center; gap: 0.4rem;">' +
+      '<i class="fa-solid fa-table-list" style="color: var(--brand-primary);"></i> BẢNG TỔNG HỢP ĐÁNH GIÁ PHƯƠNG PHÁP & HÌNH THỨC ĐÀO TẠO' +
+      '</div>' +
+      '<div class="table-container" style="padding: 0; margin: 0;">' +
+      '<table class="data-table" style="margin: 0; font-size: 0.82rem;">' +
+      '<thead>' +
+      '<tr>' +
+      '<th style="width: 5%; text-align: center;">STT</th>' +
+      '<th style="width: 32%;">TIÊU CHÍ ĐÁNH GIÁ</th>' +
+      '<th style="width: 11%; text-align: center;" style="color: #137333;">TỐT (4)</th>' +
+      '<th style="width: 11%; text-align: center;" style="color: #34A853;">KHÁ (3)</th>' +
+      '<th style="width: 11%; text-align: center;" style="color: #F59E0B;">BÌNH THƯỜNG (2)</th>' +
+      '<th style="width: 11%; text-align: center;" style="color: #EF4444;">HẠN CHẾ (1)</th>' +
+      '<th style="width: 9%; text-align: center;">TỔNG SỐ</th>' +
+      '<th style="width: 10%; text-align: center;">ĐIỂM TB (4.0)</th>' +
+      '</tr>' +
+      '</thead>' +
+      '<tbody>';
 
     let tableRowsHtml = '';
 
@@ -10968,46 +11027,46 @@ document.addEventListener('DOMContentLoaded', () => {
       const c2 = directItem.c2;
       const sub = directItem.subtotal || { score: directItem.score || 0, posRate: directItem.posRate || 0, total: ((directItem.c1 ? directItem.c1.total : 0) + (directItem.c2 ? directItem.c2.total : 0)) || directItem.votes || 0 };
 
-      tableRowsHtml += 
+      tableRowsHtml +=
         // Group Header A
         '<tr style="background: #F1F5F9; font-weight: 800; color: #1E293B;">' +
-          '<td colspan="8" style="padding: 0.55rem 0.85rem;"><i class="fa-solid fa-user-group" style="color: #137333; margin-right: 0.35rem;"></i> A. HÌNH THỨC TRỰC TIẾP</td>' +
+        '<td colspan="8" style="padding: 0.55rem 0.85rem;"><i class="fa-solid fa-user-group" style="color: #137333; margin-right: 0.35rem;"></i> A. HÌNH THỨC TRỰC TIẾP</td>' +
         '</tr>' +
 
         // Criterion 1
         '<tr>' +
-          '<td style="text-align: center; color: #64748B;">1</td>' +
-          '<td style="font-weight: 600;">Hoạt động học tập</td>' +
-          '<td style="text-align: center;"><strong style="color: #137333;">' + ((c1.n4 / c1.total) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + c1.n4 + ')</span></td>' +
-          '<td style="text-align: center;"><strong style="color: #34A853;">' + ((c1.n3 / c1.total) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + c1.n3 + ')</span></td>' +
-          '<td style="text-align: center;"><strong style="color: #F59E0B;">' + ((c1.n2 / c1.total) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + c1.n2 + ')</span></td>' +
-          '<td style="text-align: center;"><strong style="color: #EF4444;">' + ((c1.n1 / c1.total) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + c1.n1 + ')</span></td>' +
-          '<td style="text-align: center; font-weight: 700;">' + c1.total + '</td>' +
-          '<td style="text-align: center; font-weight: 800; color: #137333;">' + c1.score.toFixed(2) + '</td>' +
+        '<td style="text-align: center; color: #64748B;">1</td>' +
+        '<td style="font-weight: 600;">Hoạt động học tập</td>' +
+        '<td style="text-align: center;"><strong style="color: #137333;">' + ((c1.n4 / c1.total) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + c1.n4 + ')</span></td>' +
+        '<td style="text-align: center;"><strong style="color: #34A853;">' + ((c1.n3 / c1.total) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + c1.n3 + ')</span></td>' +
+        '<td style="text-align: center;"><strong style="color: #F59E0B;">' + ((c1.n2 / c1.total) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + c1.n2 + ')</span></td>' +
+        '<td style="text-align: center;"><strong style="color: #EF4444;">' + ((c1.n1 / c1.total) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + c1.n1 + ')</span></td>' +
+        '<td style="text-align: center; font-weight: 700;">' + c1.total + '</td>' +
+        '<td style="text-align: center; font-weight: 800; color: #137333;">' + c1.score.toFixed(2) + '</td>' +
         '</tr>' +
 
         // Criterion 2
         '<tr>' +
-          '<td style="text-align: center; color: #64748B;">2</td>' +
-          '<td style="font-weight: 600;">Hình thức đào tạo</td>' +
-          '<td style="text-align: center;"><strong style="color: #137333;">' + ((c2.n4 / c2.total) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + c2.n4 + ')</span></td>' +
-          '<td style="text-align: center;"><strong style="color: #34A853;">' + ((c2.n3 / c2.total) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + c2.n3 + ')</span></td>' +
-          '<td style="text-align: center;"><strong style="color: #F59E0B;">' + ((c2.n2 / c2.total) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + c2.n2 + ')</span></td>' +
-          '<td style="text-align: center;"><strong style="color: #EF4444;">' + ((c2.n1 / c2.total) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + c2.n1 + ')</span></td>' +
-          '<td style="text-align: center; font-weight: 700;">' + c2.total + '</td>' +
-          '<td style="text-align: center; font-weight: 800; color: #137333;">' + c2.score.toFixed(2) + '</td>' +
+        '<td style="text-align: center; color: #64748B;">2</td>' +
+        '<td style="font-weight: 600;">Hình thức đào tạo</td>' +
+        '<td style="text-align: center;"><strong style="color: #137333;">' + ((c2.n4 / c2.total) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + c2.n4 + ')</span></td>' +
+        '<td style="text-align: center;"><strong style="color: #34A853;">' + ((c2.n3 / c2.total) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + c2.n3 + ')</span></td>' +
+        '<td style="text-align: center;"><strong style="color: #F59E0B;">' + ((c2.n2 / c2.total) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + c2.n2 + ')</span></td>' +
+        '<td style="text-align: center;"><strong style="color: #EF4444;">' + ((c2.n1 / c2.total) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + c2.n1 + ')</span></td>' +
+        '<td style="text-align: center; font-weight: 700;">' + c2.total + '</td>' +
+        '<td style="text-align: center; font-weight: 800; color: #137333;">' + c2.score.toFixed(2) + '</td>' +
         '</tr>' +
 
         // Subtotal Direct Row
         '<tr style="background: #F8FAFC; font-weight: 800; border-top: 1px solid #CBD5E1; border-bottom: 2px solid #CBD5E1;">' +
-          '<td></td>' +
-          '<td style="color: #137333;">Cộng hình thức Trực tiếp</td>' +
-          '<td style="text-align: center; color: #137333;"><strong>' + (sub.total > 0 ? (((c1.n4 + c2.n4) / sub.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (sub.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + (c1.n4 + c2.n4) + ')</span>' : '') + '</td>' +
-          '<td style="text-align: center; color: #34A853;"><strong>' + (sub.total > 0 ? (((c1.n3 + c2.n3) / sub.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (sub.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + (c1.n3 + c2.n3) + ')</span>' : '') + '</td>' +
-          '<td style="text-align: center; color: #F59E0B;"><strong>' + (sub.total > 0 ? (((c1.n2 + c2.n2) / sub.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (sub.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + (c1.n2 + c2.n2) + ')</span>' : '') + '</td>' +
-          '<td style="text-align: center; color: #EF4444;"><strong>' + (sub.total > 0 ? (((c1.n1 + c2.n1) / sub.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (sub.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + (c1.n1 + c2.n1) + ')</span>' : '') + '</td>' +
-          '<td style="text-align: center; font-weight: 800;">' + sub.total + '</td>' +
-          '<td style="text-align: center; font-weight: 800; color: #137333; font-size: 0.95rem;">' + sub.score.toFixed(2) + '</td>' +
+        '<td></td>' +
+        '<td style="color: #137333;">Cộng hình thức Trực tiếp</td>' +
+        '<td style="text-align: center; color: #137333;"><strong>' + (sub.total > 0 ? (((c1.n4 + c2.n4) / sub.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (sub.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + (c1.n4 + c2.n4) + ')</span>' : '') + '</td>' +
+        '<td style="text-align: center; color: #34A853;"><strong>' + (sub.total > 0 ? (((c1.n3 + c2.n3) / sub.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (sub.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + (c1.n3 + c2.n3) + ')</span>' : '') + '</td>' +
+        '<td style="text-align: center; color: #F59E0B;"><strong>' + (sub.total > 0 ? (((c1.n2 + c2.n2) / sub.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (sub.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + (c1.n2 + c2.n2) + ')</span>' : '') + '</td>' +
+        '<td style="text-align: center; color: #EF4444;"><strong>' + (sub.total > 0 ? (((c1.n1 + c2.n1) / sub.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (sub.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + (c1.n1 + c2.n1) + ')</span>' : '') + '</td>' +
+        '<td style="text-align: center; font-weight: 800;">' + sub.total + '</td>' +
+        '<td style="text-align: center; font-weight: 800; color: #137333; font-size: 0.95rem;">' + sub.score.toFixed(2) + '</td>' +
         '</tr>';
     }
 
@@ -11017,46 +11076,46 @@ document.addEventListener('DOMContentLoaded', () => {
       const c2 = hybridItem.c2;
       const sub = hybridItem.subtotal || { score: hybridItem.score || 0, posRate: hybridItem.posRate || 0, total: ((hybridItem.c1 ? hybridItem.c1.total : 0) + (hybridItem.c2 ? hybridItem.c2.total : 0)) || hybridItem.votes || 0 };
 
-      tableRowsHtml += 
+      tableRowsHtml +=
         // Group Header B
         '<tr style="background: #F1F5F9; font-weight: 800; color: #1E293B;">' +
-          '<td colspan="8" style="padding: 0.55rem 0.85rem;"><i class="fa-solid fa-shapes" style="color: #7E22CE; margin-right: 0.35rem;"></i> B. HÌNH THỨC TRỰC TIẾP KẾT HỢP TRỰC TUYẾN</td>' +
+        '<td colspan="8" style="padding: 0.55rem 0.85rem;"><i class="fa-solid fa-shapes" style="color: #7E22CE; margin-right: 0.35rem;"></i> B. HÌNH THỨC TRỰC TIẾP KẾT HỢP TRỰC TUYẾN</td>' +
         '</tr>' +
 
         // Criterion 1
         '<tr>' +
-          '<td style="text-align: center; color: #64748B;">1</td>' +
-          '<td style="font-weight: 600;">Hoạt động học tập</td>' +
-          '<td style="text-align: center;"><strong style="color: #137333;">' + ((c1.n4 / c1.total) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + c1.n4 + ')</span></td>' +
-          '<td style="text-align: center;"><strong style="color: #34A853;">' + ((c1.n3 / c1.total) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + c1.n3 + ')</span></td>' +
-          '<td style="text-align: center;"><strong style="color: #F59E0B;">' + ((c1.n2 / c1.total) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + c1.n2 + ')</span></td>' +
-          '<td style="text-align: center;"><strong style="color: #EF4444;">' + ((c1.n1 / c1.total) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + c1.n1 + ')</span></td>' +
-          '<td style="text-align: center; font-weight: 700;">' + c1.total + '</td>' +
-          '<td style="text-align: center; font-weight: 800; color: #7E22CE;">' + c1.score.toFixed(2) + '</td>' +
+        '<td style="text-align: center; color: #64748B;">1</td>' +
+        '<td style="font-weight: 600;">Hoạt động học tập</td>' +
+        '<td style="text-align: center;"><strong style="color: #137333;">' + ((c1.n4 / c1.total) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + c1.n4 + ')</span></td>' +
+        '<td style="text-align: center;"><strong style="color: #34A853;">' + ((c1.n3 / c1.total) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + c1.n3 + ')</span></td>' +
+        '<td style="text-align: center;"><strong style="color: #F59E0B;">' + ((c1.n2 / c1.total) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + c1.n2 + ')</span></td>' +
+        '<td style="text-align: center;"><strong style="color: #EF4444;">' + ((c1.n1 / c1.total) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + c1.n1 + ')</span></td>' +
+        '<td style="text-align: center; font-weight: 700;">' + c1.total + '</td>' +
+        '<td style="text-align: center; font-weight: 800; color: #7E22CE;">' + c1.score.toFixed(2) + '</td>' +
         '</tr>' +
 
         // Criterion 2
         '<tr>' +
-          '<td style="text-align: center; color: #64748B;">2</td>' +
-          '<td style="font-weight: 600;">Hình thức đào tạo</td>' +
-          '<td style="text-align: center;"><strong style="color: #137333;">' + ((c2.n4 / c2.total) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + c2.n4 + ')</span></td>' +
-          '<td style="text-align: center;"><strong style="color: #34A853;">' + ((c2.n3 / c2.total) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + c2.n3 + ')</span></td>' +
-          '<td style="text-align: center;"><strong style="color: #F59E0B;">' + ((c2.n2 / c2.total) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + c2.n2 + ')</span></td>' +
-          '<td style="text-align: center;"><strong style="color: #EF4444;">' + ((c2.n1 / c2.total) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + c2.n1 + ')</span></td>' +
-          '<td style="text-align: center; font-weight: 700;">' + c2.total + '</td>' +
-          '<td style="text-align: center; font-weight: 800; color: #7E22CE;">' + c2.score.toFixed(2) + '</td>' +
+        '<td style="text-align: center; color: #64748B;">2</td>' +
+        '<td style="font-weight: 600;">Hình thức đào tạo</td>' +
+        '<td style="text-align: center;"><strong style="color: #137333;">' + ((c2.n4 / c2.total) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + c2.n4 + ')</span></td>' +
+        '<td style="text-align: center;"><strong style="color: #34A853;">' + ((c2.n3 / c2.total) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + c2.n3 + ')</span></td>' +
+        '<td style="text-align: center;"><strong style="color: #F59E0B;">' + ((c2.n2 / c2.total) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + c2.n2 + ')</span></td>' +
+        '<td style="text-align: center;"><strong style="color: #EF4444;">' + ((c2.n1 / c2.total) * 100).toFixed(1) + '%</strong> <span style="font-size: 0.75rem; color: #64748B;">(' + c2.n1 + ')</span></td>' +
+        '<td style="text-align: center; font-weight: 700;">' + c2.total + '</td>' +
+        '<td style="text-align: center; font-weight: 800; color: #7E22CE;">' + c2.score.toFixed(2) + '</td>' +
         '</tr>' +
 
         // Subtotal Hybrid Row
         '<tr style="background: #F8FAFC; font-weight: 800; border-top: 1px solid #CBD5E1; border-bottom: 2px solid #CBD5E1;">' +
-          '<td></td>' +
-          '<td style="color: #7E22CE;">Cộng hình thức Trực tiếp kết hợp Trực tuyến</td>' +
-          '<td style="text-align: center; color: #137333;"><strong>' + (sub.total > 0 ? (((c1.n4 + c2.n4) / sub.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (sub.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + (c1.n4 + c2.n4) + ')</span>' : '') + '</td>' +
-          '<td style="text-align: center; color: #34A853;"><strong>' + (sub.total > 0 ? (((c1.n3 + c2.n3) / sub.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (sub.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + (c1.n3 + c2.n3) + ')</span>' : '') + '</td>' +
-          '<td style="text-align: center; color: #F59E0B;"><strong>' + (sub.total > 0 ? (((c1.n2 + c2.n2) / sub.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (sub.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + (c1.n2 + c2.n2) + ')</span>' : '') + '</td>' +
-          '<td style="text-align: center; color: #EF4444;"><strong>' + (sub.total > 0 ? (((c1.n1 + c2.n1) / sub.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (sub.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + (c1.n1 + c2.n1) + ')</span>' : '') + '</td>' +
-          '<td style="text-align: center; font-weight: 800;">' + sub.total + '</td>' +
-          '<td style="text-align: center; font-weight: 800; color: #7E22CE; font-size: 0.95rem;">' + sub.score.toFixed(2) + '</td>' +
+        '<td></td>' +
+        '<td style="color: #7E22CE;">Cộng hình thức Trực tiếp kết hợp Trực tuyến</td>' +
+        '<td style="text-align: center; color: #137333;"><strong>' + (sub.total > 0 ? (((c1.n4 + c2.n4) / sub.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (sub.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + (c1.n4 + c2.n4) + ')</span>' : '') + '</td>' +
+        '<td style="text-align: center; color: #34A853;"><strong>' + (sub.total > 0 ? (((c1.n3 + c2.n3) / sub.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (sub.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + (c1.n3 + c2.n3) + ')</span>' : '') + '</td>' +
+        '<td style="text-align: center; color: #F59E0B;"><strong>' + (sub.total > 0 ? (((c1.n2 + c2.n2) / sub.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (sub.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + (c1.n2 + c2.n2) + ')</span>' : '') + '</td>' +
+        '<td style="text-align: center; color: #EF4444;"><strong>' + (sub.total > 0 ? (((c1.n1 + c2.n1) / sub.total) * 100).toFixed(1) + '%' : '—') + '</strong>' + (sub.total > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + (c1.n1 + c2.n1) + ')</span>' : '') + '</td>' +
+        '<td style="text-align: center; font-weight: 800;">' + sub.total + '</td>' +
+        '<td style="text-align: center; font-weight: 800; color: #7E22CE; font-size: 0.95rem;">' + sub.score.toFixed(2) + '</td>' +
         '</tr>';
     }
 
@@ -11078,16 +11137,16 @@ document.addEventListener('DOMContentLoaded', () => {
       grandTotal += hybridItem.subtotal ? hybridItem.subtotal.total : (hybridItem.total || hybridItem.votes || ((hybridItem.c1 ? hybridItem.c1.total : 0) + (hybridItem.c2 ? hybridItem.c2.total : 0)));
     }
 
-    tableRowsHtml += 
+    tableRowsHtml +=
       '<tr style="background: #FFF1F2; font-weight: 800; border-top: 2px solid var(--brand-primary);">' +
-        '<td></td>' +
-        '<td style="color: var(--brand-primary); text-transform: uppercase;">ĐIỂM TRUNG BÌNH CHUNG PHƯƠNG PHÁP & HÌNH THỨC ĐÀO TẠO</td>' +
-        '<td style="text-align: center; color: #137333;"><strong>' + (grandTotal > 0 ? ((grandN4 / grandTotal) * 100).toFixed(1) + '%' : '—') + '</strong>' + (grandTotal > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + grandN4 + ')</span>' : '') + '</td>' +
-        '<td style="text-align: center; color: #34A853;"><strong>' + (grandTotal > 0 ? ((grandN3 / grandTotal) * 100).toFixed(1) + '%' : '—') + '</strong>' + (grandTotal > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + grandN3 + ')</span>' : '') + '</td>' +
-        '<td style="text-align: center; color: #F59E0B;"><strong>' + (grandTotal > 0 ? ((grandN2 / grandTotal) * 100).toFixed(1) + '%' : '—') + '</strong>' + (grandTotal > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + grandN2 + ')</span>' : '') + '</td>' +
-        '<td style="text-align: center; color: #EF4444;"><strong>' + (grandTotal > 0 ? ((grandN1 / grandTotal) * 100).toFixed(1) + '%' : '—') + '</strong>' + (grandTotal > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + grandN1 + ')</span>' : '') + '</td>' +
-        '<td style="text-align: center; font-weight: 800; color: var(--brand-primary);">' + grandTotal + '</td>' +
-        '<td style="text-align: center; font-weight: 800; color: var(--brand-primary); font-size: 1.05rem;">' + grandScore + '</td>' +
+      '<td></td>' +
+      '<td style="color: var(--brand-primary); text-transform: uppercase;">ĐIỂM TRUNG BÌNH CHUNG PHƯƠNG PHÁP & HÌNH THỨC ĐÀO TẠO</td>' +
+      '<td style="text-align: center; color: #137333;"><strong>' + (grandTotal > 0 ? ((grandN4 / grandTotal) * 100).toFixed(1) + '%' : '—') + '</strong>' + (grandTotal > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + grandN4 + ')</span>' : '') + '</td>' +
+      '<td style="text-align: center; color: #34A853;"><strong>' + (grandTotal > 0 ? ((grandN3 / grandTotal) * 100).toFixed(1) + '%' : '—') + '</strong>' + (grandTotal > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + grandN3 + ')</span>' : '') + '</td>' +
+      '<td style="text-align: center; color: #F59E0B;"><strong>' + (grandTotal > 0 ? ((grandN2 / grandTotal) * 100).toFixed(1) + '%' : '—') + '</strong>' + (grandTotal > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + grandN2 + ')</span>' : '') + '</td>' +
+      '<td style="text-align: center; color: #EF4444;"><strong>' + (grandTotal > 0 ? ((grandN1 / grandTotal) * 100).toFixed(1) + '%' : '—') + '</strong>' + (grandTotal > 0 ? ' <span style="font-size: 0.75rem; color: #64748B;">(' + grandN1 + ')</span>' : '') + '</td>' +
+      '<td style="text-align: center; font-weight: 800; color: var(--brand-primary);">' + grandTotal + '</td>' +
+      '<td style="text-align: center; font-weight: 800; color: var(--brand-primary); font-size: 1.05rem;">' + grandScore + '</td>' +
       '</tr>';
 
     containerElem.innerHTML = sectionHtml + tableRowsHtml + '</tbody></table></div></div>';
@@ -11101,7 +11160,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!ctx || typeof Chart === 'undefined') return;
 
     if (reportCharts.pphtStacked) {
-      try { reportCharts.pphtStacked.destroy(); } catch (e) {}
+      try { reportCharts.pphtStacked.destroy(); } catch (e) { }
     }
 
     const directItem = containerElem._directItem;
@@ -11253,15 +11312,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const hasData = csvcData && ((isProgram && (csvcData.votes || 0) > 0) || (!isProgram && ((csvcData.votes || csvcData.tong_phieu || csvcData.so_phieu || 0) > 0)));
 
     if (!hasData) {
-      containerElem.innerHTML = 
+      containerElem.innerHTML =
         '<div style="border-bottom: 1px solid #E2E8F0; padding-bottom: 0.65rem; margin-bottom: 0.85rem;">' +
-          '<h3 style="margin: 0; font-size: 1.05rem; font-weight: 800; color: var(--brand-primary); display: flex; align-items: center; gap: 0.5rem;">' +
-            '<i class="fa-solid fa-hotel"></i> ' + title +
-          '</h3>' +
+        '<h3 style="margin: 0; font-size: 1.05rem; font-weight: 800; color: var(--brand-primary); display: flex; align-items: center; gap: 0.5rem;">' +
+        '<i class="fa-solid fa-hotel"></i> ' + title +
+        '</h3>' +
         '</div>' +
         '<div style="padding: 1.5rem; background: #F8FAFC; border: 1px dashed #CBD5E1; border-radius: 8px; text-align: center; color: var(--text-muted); font-style: italic;">' +
-          '<i class="fa-solid fa-circle-exclamation" style="margin-right: 0.4rem; color: #94A3B8;"></i> ' +
-          'Chưa có dữ liệu đánh giá CSVC' +
+        '<i class="fa-solid fa-circle-exclamation" style="margin-right: 0.4rem; color: #94A3B8;"></i> ' +
+        'Chưa có dữ liệu đánh giá CSVC' +
         '</div>';
       return;
     }
@@ -11307,72 +11366,72 @@ document.addEventListener('DOMContentLoaded', () => {
     // Multi-format slicer header if applicable
     let headerSlicerHtml = '';
     if (isMulti) {
-      headerSlicerHtml = 
+      headerSlicerHtml =
         '<div class="report-slicer-group" style="display: flex; gap: 0.35rem; align-items: center; background: #F8FAFC; padding: 0.2rem 0.4rem; border-radius: 6px; border: 1px solid #E2E8F0;">' +
-          '<span style="font-size: 0.72rem; font-weight: 700; color: #64748B; margin-right: 0.2rem;"><i class="fa-solid fa-filter"></i> Lọc hình thức:</span>' +
-          '<button type="button" class="btn-slicer active" data-filter="all" onclick="filterReportCsvcFormat(this, \'all\')">Tất cả</button>' +
-          '<button type="button" class="btn-slicer" data-filter="direct" onclick="filterReportCsvcFormat(this, \'direct\')">Trực tiếp</button>' +
-          '<button type="button" class="btn-slicer" data-filter="online" onclick="filterReportCsvcFormat(this, \'online\')">Trực tiếp kết hợp Trực tuyến</button>' +
+        '<span style="font-size: 0.72rem; font-weight: 700; color: #64748B; margin-right: 0.2rem;"><i class="fa-solid fa-filter"></i> Lọc hình thức:</span>' +
+        '<button type="button" class="btn-slicer active" data-filter="all" onclick="filterReportCsvcFormat(this, \'all\')">Tất cả</button>' +
+        '<button type="button" class="btn-slicer" data-filter="direct" onclick="filterReportCsvcFormat(this, \'direct\')">Trực tiếp</button>' +
+        '<button type="button" class="btn-slicer" data-filter="online" onclick="filterReportCsvcFormat(this, \'online\')">Trực tiếp kết hợp Trực tuyến</button>' +
         '</div>';
     }
 
-    let sectionHtml = 
+    let sectionHtml =
       '<div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #E2E8F0; padding-bottom: 0.65rem; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">' +
-        '<div>' +
-          '<h3 style="margin: 0; font-size: 1.05rem; font-weight: 800; color: var(--brand-primary); display: flex; align-items: center; gap: 0.5rem;">' +
-            '<i class="fa-solid fa-hotel"></i> ' + title +
-          '</h3>' +
-          '<div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.15rem;">Đánh giá cơ sở vật chất, hậu cần và tổ chức lớp • Thang điểm chuẩn hóa 4.00</div>' +
-        '</div>' +
-        '<div style="display: flex; align-items: center; gap: 0.6rem;">' +
-          headerSlicerHtml +
-          '<span style="font-size: 0.82rem; font-weight: 700; color: #1E293B;">' + totalVotes + ' phiếu</span>' +
-          '<span style="font-size: 0.95rem; font-weight: 800; color: var(--brand-primary);">' + overallScore.toFixed(2) + ' <span style="font-size: 0.75rem; color: #64748B;">/ 4.0</span></span>' +
-        '</div>' +
+      '<div>' +
+      '<h3 style="margin: 0; font-size: 1.05rem; font-weight: 800; color: var(--brand-primary); display: flex; align-items: center; gap: 0.5rem;">' +
+      '<i class="fa-solid fa-hotel"></i> ' + title +
+      '</h3>' +
+      '<div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.15rem;">Đánh giá cơ sở vật chất, hậu cần và tổ chức lớp • Thang điểm chuẩn hóa 4.00</div>' +
+      '</div>' +
+      '<div style="display: flex; align-items: center; gap: 0.6rem;">' +
+      headerSlicerHtml +
+      '<span style="font-size: 0.82rem; font-weight: 700; color: #1E293B;">' + totalVotes + ' phiếu</span>' +
+      '<span style="font-size: 0.95rem; font-weight: 800; color: var(--brand-primary);">' + overallScore.toFixed(2) + ' <span style="font-size: 0.75rem; color: #64748B;">/ 4.0</span></span>' +
+      '</div>' +
       '</div>' +
 
       // 3 CRITERIA CARDS
       '<div id="reportCsvcCardsContainer" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 0.85rem; margin-bottom: 1.15rem;">' +
-        criteriaList.map((c, idx) => {
-          const icon = idx === 0 ? 'fa-clipboard-check' : (idx === 1 ? 'fa-building' : 'fa-utensils');
-          const color = idx === 0 ? '#137333' : (idx === 1 ? '#0284C7' : '#B45309');
-          const hasSurveyData = (c.total > 0 && c.score > 0);
-          const scoreStr = hasSurveyData 
-            ? (c.score.toFixed(2) + ' <span style="font-size: 0.8rem; font-weight: 600; color: #64748B;">/ 4.0</span>') 
-            : '<span style="font-size: 1.15rem; font-weight: 700; color: #94A3B8;">Không khảo sát</span>';
-          const subText = hasSurveyData 
-            ? ('Tích cực: ' + c.posRate.toFixed(1) + '% (' + (c.n4 + c.n3) + ' phiếu)') 
-            : '<span style="font-style: italic; color: #94A3B8;">Không có câu hỏi trong phiếu</span>';
+      criteriaList.map((c, idx) => {
+        const icon = idx === 0 ? 'fa-clipboard-check' : (idx === 1 ? 'fa-building' : 'fa-utensils');
+        const color = idx === 0 ? '#137333' : (idx === 1 ? '#0284C7' : '#B45309');
+        const hasSurveyData = (c.total > 0 && c.score > 0);
+        const scoreStr = hasSurveyData
+          ? (c.score.toFixed(2) + ' <span style="font-size: 0.8rem; font-weight: 600; color: #64748B;">/ 4.0</span>')
+          : '<span style="font-size: 1.15rem; font-weight: 700; color: #94A3B8;">Không khảo sát</span>';
+        const subText = hasSurveyData
+          ? ('Tích cực: ' + c.posRate.toFixed(1) + '% (' + (c.n4 + c.n3) + ' phiếu)')
+          : '<span style="font-style: italic; color: #94A3B8;">Không có câu hỏi trong phiếu</span>';
 
-          return '<div style="background: white; border: 1px solid #E2E8F0; border-radius: 8px; padding: 0.85rem 1rem;">' +
-            '<div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.4rem;">' +
-              '<span style="font-size: 0.82rem; font-weight: 700; color: #1E293B;">' + c.name + '</span>' +
-              '<i class="fa-solid ' + icon + '" style="color: ' + (hasSurveyData ? color : '#94A3B8') + '; font-size: 1rem;"></i>' +
-            '</div>' +
-            '<div style="font-size: 1.6rem; font-weight: 800; color: ' + (hasSurveyData ? color : '#94A3B8') + '; line-height: 1.2;">' + scoreStr + '</div>' +
-            '<div style="font-size: 0.75rem; color: #64748B; margin-top: 0.25rem;">' + subText + '</div>' +
+        return '<div style="background: white; border: 1px solid #E2E8F0; border-radius: 8px; padding: 0.85rem 1rem;">' +
+          '<div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.4rem;">' +
+          '<span style="font-size: 0.82rem; font-weight: 700; color: #1E293B;">' + c.name + '</span>' +
+          '<i class="fa-solid ' + icon + '" style="color: ' + (hasSurveyData ? color : '#94A3B8') + '; font-size: 1rem;"></i>' +
+          '</div>' +
+          '<div style="font-size: 1.6rem; font-weight: 800; color: ' + (hasSurveyData ? color : '#94A3B8') + '; line-height: 1.2;">' + scoreStr + '</div>' +
+          '<div style="font-size: 0.75rem; color: #64748B; margin-top: 0.25rem;">' + subText + '</div>' +
           '</div>';
-        }).join('') +
+      }).join('') +
       '</div>';
 
     // IF PROGRAM MODE: LOCATION MULTI-AXIS COMBINATION CHART & DETAILED DATA TABLE (MATCHING "TỔ CHỨC & CSVC" SCREEN)
     if (isProgram && csvcData.locations && csvcData.locations.length > 0) {
       const locCount = csvcData.locations.length;
-      
+
       let totLocClasses = 0;
       csvcData.locations.forEach(l => {
         totLocClasses += (l.classes || l.classesCount || 1);
       });
 
       const progFmt = (csvcData.format || (activeItem && activeItem.format) || 'Trực tiếp');
-      const c1ScoreVal = (csvcData.c1 && typeof csvcData.c1.score === 'number' && csvcData.c1.score > 0) 
-        ? csvcData.c1.score.toFixed(2) 
+      const c1ScoreVal = (csvcData.c1 && typeof csvcData.c1.score === 'number' && csvcData.c1.score > 0)
+        ? csvcData.c1.score.toFixed(2)
         : '—';
-      const c2ScoreVal = (csvcData.c2 && typeof csvcData.c2.score === 'number' && csvcData.c2.score > 0) 
-        ? csvcData.c2.score.toFixed(2) 
+      const c2ScoreVal = (csvcData.c2 && typeof csvcData.c2.score === 'number' && csvcData.c2.score > 0)
+        ? csvcData.c2.score.toFixed(2)
         : '—';
-      const c3ScoreVal = (csvcData.c3 && typeof csvcData.c3.score === 'number' && csvcData.c3.score > 0) 
-        ? csvcData.c3.score.toFixed(2) 
+      const c3ScoreVal = (csvcData.c3 && typeof csvcData.c3.score === 'number' && csvcData.c3.score > 0)
+        ? csvcData.c3.score.toFixed(2)
         : '—';
 
       // Build Table Rows
@@ -11384,135 +11443,135 @@ document.addEventListener('DOMContentLoaded', () => {
         const clsCnt = loc.classes || loc.classesCount || 1;
         const fmtBadge = getReportFormatBadge(loc.format || 'Trực tiếp');
 
-        tableRowsHtml += 
+        tableRowsHtml +=
           '<tr style="border-bottom: 1px solid #F1F5F9; transition: background 0.15s;" onmouseover="this.style.background=\'#F8FAFC\'" onmouseout="this.style.background=\'transparent\'">' +
-            '<td style="padding: 0.45rem 0.55rem; font-weight: 700; color: #1E293B; font-size: 0.78rem; white-space: nowrap;">' +
-              (loc.full_name || loc.name) +
-            '</td>' +
-            '<td style="padding: 0.45rem 0.35rem; text-align: center; font-weight: 700; color: #64748B; font-size: 0.78rem; white-space: nowrap;">' +
-              clsCnt + ' lớp' +
-            '</td>' +
-            '<td style="padding: 0.45rem 0.4rem; text-align: center; white-space: nowrap;">' +
-              fmtBadge +
-            '</td>' +
-            '<td style="padding: 0.45rem 0.35rem; text-align: center; font-size: 0.8rem; white-space: nowrap;">' +
-              (s1 !== '—' ? '<strong style="color: #0F5132;">' + s1 + '</strong>' : '<span style="color: #94A3B8; font-style: italic;">—</span>') +
-            '</td>' +
-            '<td style="padding: 0.45rem 0.35rem; text-align: center; font-size: 0.8rem; white-space: nowrap;">' +
-              (s2 !== '—' ? '<strong style="color: #8C1D40;">' + s2 + '</strong>' : '<span style="color: #94A3B8; font-style: italic;">—</span>') +
-            '</td>' +
-            '<td style="padding: 0.45rem 0.35rem; text-align: center; font-size: 0.8rem; white-space: nowrap;">' +
-              (s3 !== '—' ? '<strong style="color: #D97706;">' + s3 + '</strong>' : '<span style="color: #94A3B8; font-style: italic;">—</span>') +
-            '</td>' +
+          '<td style="padding: 0.45rem 0.55rem; font-weight: 700; color: #1E293B; font-size: 0.78rem; white-space: nowrap;">' +
+          (loc.full_name || loc.name) +
+          '</td>' +
+          '<td style="padding: 0.45rem 0.35rem; text-align: center; font-weight: 700; color: #64748B; font-size: 0.78rem; white-space: nowrap;">' +
+          clsCnt + ' lớp' +
+          '</td>' +
+          '<td style="padding: 0.45rem 0.4rem; text-align: center; white-space: nowrap;">' +
+          fmtBadge +
+          '</td>' +
+          '<td style="padding: 0.45rem 0.35rem; text-align: center; font-size: 0.8rem; white-space: nowrap;">' +
+          (s1 !== '—' ? '<strong style="color: #0F5132;">' + s1 + '</strong>' : '<span style="color: #94A3B8; font-style: italic;">—</span>') +
+          '</td>' +
+          '<td style="padding: 0.45rem 0.35rem; text-align: center; font-size: 0.8rem; white-space: nowrap;">' +
+          (s2 !== '—' ? '<strong style="color: #8C1D40;">' + s2 + '</strong>' : '<span style="color: #94A3B8; font-style: italic;">—</span>') +
+          '</td>' +
+          '<td style="padding: 0.45rem 0.35rem; text-align: center; font-size: 0.8rem; white-space: nowrap;">' +
+          (s3 !== '—' ? '<strong style="color: #D97706;">' + s3 + '</strong>' : '<span style="color: #94A3B8; font-style: italic;">—</span>') +
+          '</td>' +
           '</tr>';
       });
 
-      sectionHtml += 
+      sectionHtml +=
         '<div style="background: white; border: 1px solid #E2E8F0; border-radius: 8px; padding: 1.15rem; margin-bottom: 1.15rem;">' +
-          '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.85rem; flex-wrap: wrap; gap: 0.5rem;">' +
-            '<div>' +
-              '<div style="font-size: 0.88rem; font-weight: 800; color: #1E293B; display: flex; align-items: center; gap: 0.4rem;">' +
-                '<i class="fa-solid fa-map-location-dot" style="color: var(--brand-primary);"></i> SO SÁNH ĐIỂM ĐÁNH GIÁ THEO ĐỊA ĐIỂM' +
-              '</div>' +
-              '<div style="font-size: 0.75rem; color: #64748B; margin-top: 0.15rem;">' +
-                'Phân tích chất lượng tổ chức & cơ sở vật chất theo từng địa bàn tổ chức' +
-              '</div>' +
-            '</div>' +
-            '<div style="display: flex; align-items: center; gap: 0.5rem;">' +
-              '<span style="font-size: 0.72rem; background: #F1F5F9; color: #475569; padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: 600;">' +
-                '<i class="fa-solid fa-layer-group"></i> ' + locCount + ' địa bàn' +
-              '</span>' +
-              (locCount > 3 ? '<span style="font-size: 0.72rem; background: #FFF1F2; color: var(--brand-primary); padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: 600;"><i class="fa-solid fa-arrows-left-right"></i> Kéo ngang biểu đồ</span>' : '') +
-            '</div>' +
-          '</div>' +
-          
-          '<div class="report-csvc-location-grid" style="display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1.05fr); gap: 1rem; align-items: start;">' +
-            // LEFT COLUMN: Combination Chart
-            '<div style="min-width: 0; background: #FAFBFD; border: 1px solid #E2E8F0; border-radius: 8px; padding: 0.65rem;">' +
-              '<div id="reportCsvcScrollOuter" style="width: 100%; overflow-x: auto; cursor: grab;">' +
-                '<div id="reportCsvcScrollInner" style="height: 335px; position: relative;">' +
-                  '<canvas id="reportCsvcLocationChart"></canvas>' +
-                '</div>' +
-              '</div>' +
-            '</div>' +
-            
-            // RIGHT COLUMN: Matching Data Table
-            '<div style="min-width: 0; background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 8px; overflow: hidden; display: flex; flex-direction: column;">' +
-              '<div style="padding: 0.55rem 0.85rem; background: #F8FAFC; border-bottom: 1px solid #E2E8F0; display: flex; justify-content: space-between; align-items: center;">' +
-                '<div style="font-size: 0.8rem; font-weight: 800; color: #1E293B; display: flex; align-items: center; gap: 0.35rem;">' +
-                  '<i class="fa-solid fa-table-list" style="color: var(--brand-primary);"></i> CHI TIẾT ĐIỂM THEO ĐỊA ĐIỂM' +
-                '</div>' +
-                '<span style="font-size: 0.72rem; color: #64748B; font-weight: 600;">' + locCount + ' địa điểm</span>' +
-              '</div>' +
-              '<div style="max-height: 335px; overflow-y: auto; overflow-x: auto;" class="table-container">' +
-                '<table class="data-table" id="reportCsvcLocationTable" style="width: 100%; border-collapse: collapse; margin: 0;">' +
-                  '<thead style="position: sticky; top: 0; background: #F8FAFC; z-index: 2; border-bottom: 2px solid #E2E8F0;">' +
-                    '<tr>' +
-                      '<th style="padding: 0.5rem 0.55rem; text-align: left; font-size: 0.74rem; color: #475569; white-space: nowrap;">ĐỊA ĐIỂM</th>' +
-                      '<th style="padding: 0.5rem 0.35rem; text-align: center; font-size: 0.74rem; color: #475569; white-space: nowrap;">SỐ LỚP</th>' +
-                      '<th style="padding: 0.5rem 0.4rem; text-align: center; font-size: 0.74rem; color: #475569; white-space: nowrap;">HÌNH THỨC</th>' +
-                      '<th style="padding: 0.5rem 0.35rem; text-align: center; font-size: 0.74rem; color: #0F5132; white-space: nowrap;" title="1. Công tác tổ chức lớp học (Thang 4.0)">CTTC (4.0)</th>' +
-                      '<th style="padding: 0.5rem 0.35rem; text-align: center; font-size: 0.74rem; color: #8C1D40; white-space: nowrap;" title="2. Cơ sở vật chất & thiết bị phòng học (Thang 4.0)">CSVC (4.0)</th>' +
-                      '<th style="padding: 0.5rem 0.35rem; text-align: center; font-size: 0.74rem; color: #D97706; white-space: nowrap;" title="3. Công tác hậu cần ăn nghỉ nước uống (Thang 4.0)">HẬU CẦN (4.0)</th>' +
-                    '</tr>' +
-                  '</thead>' +
-                  '<tbody>' +
-                    tableRowsHtml +
-                  '</tbody>' +
-                  '<tfoot style="position: sticky; bottom: 0; background: #FFF1F2; font-weight: 700; border-top: 2px solid #FECDD3; z-index: 2;">' +
-                    '<tr>' +
-                      '<td style="padding: 0.45rem 0.55rem; font-weight: 800; color: var(--brand-primary); font-size: 0.75rem; white-space: nowrap;">BÌNH QUÂN CHUNG</td>' +
-                      '<td style="padding: 0.45rem 0.35rem; text-align: center; font-weight: 800; color: #1E293B; font-size: 0.76rem; white-space: nowrap;">' + totLocClasses + ' lớp</td>' +
-                      '<td style="padding: 0.45rem 0.4rem; text-align: center; white-space: nowrap;">' + getReportFormatBadge(progFmt) + '</td>' +
-                      '<td style="padding: 0.45rem 0.35rem; text-align: center; font-weight: 800; color: #0F5132; font-size: 0.78rem; white-space: nowrap;">' + c1ScoreVal + '</td>' +
-                      '<td style="padding: 0.45rem 0.35rem; text-align: center; font-weight: 800; color: #8C1D40; font-size: 0.78rem; white-space: nowrap;">' + c2ScoreVal + '</td>' +
-                      '<td style="padding: 0.45rem 0.35rem; text-align: center; font-weight: 800; color: #D97706; font-size: 0.78rem; white-space: nowrap;">' + c3ScoreVal + '</td>' +
-                    '</tr>' +
-                  '</tfoot>' +
-                '</table>' +
-              '</div>' +
-            '</div>' +
-          '</div>' +
+        '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.85rem; flex-wrap: wrap; gap: 0.5rem;">' +
+        '<div>' +
+        '<div style="font-size: 0.88rem; font-weight: 800; color: #1E293B; display: flex; align-items: center; gap: 0.4rem;">' +
+        '<i class="fa-solid fa-map-location-dot" style="color: var(--brand-primary);"></i> SO SÁNH ĐIỂM ĐÁNH GIÁ THEO ĐỊA ĐIỂM' +
+        '</div>' +
+        '<div style="font-size: 0.75rem; color: #64748B; margin-top: 0.15rem;">' +
+        'Phân tích chất lượng tổ chức & cơ sở vật chất theo từng địa bàn tổ chức' +
+        '</div>' +
+        '</div>' +
+        '<div style="display: flex; align-items: center; gap: 0.5rem;">' +
+        '<span style="font-size: 0.72rem; background: #F1F5F9; color: #475569; padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: 600;">' +
+        '<i class="fa-solid fa-layer-group"></i> ' + locCount + ' địa bàn' +
+        '</span>' +
+        (locCount > 3 ? '<span style="font-size: 0.72rem; background: #FFF1F2; color: var(--brand-primary); padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: 600;"><i class="fa-solid fa-arrows-left-right"></i> Kéo ngang biểu đồ</span>' : '') +
+        '</div>' +
+        '</div>' +
+
+        '<div class="report-csvc-location-grid" style="display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1.05fr); gap: 1rem; align-items: start;">' +
+        // LEFT COLUMN: Combination Chart
+        '<div style="min-width: 0; background: #FAFBFD; border: 1px solid #E2E8F0; border-radius: 8px; padding: 0.65rem;">' +
+        '<div id="reportCsvcScrollOuter" style="width: 100%; overflow-x: auto; cursor: grab;">' +
+        '<div id="reportCsvcScrollInner" style="height: 335px; position: relative;">' +
+        '<canvas id="reportCsvcLocationChart"></canvas>' +
+        '</div>' +
+        '</div>' +
+        '</div>' +
+
+        // RIGHT COLUMN: Matching Data Table
+        '<div style="min-width: 0; background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 8px; overflow: hidden; display: flex; flex-direction: column;">' +
+        '<div style="padding: 0.55rem 0.85rem; background: #F8FAFC; border-bottom: 1px solid #E2E8F0; display: flex; justify-content: space-between; align-items: center;">' +
+        '<div style="font-size: 0.8rem; font-weight: 800; color: #1E293B; display: flex; align-items: center; gap: 0.35rem;">' +
+        '<i class="fa-solid fa-table-list" style="color: var(--brand-primary);"></i> CHI TIẾT ĐIỂM THEO ĐỊA ĐIỂM' +
+        '</div>' +
+        '<span style="font-size: 0.72rem; color: #64748B; font-weight: 600;">' + locCount + ' địa điểm</span>' +
+        '</div>' +
+        '<div style="max-height: 335px; overflow-y: auto; overflow-x: auto;" class="table-container">' +
+        '<table class="data-table" id="reportCsvcLocationTable" style="width: 100%; border-collapse: collapse; margin: 0;">' +
+        '<thead style="position: sticky; top: 0; background: #F8FAFC; z-index: 2; border-bottom: 2px solid #E2E8F0;">' +
+        '<tr>' +
+        '<th style="padding: 0.5rem 0.55rem; text-align: left; font-size: 0.74rem; color: #475569; white-space: nowrap;">ĐỊA ĐIỂM</th>' +
+        '<th style="padding: 0.5rem 0.35rem; text-align: center; font-size: 0.74rem; color: #475569; white-space: nowrap;">SỐ LỚP</th>' +
+        '<th style="padding: 0.5rem 0.4rem; text-align: center; font-size: 0.74rem; color: #475569; white-space: nowrap;">HÌNH THỨC</th>' +
+        '<th style="padding: 0.5rem 0.35rem; text-align: center; font-size: 0.74rem; color: #0F5132; white-space: nowrap;" title="1. Công tác tổ chức lớp học (Thang 4.0)">CTTC (4.0)</th>' +
+        '<th style="padding: 0.5rem 0.35rem; text-align: center; font-size: 0.74rem; color: #8C1D40; white-space: nowrap;" title="2. Cơ sở vật chất & thiết bị phòng học (Thang 4.0)">CSVC (4.0)</th>' +
+        '<th style="padding: 0.5rem 0.35rem; text-align: center; font-size: 0.74rem; color: #D97706; white-space: nowrap;" title="3. Công tác hậu cần ăn nghỉ nước uống (Thang 4.0)">HẬU CẦN (4.0)</th>' +
+        '</tr>' +
+        '</thead>' +
+        '<tbody>' +
+        tableRowsHtml +
+        '</tbody>' +
+        '<tfoot style="position: sticky; bottom: 0; background: #FFF1F2; font-weight: 700; border-top: 2px solid #FECDD3; z-index: 2;">' +
+        '<tr>' +
+        '<td style="padding: 0.45rem 0.55rem; font-weight: 800; color: var(--brand-primary); font-size: 0.75rem; white-space: nowrap;">BÌNH QUÂN CHUNG</td>' +
+        '<td style="padding: 0.45rem 0.35rem; text-align: center; font-weight: 800; color: #1E293B; font-size: 0.76rem; white-space: nowrap;">' + totLocClasses + ' lớp</td>' +
+        '<td style="padding: 0.45rem 0.4rem; text-align: center; white-space: nowrap;">' + getReportFormatBadge(progFmt) + '</td>' +
+        '<td style="padding: 0.45rem 0.35rem; text-align: center; font-weight: 800; color: #0F5132; font-size: 0.78rem; white-space: nowrap;">' + c1ScoreVal + '</td>' +
+        '<td style="padding: 0.45rem 0.35rem; text-align: center; font-weight: 800; color: #8C1D40; font-size: 0.78rem; white-space: nowrap;">' + c2ScoreVal + '</td>' +
+        '<td style="padding: 0.45rem 0.35rem; text-align: center; font-weight: 800; color: #D97706; font-size: 0.78rem; white-space: nowrap;">' + c3ScoreVal + '</td>' +
+        '</tr>' +
+        '</tfoot>' +
+        '</table>' +
+        '</div>' +
+        '</div>' +
+        '</div>' +
         '</div>';
     }
 
     // DETAILED PROGRESS BARS FOR CRITERIA
-    sectionHtml += 
+    sectionHtml +=
       '<div id="reportCsvcCriteriaBars" style="display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1.15rem;">' +
-        criteriaList.map((c, idx) => {
-          const tot = c.total || (c.n4 + c.n3 + c.n2 + c.n1) || 0;
-          if (tot === 0) {
-            return '<div style="background: white; border: 1px solid #E2E8F0; border-radius: 8px; padding: 0.85rem 1rem;">' +
-              '<div style="display: flex; justify-content: space-between; align-items: center;">' +
-                '<span style="font-size: 0.82rem; font-weight: 700; color: #64748B;">' + c.name + '</span>' +
-                '<span style="font-size: 0.78rem; font-weight: 600; color: #94A3B8; font-style: italic;"><i class="fa-solid fa-circle-info" style="margin-right: 0.3rem;"></i> Không khảo sát tiêu chí này</span>' +
-              '</div>' +
-            '</div>';
-          }
-          const r4 = ((c.n4 / tot) * 100).toFixed(1);
-          const r3 = ((c.n3 / tot) * 100).toFixed(1);
-          const r2 = ((c.n2 / tot) * 100).toFixed(1);
-          const r1 = ((c.n1 / tot) * 100).toFixed(1);
-
+      criteriaList.map((c, idx) => {
+        const tot = c.total || (c.n4 + c.n3 + c.n2 + c.n1) || 0;
+        if (tot === 0) {
           return '<div style="background: white; border: 1px solid #E2E8F0; border-radius: 8px; padding: 0.85rem 1rem;">' +
-            '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.45rem;">' +
-              '<span style="font-size: 0.82rem; font-weight: 700; color: #1E293B;">' + c.name + '</span>' +
-              '<span style="font-size: 0.82rem; font-weight: 700; color: #15803D;">Tích cực: ' + c.posRate.toFixed(1) + '% &nbsp;•&nbsp; <strong style="font-size: 0.95rem; color: var(--brand-primary);">' + c.score.toFixed(2) + '</strong>/4.0</span>' +
+            '<div style="display: flex; justify-content: space-between; align-items: center;">' +
+            '<span style="font-size: 0.82rem; font-weight: 700; color: #64748B;">' + c.name + '</span>' +
+            '<span style="font-size: 0.78rem; font-weight: 600; color: #94A3B8; font-style: italic;"><i class="fa-solid fa-circle-info" style="margin-right: 0.3rem;"></i> Không khảo sát tiêu chí này</span>' +
             '</div>' +
-            '<div style="display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: #E2E8F0; margin-bottom: 0.65rem;">' +
-              '<div style="width: ' + r4 + '%; background: #137333;" title="Tốt: ' + r4 + '%"></div>' +
-              '<div style="width: ' + r3 + '%; background: #34A853;" title="Khá: ' + r3 + '%"></div>' +
-              '<div style="width: ' + r2 + '%; background: #F59E0B;" title="Bình thường: ' + r2 + '%"></div>' +
-              '<div style="width: ' + r1 + '%; background: #EF4444;" title="Hạn chế: ' + r1 + '%"></div>' +
-            '</div>' +
-            '<div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; text-align: center; font-size: 0.75rem; background: #F8FAFC; padding: 0.5rem; border-radius: 6px;">' +
-              '<div><span style="color: #64748B;">Tốt (4):</span> <strong style="color: #137333;">' + r4 + '%</strong> (' + c.n4 + ')</div>' +
-              '<div><span style="color: #64748B;">Khá (3):</span> <strong style="color: #34A853;">' + r3 + '%</strong> (' + c.n3 + ')</div>' +
-              '<div><span style="color: #64748B;">Bình thường (2):</span> <strong style="color: #F59E0B;">' + r2 + '%</strong> (' + c.n2 + ')</div>' +
-              '<div><span style="color: #64748B;">Hạn chế (1):</span> <strong style="color: #EF4444;">' + r1 + '%</strong> (' + c.n1 + ')</div>' +
-            '</div>' +
+            '</div>';
+        }
+        const r4 = ((c.n4 / tot) * 100).toFixed(1);
+        const r3 = ((c.n3 / tot) * 100).toFixed(1);
+        const r2 = ((c.n2 / tot) * 100).toFixed(1);
+        const r1 = ((c.n1 / tot) * 100).toFixed(1);
+
+        return '<div style="background: white; border: 1px solid #E2E8F0; border-radius: 8px; padding: 0.85rem 1rem;">' +
+          '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.45rem;">' +
+          '<span style="font-size: 0.82rem; font-weight: 700; color: #1E293B;">' + c.name + '</span>' +
+          '<span style="font-size: 0.82rem; font-weight: 700; color: #15803D;">Tích cực: ' + c.posRate.toFixed(1) + '% &nbsp;•&nbsp; <strong style="font-size: 0.95rem; color: var(--brand-primary);">' + c.score.toFixed(2) + '</strong>/4.0</span>' +
+          '</div>' +
+          '<div style="display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: #E2E8F0; margin-bottom: 0.65rem;">' +
+          '<div style="width: ' + r4 + '%; background: #137333;" title="Tốt: ' + r4 + '%"></div>' +
+          '<div style="width: ' + r3 + '%; background: #34A853;" title="Khá: ' + r3 + '%"></div>' +
+          '<div style="width: ' + r2 + '%; background: #F59E0B;" title="Bình thường: ' + r2 + '%"></div>' +
+          '<div style="width: ' + r1 + '%; background: #EF4444;" title="Hạn chế: ' + r1 + '%"></div>' +
+          '</div>' +
+          '<div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; text-align: center; font-size: 0.75rem; background: #F8FAFC; padding: 0.5rem; border-radius: 6px;">' +
+          '<div><span style="color: #64748B;">Tốt (4):</span> <strong style="color: #137333;">' + r4 + '%</strong> (' + c.n4 + ')</div>' +
+          '<div><span style="color: #64748B;">Khá (3):</span> <strong style="color: #34A853;">' + r3 + '%</strong> (' + c.n3 + ')</div>' +
+          '<div><span style="color: #64748B;">Bình thường (2):</span> <strong style="color: #F59E0B;">' + r2 + '%</strong> (' + c.n2 + ')</div>' +
+          '<div><span style="color: #64748B;">Hạn chế (1):</span> <strong style="color: #EF4444;">' + r1 + '%</strong> (' + c.n1 + ')</div>' +
+          '</div>' +
           '</div>';
-        }).join('') +
+      }).join('') +
       '</div>';
 
     containerElem.innerHTML = sectionHtml;
@@ -11525,7 +11584,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (locCanvas && typeof Chart !== 'undefined') {
         if (reportCharts.csvcLocation) {
-          try { reportCharts.csvcLocation.destroy(); } catch (e) {}
+          try { reportCharts.csvcLocation.destroy(); } catch (e) { }
           reportCharts.csvcLocation = null;
         }
 
@@ -11648,14 +11707,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 },
                 ticks: {
                   stepSize: 0.2,
-                  callback: function(v) {
+                  callback: function (v) {
                     if (v > 4.0) return '';
                     return v.toFixed(1).replace('.', ',');
                   },
                   font: { family: 'Plus Jakarta Sans', weight: '600', size: 10.5 }
                 },
                 grid: {
-                  color: function(context) {
+                  color: function (context) {
                     if (context.tick && context.tick.value > 4.0) return 'transparent';
                     return '#E2E8F0';
                   }
@@ -11709,7 +11768,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 padding: 10,
                 cornerRadius: 6,
                 callbacks: {
-                  title: function(items) {
+                  title: function (items) {
                     if (!items || items.length === 0) return '';
                     const idx = items[0].dataIndex;
                     const it = itemList[idx];
@@ -11717,7 +11776,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const numCls = it.classes || it.classesCount || 1;
                     return 'Địa điểm: ' + (it.full_name || it.name) + ' (' + numCls + ' lớp - ' + it.votes + ' phiếu)';
                   },
-                  label: function(context) {
+                  label: function (context) {
                     const label = context.dataset.label || '';
                     const val = context.parsed.y;
                     if (context.dataset.yAxisID === 'yClasses') {
@@ -11747,12 +11806,12 @@ document.addEventListener('DOMContentLoaded', () => {
             startX = e.pageX - scrollOuter.offsetLeft;
             scrollLeft = scrollOuter.scrollLeft;
           });
-          scrollOuter.addEventListener('mouseleave', () => { 
-            isDown = false; 
+          scrollOuter.addEventListener('mouseleave', () => {
+            isDown = false;
             scrollOuter.style.cursor = 'grab';
           });
-          scrollOuter.addEventListener('mouseup', () => { 
-            isDown = false; 
+          scrollOuter.addEventListener('mouseup', () => {
+            isDown = false;
             scrollOuter.style.cursor = 'grab';
           });
           scrollOuter.addEventListener('mousemove', (e) => {
@@ -11801,8 +11860,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const hybridCohort = gvObj && gvObj.hybrid ? gvObj.hybrid : null;
     const overallCohort = gvObj && gvObj.overall ? gvObj.overall : null;
 
-    const overallLecturers = (overallCohort && overallCohort.lecturers) 
-      || (isProgram ? (gvData && gvData.lecturers) : (gvData && gvData.gvList)) 
+    const overallLecturers = (overallCohort && overallCohort.lecturers)
+      || (isProgram ? (gvData && gvData.lecturers) : (gvData && gvData.gvList))
       || [];
     const directLecturers = (directCohort && directCohort.lecturers) || [];
     const hybridLecturers = (hybridCohort && hybridCohort.lecturers) || [];
@@ -11810,15 +11869,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const hasData = Array.isArray(overallLecturers) && overallLecturers.length > 0;
 
     if (!hasData) {
-      containerElem.innerHTML = 
+      containerElem.innerHTML =
         '<div style="border-bottom: 1px solid #E2E8F0; padding-bottom: 0.65rem; margin-bottom: 0.85rem;">' +
-          '<h3 style="margin: 0; font-size: 1.05rem; font-weight: 800; color: var(--brand-primary); display: flex; align-items: center; gap: 0.5rem;">' +
-            '<i class="fa-solid fa-chalkboard-user"></i> ' + title +
-          '</h3>' +
+        '<h3 style="margin: 0; font-size: 1.05rem; font-weight: 800; color: var(--brand-primary); display: flex; align-items: center; gap: 0.5rem;">' +
+        '<i class="fa-solid fa-chalkboard-user"></i> ' + title +
+        '</h3>' +
         '</div>' +
         '<div style="padding: 1.5rem; background: #F8FAFC; border: 1px dashed #CBD5E1; border-radius: 8px; text-align: center; color: var(--text-muted); font-style: italic;">' +
-          '<i class="fa-solid fa-circle-exclamation" style="margin-right: 0.4rem; color: #94A3B8;"></i> ' +
-          'Chưa có dữ liệu đánh giá giảng viên' +
+        '<i class="fa-solid fa-circle-exclamation" style="margin-right: 0.4rem; color: #94A3B8;"></i> ' +
+        'Chưa có dữ liệu đánh giá giảng viên' +
         '</div>';
       return;
     }
@@ -11827,29 +11886,29 @@ document.addEventListener('DOMContentLoaded', () => {
     const hasHybrid = hybridLecturers.length > 0;
     const isMultiFormat = hasDirect && hasHybrid;
 
-    let sectionHtml = 
+    let sectionHtml =
       '<div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #E2E8F0; padding-bottom: 0.65rem; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">' +
-        '<div>' +
-          '<h3 style="margin: 0; font-size: 1.05rem; font-weight: 800; color: var(--brand-primary); display: flex; align-items: center; gap: 0.5rem;">' +
-            '<i class="fa-solid fa-chalkboard-user"></i> ' + title +
-          '</h3>' +
-          '<div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.15rem;">Đánh giá 3 tiêu chí: Chuyên môn, Sư phạm, Tác phong • Thang điểm chuẩn hóa 5.00</div>' +
-        '</div>';
+      '<div>' +
+      '<h3 style="margin: 0; font-size: 1.05rem; font-weight: 800; color: var(--brand-primary); display: flex; align-items: center; gap: 0.5rem;">' +
+      '<i class="fa-solid fa-chalkboard-user"></i> ' + title +
+      '</h3>' +
+      '<div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.15rem;">Đánh giá 3 tiêu chí: Chuyên môn, Sư phạm, Tác phong • Thang điểm chuẩn hóa 5.00</div>' +
+      '</div>';
 
     if (isMultiFormat) {
       sectionHtml +=
         '<div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">' +
-          '<span style="font-size: 0.78rem; font-weight: 700; color: #15803D; background: #DCFCE7; padding: 0.25rem 0.6rem; border-radius: 6px;">' +
-            '<i class="fa-solid fa-user-group"></i> Trực tiếp: ' + directCohort.totalVotes + ' phiếu • ' + directCohort.avgTb.toFixed(2) + '/5.0' +
-          '</span>' +
-          '<span style="font-size: 0.78rem; font-weight: 700; color: #7E22CE; background: #F3E8FF; padding: 0.25rem 0.6rem; border-radius: 6px;">' +
-            '<i class="fa-solid fa-shapes"></i> Trực tiếp kết hợp Trực tuyến: ' + hybridCohort.totalVotes + ' phiếu • ' + hybridCohort.avgTb.toFixed(2) + '/5.0' +
-          '</span>' +
-          '<span style="font-size: 0.82rem; font-weight: 800; color: #8C1D40; background: #FFE4E6; padding: 0.25rem 0.6rem; border-radius: 6px;">' +
-            '<i class="fa-solid fa-star"></i> Bình quân chung: ' + overallCohort.totalVotes + ' phiếu • ' + overallCohort.avgTb.toFixed(2) + '/5.0' +
-          '</span>' +
+        '<span style="font-size: 0.78rem; font-weight: 700; color: #15803D; background: #DCFCE7; padding: 0.25rem 0.6rem; border-radius: 6px;">' +
+        '<i class="fa-solid fa-user-group"></i> Trực tiếp: ' + directCohort.totalVotes + ' phiếu • ' + directCohort.avgTb.toFixed(2) + '/5.0' +
+        '</span>' +
+        '<span style="font-size: 0.78rem; font-weight: 700; color: #7E22CE; background: #F3E8FF; padding: 0.25rem 0.6rem; border-radius: 6px;">' +
+        '<i class="fa-solid fa-shapes"></i> Trực tiếp kết hợp Trực tuyến: ' + hybridCohort.totalVotes + ' phiếu • ' + hybridCohort.avgTb.toFixed(2) + '/5.0' +
+        '</span>' +
+        '<span style="font-size: 0.82rem; font-weight: 800; color: #8C1D40; background: #FFE4E6; padding: 0.25rem 0.6rem; border-radius: 6px;">' +
+        '<i class="fa-solid fa-star"></i> Bình quân chung: ' + overallCohort.totalVotes + ' phiếu • ' + overallCohort.avgTb.toFixed(2) + '/5.0' +
+        '</span>' +
         '</div>' +
-      '</div>';
+        '</div>';
     } else {
       const totVotes = overallCohort ? overallCohort.totalVotes : overallLecturers.reduce((acc, g) => acc + (g.totalVotes || 0), 0);
       const totHours = overallCohort ? overallCohort.totalHours : overallLecturers.reduce((acc, g) => acc + (g.totalHours || 0), 0);
@@ -11857,75 +11916,75 @@ document.addEventListener('DOMContentLoaded', () => {
 
       sectionHtml +=
         '<div style="display: flex; align-items: center; gap: 0.6rem;">' +
-          '<span style="font-size: 0.8rem; font-weight: 700; color: #64748B; background: #F1F5F9; padding: 0.25rem 0.65rem; border-radius: 6px;">' +
-            overallLecturers.length + ' Giảng viên &nbsp;•&nbsp; ' + totHours + ' Tiết' +
-          '</span>' +
-          '<span style="font-size: 0.95rem; font-weight: 800; color: #8C1D40;">' + avgScore + ' <span style="font-size: 0.75rem; color: #64748B;">/ 5.0</span></span>' +
+        '<span style="font-size: 0.8rem; font-weight: 700; color: #64748B; background: #F1F5F9; padding: 0.25rem 0.65rem; border-radius: 6px;">' +
+        overallLecturers.length + ' Giảng viên &nbsp;•&nbsp; ' + totHours + ' Tiết' +
+        '</span>' +
+        '<span style="font-size: 0.95rem; font-weight: 800; color: #8C1D40;">' + avgScore + ' <span style="font-size: 0.75rem; color: #64748B;">/ 5.0</span></span>' +
         '</div>' +
-      '</div>';
+        '</div>';
     }
 
     // MULTI-AXIS CHART FOR LECTURER RANKING & COMPARISON
-    sectionHtml += 
+    sectionHtml +=
       '<div style="background: white; border: 1px solid #E2E8F0; border-radius: 8px; padding: 1.15rem; margin-bottom: 1.15rem;">' +
-        '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.85rem; flex-wrap: wrap; gap: 0.5rem;">' +
-          '<div style="font-size: 0.88rem; font-weight: 800; color: #1E293B; display: flex; align-items: center; gap: 0.4rem;">' +
-            '<i class="fa-solid fa-chart-line" style="color: var(--brand-primary);"></i> SO SÁNH & XẾP HẠNG ĐÁNH GIÁ GIẢNG VIÊN' +
-          '</div>' +
-          '<div style="display: flex; gap: 0.85rem; align-items: center; font-size: 0.75rem; font-weight: 700;">' +
-            '<span style="display: inline-flex; align-items: center; gap: 0.3rem;"><span style="width: 10px; height: 10px; border-radius: 50%; background: #8C1D40;"></span> 1. Chuyên môn (KTCM)</span>' +
-            '<span style="display: inline-flex; align-items: center; gap: 0.3rem;"><span style="width: 10px; height: 10px; border-radius: 50%; background: #0284C7;"></span> 2. Sư phạm (KNSP)</span>' +
-            '<span style="display: inline-flex; align-items: center; gap: 0.3rem;"><span style="width: 10px; height: 10px; border-radius: 50%; background: #059669;"></span> 3. Tác phong (TDTP)</span>' +
-            '<span style="display: inline-flex; align-items: center; gap: 0.3rem;"><span style="width: 12px; height: 8px; background: rgba(148, 163, 184, 0.4); border-radius: 2px;"></span> Tổng số tiết</span>' +
-            (isProgram ? '<span style="display: inline-flex; align-items: center; gap: 0.3rem;"><span style="width: 12px; height: 8px; background: rgba(217, 119, 6, 0.35); border-radius: 2px;"></span> Tổng số lớp</span>' : '') +
-          '</div>' +
-        '</div>' +
-        '<div style="height: 340px; position: relative;">' +
-          '<canvas id="reportGvComparisonChart"></canvas>' +
-        '</div>' +
+      '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.85rem; flex-wrap: wrap; gap: 0.5rem;">' +
+      '<div style="font-size: 0.88rem; font-weight: 800; color: #1E293B; display: flex; align-items: center; gap: 0.4rem;">' +
+      '<i class="fa-solid fa-chart-line" style="color: var(--brand-primary);"></i> SO SÁNH & XẾP HẠNG ĐÁNH GIÁ GIẢNG VIÊN' +
+      '</div>' +
+      '<div style="display: flex; gap: 0.85rem; align-items: center; font-size: 0.75rem; font-weight: 700;">' +
+      '<span style="display: inline-flex; align-items: center; gap: 0.3rem;"><span style="width: 10px; height: 10px; border-radius: 50%; background: #8C1D40;"></span> 1. Chuyên môn (KTCM)</span>' +
+      '<span style="display: inline-flex; align-items: center; gap: 0.3rem;"><span style="width: 10px; height: 10px; border-radius: 50%; background: #0284C7;"></span> 2. Sư phạm (KNSP)</span>' +
+      '<span style="display: inline-flex; align-items: center; gap: 0.3rem;"><span style="width: 10px; height: 10px; border-radius: 50%; background: #059669;"></span> 3. Tác phong (TDTP)</span>' +
+      '<span style="display: inline-flex; align-items: center; gap: 0.3rem;"><span style="width: 12px; height: 8px; background: rgba(148, 163, 184, 0.4); border-radius: 2px;"></span> Tổng số tiết</span>' +
+      (isProgram ? '<span style="display: inline-flex; align-items: center; gap: 0.3rem;"><span style="width: 12px; height: 8px; background: rgba(217, 119, 6, 0.35); border-radius: 2px;"></span> Tổng số lớp</span>' : '') +
+      '</div>' +
+      '</div>' +
+      '<div style="height: 340px; position: relative;">' +
+      '<canvas id="reportGvComparisonChart"></canvas>' +
+      '</div>' +
       '</div>';
 
     // DETAILED LECTURER TABLE
-    sectionHtml += 
+    sectionHtml +=
       '<div style="background: white; border: 1px solid #E2E8F0; border-radius: 8px; overflow: hidden;">' +
-        '<div style="padding: 0.75rem 1rem; background: #F8FAFC; border-bottom: 1px solid #E2E8F0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">' +
-          '<div style="font-size: 0.85rem; font-weight: 800; color: #1E293B; display: flex; align-items: center; gap: 0.4rem;">' +
-            '<i class="fa-solid fa-list-check" style="color: var(--brand-primary);"></i> DANH SÁCH CHI TIẾT ĐÁNH GIÁ TỪNG GIẢNG VIÊN' +
-          '</div>' +
-          '<div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;">';
+      '<div style="padding: 0.75rem 1rem; background: #F8FAFC; border-bottom: 1px solid #E2E8F0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">' +
+      '<div style="font-size: 0.85rem; font-weight: 800; color: #1E293B; display: flex; align-items: center; gap: 0.4rem;">' +
+      '<i class="fa-solid fa-list-check" style="color: var(--brand-primary);"></i> DANH SÁCH CHI TIẾT ĐÁNH GIÁ TỪNG GIẢNG VIÊN' +
+      '</div>' +
+      '<div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;">';
 
     if (isMultiFormat) {
       sectionHtml +=
-            '<div style="display: inline-flex; gap: 0.25rem; background: #E2E8F0; padding: 2px; border-radius: 6px;">' +
-              '<button type="button" class="report-gv-tab-btn active" data-tab="all" onclick="switchReportGvTab(\'all\')" style="font-size: 0.72rem; font-weight: 700; padding: 0.25rem 0.55rem; border: none; border-radius: 4px; cursor: pointer; background: var(--brand-primary); color: #fff;">Tất cả</button>' +
-              '<button type="button" class="report-gv-tab-btn" data-tab="direct" onclick="switchReportGvTab(\'direct\')" style="font-size: 0.72rem; font-weight: 700; padding: 0.25rem 0.55rem; border: none; border-radius: 4px; cursor: pointer; background: transparent; color: #475569;">Trực tiếp</button>' +
-              '<button type="button" class="report-gv-tab-btn" data-tab="hybrid" onclick="switchReportGvTab(\'hybrid\')" style="font-size: 0.72rem; font-weight: 700; padding: 0.25rem 0.55rem; border: none; border-radius: 4px; cursor: pointer; background: transparent; color: #475569;">Trực tiếp kết hợp Trực tuyến</button>' +
-              '<button type="button" class="report-gv-tab-btn" data-tab="overall" onclick="switchReportGvTab(\'overall\')" style="font-size: 0.72rem; font-weight: 700; padding: 0.25rem 0.55rem; border: none; border-radius: 4px; cursor: pointer; background: transparent; color: #475569;">Bình quân chung</button>' +
-            '</div>';
+        '<div style="display: inline-flex; gap: 0.25rem; background: #E2E8F0; padding: 2px; border-radius: 6px;">' +
+        '<button type="button" class="report-gv-tab-btn active" data-tab="all" onclick="switchReportGvTab(\'all\')" style="font-size: 0.72rem; font-weight: 700; padding: 0.25rem 0.55rem; border: none; border-radius: 4px; cursor: pointer; background: var(--brand-primary); color: #fff;">Tất cả</button>' +
+        '<button type="button" class="report-gv-tab-btn" data-tab="direct" onclick="switchReportGvTab(\'direct\')" style="font-size: 0.72rem; font-weight: 700; padding: 0.25rem 0.55rem; border: none; border-radius: 4px; cursor: pointer; background: transparent; color: #475569;">Trực tiếp</button>' +
+        '<button type="button" class="report-gv-tab-btn" data-tab="hybrid" onclick="switchReportGvTab(\'hybrid\')" style="font-size: 0.72rem; font-weight: 700; padding: 0.25rem 0.55rem; border: none; border-radius: 4px; cursor: pointer; background: transparent; color: #475569;">Trực tiếp kết hợp Trực tuyến</button>' +
+        '<button type="button" class="report-gv-tab-btn" data-tab="overall" onclick="switchReportGvTab(\'overall\')" style="font-size: 0.72rem; font-weight: 700; padding: 0.25rem 0.55rem; border: none; border-radius: 4px; cursor: pointer; background: transparent; color: #475569;">Bình quân chung</button>' +
+        '</div>';
     }
 
     sectionHtml +=
-            '<input type="text" id="reportGvTableSearch" placeholder="Tìm theo tên giảng viên..." onkeyup="filterReportGvTable()" style="font-size: 0.78rem; padding: 0.3rem 0.65rem; border: 1px solid #CBD5E1; border-radius: 4px; width: 200px;">' +
-          '</div>' +
-        '</div>' +
-        '<div class="table-container" style="max-height: 500px; overflow-y: auto; margin: 0; padding: 0;">' +
-          '<table class="data-table" id="reportGvDataTable" style="margin: 0; font-size: 0.82rem;">' +
-            '<thead>' +
-              '<tr>' +
-                '<th style="width: 4%; text-align: center;">STT</th>' +
-                '<th style="width: 20%;">HỌ VÀ TÊN GIẢNG VIÊN</th>' +
-                '<th style="width: 18%;">ĐƠN VỊ CÔNG TÁC</th>' +
-                (isProgram ? '<th style="width: 8%; text-align: center;">SỐ LỚP DẠY</th>' : '<th style="width: 14%;">NỘI DUNG GIẢNG</th>') +
-                '<th style="width: 8%; text-align: center;">SỐ TIẾT</th>' +
-                '<th style="width: 8%; text-align: center;">SỐ PHIẾU</th>' +
-                '<th style="width: 9%; text-align: center;">KTCM (5.0)</th>' +
-                '<th style="width: 9%; text-align: center;">KNSP (5.0)</th>' +
-                '<th style="width: 9%; text-align: center;">TDTP (5.0)</th>' +
-                '<th style="width: 10%; text-align: center;">ĐIỂM TB (5.0)</th>' +
-                '<th style="width: 9%; text-align: center;">XẾP LOẠI</th>' +
-              '</tr>' +
-            '</thead>' +
-            '<tbody id="reportGvDataTableBody">';
+      '<input type="text" id="reportGvTableSearch" placeholder="Tìm theo tên giảng viên..." onkeyup="filterReportGvTable()" style="font-size: 0.78rem; padding: 0.3rem 0.65rem; border: 1px solid #CBD5E1; border-radius: 4px; width: 200px;">' +
+      '</div>' +
+      '</div>' +
+      '<div class="table-container" style="max-height: 500px; overflow-y: auto; margin: 0; padding: 0;">' +
+      '<table class="data-table" id="reportGvDataTable" style="margin: 0; font-size: 0.82rem;">' +
+      '<thead>' +
+      '<tr>' +
+      '<th style="width: 4%; text-align: center;">STT</th>' +
+      '<th style="width: 20%;">HỌ VÀ TÊN GIẢNG VIÊN</th>' +
+      '<th style="width: 18%;">ĐƠN VỊ CÔNG TÁC</th>' +
+      (isProgram ? '<th style="width: 8%; text-align: center;">SỐ LỚP DẠY</th>' : '<th style="width: 14%;">NỘI DUNG GIẢNG</th>') +
+      '<th style="width: 8%; text-align: center;">SỐ TIẾT</th>' +
+      '<th style="width: 8%; text-align: center;">SỐ PHIẾU</th>' +
+      '<th style="width: 9%; text-align: center;">KTCM (5.0)</th>' +
+      '<th style="width: 9%; text-align: center;">KNSP (5.0)</th>' +
+      '<th style="width: 9%; text-align: center;">TDTP (5.0)</th>' +
+      '<th style="width: 10%; text-align: center;">ĐIỂM TB (5.0)</th>' +
+      '<th style="width: 9%; text-align: center;">XẾP LOẠI</th>' +
+      '</tr>' +
+      '</thead>' +
+      '<tbody id="reportGvDataTableBody">';
 
     function buildGvRowHtml(g, idx, rowClass, isProg) {
       const gvName = g.name || g.ten_gv || 'Giảng viên';
@@ -11954,7 +12013,7 @@ document.addEventListener('DOMContentLoaded', () => {
         '<td style="text-align: center; font-weight: 700; color: #059669;">' + tdtp + '</td>' +
         '<td style="text-align: center; font-weight: 800; color: var(--brand-primary); font-size: 0.95rem;">' + diemTb + '</td>' +
         '<td style="text-align: center;">' + xepLoai + '</td>' +
-      '</tr>';
+        '</tr>';
     }
 
     function buildGvSubtotalHtml(label, color, cohort, isFinal, isProg) {
@@ -11979,14 +12038,14 @@ document.addEventListener('DOMContentLoaded', () => {
         '<td style="text-align: center; color: #059669;">' + cohort.avgTdtp.toFixed(2) + '</td>' +
         '<td style="text-align: center; color: var(--brand-primary); ' + fontSize + '">' + cohort.avgTb.toFixed(2) + '</td>' +
         '<td style="text-align: center;">' + xepLoai + '</td>' +
-      '</tr>';
+        '</tr>';
     }
 
     if (isMultiFormat) {
       // 1. SECTION A: DIRECT
       sectionHtml +=
         '<tr class="gv-section-row gv-sec-direct" style="background: #F0FDF4; font-weight: 800; color: #15803D; border-top: 1px solid #BBF7D0;">' +
-          '<td colspan="11" style="padding: 0.6rem 0.85rem; font-size: 0.85rem;"><i class="fa-solid fa-user-group" style="margin-right: 0.4rem;"></i> A. HÌNH THỨC TRỰC TIẾP (' + directCohort.lecturers.length + ' Giảng viên)</td>' +
+        '<td colspan="11" style="padding: 0.6rem 0.85rem; font-size: 0.85rem;"><i class="fa-solid fa-user-group" style="margin-right: 0.4rem;"></i> A. HÌNH THỨC TRỰC TIẾP (' + directCohort.lecturers.length + ' Giảng viên)</td>' +
         '</tr>';
       directCohort.lecturers.forEach((g, idx) => {
         sectionHtml += buildGvRowHtml(g, idx, 'gv-row-direct', isProgram);
@@ -11996,7 +12055,7 @@ document.addEventListener('DOMContentLoaded', () => {
       // 2. SECTION B: HYBRID / ONLINE
       sectionHtml +=
         '<tr class="gv-section-row gv-sec-hybrid" style="background: #FAF5FF; font-weight: 800; color: #7E22CE; border-top: 2px solid #E9D5FF;">' +
-          '<td colspan="11" style="padding: 0.6rem 0.85rem; font-size: 0.85rem;"><i class="fa-solid fa-shapes" style="margin-right: 0.4rem;"></i> B. HÌNH THỨC TRỰC TIẾP KẾT HỢP TRỰC TUYẾN (' + hybridCohort.lecturers.length + ' Giảng viên)</td>' +
+        '<td colspan="11" style="padding: 0.6rem 0.85rem; font-size: 0.85rem;"><i class="fa-solid fa-shapes" style="margin-right: 0.4rem;"></i> B. HÌNH THỨC TRỰC TIẾP KẾT HỢP TRỰC TUYẾN (' + hybridCohort.lecturers.length + ' Giảng viên)</td>' +
         '</tr>';
       hybridCohort.lecturers.forEach((g, idx) => {
         sectionHtml += buildGvRowHtml(g, idx, 'gv-row-hybrid', isProgram);
@@ -12006,7 +12065,7 @@ document.addEventListener('DOMContentLoaded', () => {
       // 3. SECTION C: OVERALL
       sectionHtml +=
         '<tr class="gv-section-row gv-sec-overall" style="background: #FFF1F2; font-weight: 800; color: #8C1D40; border-top: 2px solid #FECDD3;">' +
-          '<td colspan="11" style="padding: 0.6rem 0.85rem; font-size: 0.85rem;"><i class="fa-solid fa-star" style="margin-right: 0.4rem;"></i> C. TỔNG HỢP BÌNH QUÂN ĐÁNH GIÁ CHUNG GIẢNG VIÊN (' + overallCohort.lecturers.length + ' Giảng viên)</td>' +
+        '<td colspan="11" style="padding: 0.6rem 0.85rem; font-size: 0.85rem;"><i class="fa-solid fa-star" style="margin-right: 0.4rem;"></i> C. TỔNG HỢP BÌNH QUÂN ĐÁNH GIÁ CHUNG GIẢNG VIÊN (' + overallCohort.lecturers.length + ' Giảng viên)</td>' +
         '</tr>';
       overallCohort.lecturers.forEach((g, idx) => {
         sectionHtml += buildGvRowHtml(g, idx, 'gv-row-overall', isProgram);
@@ -12035,7 +12094,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const ctx = document.getElementById('reportGvComparisonChart');
     if (ctx && typeof Chart !== 'undefined') {
       if (reportCharts.gvComparison) {
-        try { reportCharts.gvComparison.destroy(); } catch (e) {}
+        try { reportCharts.gvComparison.destroy(); } catch (e) { }
       }
 
       const displayList = overallLecturers.slice(0, 15);
@@ -12157,12 +12216,12 @@ document.addEventListener('DOMContentLoaded', () => {
               mode: 'index',
               intersect: false,
               callbacks: {
-                title: function(items) {
+                title: function (items) {
                   const idx = items[0].dataIndex;
                   const g = displayList[idx];
                   return g.name || g.ten_gv;
                 },
-                beforeBody: function(items) {
+                beforeBody: function (items) {
                   const idx = items[0].dataIndex;
                   const g = displayList[idx];
                   return [
@@ -12173,7 +12232,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     '--------------------------------'
                   ].filter(Boolean);
                 },
-                label: function(context) {
+                label: function (context) {
                   const ds = context.dataset;
                   const val = context.parsed.y;
                   if (ds.yAxisID === 'yVolume') {
@@ -12290,15 +12349,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const hasData = dgcData && ((isProgram && (dgcData.votes || 0) > 0) || (!isProgram && ((dgcData.votes || dgcData.tong_phieu || 0) > 0)));
 
     if (!hasData) {
-      containerElem.innerHTML = 
+      containerElem.innerHTML =
         '<div style="border-bottom: 1px solid #E2E8F0; padding-bottom: 0.65rem; margin-bottom: 0.85rem;">' +
-          '<h3 style="margin: 0; font-size: 1.05rem; font-weight: 800; color: var(--brand-primary); display: flex; align-items: center; gap: 0.5rem;">' +
-            '<i class="fa-solid fa-comments"></i> ' + title +
-          '</h3>' +
+        '<h3 style="margin: 0; font-size: 1.05rem; font-weight: 800; color: var(--brand-primary); display: flex; align-items: center; gap: 0.5rem;">' +
+        '<i class="fa-solid fa-comments"></i> ' + title +
+        '</h3>' +
         '</div>' +
         '<div style="padding: 1.5rem; background: #F8FAFC; border: 1px dashed #CBD5E1; border-radius: 8px; text-align: center; color: var(--text-muted); font-style: italic;">' +
-          '<i class="fa-solid fa-circle-exclamation" style="margin-right: 0.4rem; color: #94A3B8;"></i> ' +
-          'Chưa có dữ liệu đánh giá chung' +
+        '<i class="fa-solid fa-circle-exclamation" style="margin-right: 0.4rem; color: #94A3B8;"></i> ' +
+        'Chưa có dữ liệu đánh giá chung' +
         '</div>';
       return;
     }
@@ -12334,73 +12393,73 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const commentsList = (dgcData.comments && Array.isArray(dgcData.comments)) ? dgcData.comments : [];
 
-    let sectionHtml = 
+    let sectionHtml =
       '<div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #E2E8F0; padding-bottom: 0.65rem; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">' +
-        '<div>' +
-          '<h3 style="margin: 0; font-size: 1.05rem; font-weight: 800; color: var(--brand-primary); display: flex; align-items: center; gap: 0.5rem;">' +
-            '<i class="fa-solid fa-comments"></i> ' + title +
-          '</h3>' +
-          '<div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.15rem;">Đánh giá mức độ tiếp thu và khả năng ứng dụng thực tế • Thang điểm chuẩn hóa 5.00</div>' +
-        '</div>' +
-        '<div style="display: flex; align-items: center; gap: 0.6rem;">' +
-          '<span style="font-size: 0.82rem; font-weight: 700; color: #1E293B;">' + totalVotes + ' phiếu</span>' +
-          '<span style="font-size: 0.95rem; font-weight: 800; color: #059669;">' + overallScore.toFixed(2) + ' <span style="font-size: 0.75rem; color: #64748B;">/ 5.0</span></span>' +
-        '</div>' +
+      '<div>' +
+      '<h3 style="margin: 0; font-size: 1.05rem; font-weight: 800; color: var(--brand-primary); display: flex; align-items: center; gap: 0.5rem;">' +
+      '<i class="fa-solid fa-comments"></i> ' + title +
+      '</h3>' +
+      '<div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.15rem;">Đánh giá mức độ tiếp thu và khả năng ứng dụng thực tế • Thang điểm chuẩn hóa 5.00</div>' +
+      '</div>' +
+      '<div style="display: flex; align-items: center; gap: 0.6rem;">' +
+      '<span style="font-size: 0.82rem; font-weight: 700; color: #1E293B;">' + totalVotes + ' phiếu</span>' +
+      '<span style="font-size: 0.95rem; font-weight: 800; color: #059669;">' + overallScore.toFixed(2) + ' <span style="font-size: 0.75rem; color: #64748B;">/ 5.0</span></span>' +
+      '</div>' +
       '</div>' +
 
       // 2 DISTRIBUTION CARDS (KIẾN THỨC & KỸ NĂNG)
       '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1rem; margin-bottom: 1.15rem;">' +
-        [kt, kn].map((item, idx) => {
-          const tot = item.total || (item.n5 + item.n4 + item.n3 + item.n2 + item.n1) || 1;
-          const r5 = ((item.n5 / tot) * 100).toFixed(1);
-          const r4 = ((item.n4 / tot) * 100).toFixed(1);
-          const r3 = ((item.n3 / tot) * 100).toFixed(1);
-          const r2 = ((item.n2 / tot) * 100).toFixed(1);
-          const r1 = ((item.n1 / tot) * 100).toFixed(1);
+      [kt, kn].map((item, idx) => {
+        const tot = item.total || (item.n5 + item.n4 + item.n3 + item.n2 + item.n1) || 1;
+        const r5 = ((item.n5 / tot) * 100).toFixed(1);
+        const r4 = ((item.n4 / tot) * 100).toFixed(1);
+        const r3 = ((item.n3 / tot) * 100).toFixed(1);
+        const r2 = ((item.n2 / tot) * 100).toFixed(1);
+        const r1 = ((item.n1 / tot) * 100).toFixed(1);
 
-          return '<div style="background: white; border: 1px solid #E2E8F0; border-radius: 8px; padding: 1rem;">' +
-            '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.6rem;">' +
-              '<span style="font-size: 0.85rem; font-weight: 700; color: #1E293B;">' + item.name + '</span>' +
-              '<strong style="font-size: 1.05rem; color: #059669;">' + item.score.toFixed(2) + ' <span style="font-size: 0.75rem; color: #64748B;">/ 5.0</span></strong>' +
-            '</div>' +
-            '<div style="display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: #E2E8F0; margin-bottom: 0.75rem;">' +
-              '<div style="width: ' + r5 + '%; background: #059669;" title="Rất rõ rệt (5): ' + r5 + '%"></div>' +
-              '<div style="width: ' + r4 + '%; background: #10B981;" title="Rõ rệt (4): ' + r4 + '%"></div>' +
-              '<div style="width: ' + r3 + '%; background: #F59E0B;" title="Khá (3): ' + r3 + '%"></div>' +
-              '<div style="width: ' + r2 + '%; background: #F97316;" title="Ít (2): ' + r2 + '%"></div>' +
-              '<div style="width: ' + r1 + '%; background: #EF4444;" title="Rất ít (1): ' + r1 + '%"></div>' +
-            '</div>' +
-            '<div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.35rem; text-align: center; font-size: 0.72rem; background: #F8FAFC; padding: 0.5rem; border-radius: 6px;">' +
-              '<div><span style="color: #64748B;">Rất rõ (5):</span> <strong style="color: #059669;">' + r5 + '%</strong> (' + item.n5 + ')</div>' +
-              '<div><span style="color: #64748B;">Rõ (4):</span> <strong style="color: #10B981;">' + r4 + '%</strong> (' + item.n4 + ')</div>' +
-              '<div><span style="color: #64748B;">Khá (3):</span> <strong style="color: #F59E0B;">' + r3 + '%</strong> (' + item.n3 + ')</div>' +
-              '<div><span style="color: #64748B;">Ít (2):</span> <strong style="color: #F97316;">' + r2 + '%</strong> (' + item.n2 + ')</div>' +
-              '<div><span style="color: #64748B;">Rất ít (1):</span> <strong style="color: #EF4444;">' + r1 + '%</strong> (' + item.n1 + ')</div>' +
-            '</div>' +
+        return '<div style="background: white; border: 1px solid #E2E8F0; border-radius: 8px; padding: 1rem;">' +
+          '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.6rem;">' +
+          '<span style="font-size: 0.85rem; font-weight: 700; color: #1E293B;">' + item.name + '</span>' +
+          '<strong style="font-size: 1.05rem; color: #059669;">' + item.score.toFixed(2) + ' <span style="font-size: 0.75rem; color: #64748B;">/ 5.0</span></strong>' +
+          '</div>' +
+          '<div style="display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: #E2E8F0; margin-bottom: 0.75rem;">' +
+          '<div style="width: ' + r5 + '%; background: #059669;" title="Rất rõ rệt (5): ' + r5 + '%"></div>' +
+          '<div style="width: ' + r4 + '%; background: #10B981;" title="Rõ rệt (4): ' + r4 + '%"></div>' +
+          '<div style="width: ' + r3 + '%; background: #F59E0B;" title="Khá (3): ' + r3 + '%"></div>' +
+          '<div style="width: ' + r2 + '%; background: #F97316;" title="Ít (2): ' + r2 + '%"></div>' +
+          '<div style="width: ' + r1 + '%; background: #EF4444;" title="Rất ít (1): ' + r1 + '%"></div>' +
+          '</div>' +
+          '<div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.35rem; text-align: center; font-size: 0.72rem; background: #F8FAFC; padding: 0.5rem; border-radius: 6px;">' +
+          '<div><span style="color: #64748B;">Rất rõ (5):</span> <strong style="color: #059669;">' + r5 + '%</strong> (' + item.n5 + ')</div>' +
+          '<div><span style="color: #64748B;">Rõ (4):</span> <strong style="color: #10B981;">' + r4 + '%</strong> (' + item.n4 + ')</div>' +
+          '<div><span style="color: #64748B;">Khá (3):</span> <strong style="color: #F59E0B;">' + r3 + '%</strong> (' + item.n3 + ')</div>' +
+          '<div><span style="color: #64748B;">Ít (2):</span> <strong style="color: #F97316;">' + r2 + '%</strong> (' + item.n2 + ')</div>' +
+          '<div><span style="color: #64748B;">Rất ít (1):</span> <strong style="color: #EF4444;">' + r1 + '%</strong> (' + item.n1 + ')</div>' +
+          '</div>' +
           '</div>';
-        }).join('') +
+      }).join('') +
       '</div>';
 
     // STUDENT COMMENTS SECTION
     if (commentsList.length > 0) {
-      sectionHtml += 
+      sectionHtml +=
         '<div style="background: white; border: 1px solid #E2E8F0; border-radius: 8px; overflow: hidden;">' +
-          '<div style="padding: 0.75rem 1rem; background: #F8FAFC; border-bottom: 1px solid #E2E8F0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">' +
-            '<div style="font-size: 0.85rem; font-weight: 800; color: #1E293B; display: flex; align-items: center; gap: 0.4rem;">' +
-              '<i class="fa-regular fa-comment-dots" style="color: var(--brand-primary);"></i> TỔNG HỢP Ý KIẾN ĐÓNG GÓP CỦA HỌC VIÊN (' + commentsList.length + ' ý kiến)' +
-            '</div>' +
-            '<div>' +
-              '<input type="text" id="reportDgcCommentSearch" placeholder="Tìm kiếm ý kiến..." onkeyup="filterReportDgcComments()" style="font-size: 0.78rem; padding: 0.3rem 0.65rem; border: 1px solid #CBD5E1; border-radius: 4px; width: 220px;">' +
-            '</div>' +
-          '</div>' +
-          '<div style="max-height: 280px; overflow-y: auto; padding: 0.85rem;" id="reportDgcCommentsContainer">';
+        '<div style="padding: 0.75rem 1rem; background: #F8FAFC; border-bottom: 1px solid #E2E8F0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">' +
+        '<div style="font-size: 0.85rem; font-weight: 800; color: #1E293B; display: flex; align-items: center; gap: 0.4rem;">' +
+        '<i class="fa-regular fa-comment-dots" style="color: var(--brand-primary);"></i> TỔNG HỢP Ý KIẾN ĐÓNG GÓP CỦA HỌC VIÊN (' + commentsList.length + ' ý kiến)' +
+        '</div>' +
+        '<div>' +
+        '<input type="text" id="reportDgcCommentSearch" placeholder="Tìm kiếm ý kiến..." onkeyup="filterReportDgcComments()" style="font-size: 0.78rem; padding: 0.3rem 0.65rem; border: 1px solid #CBD5E1; border-radius: 4px; width: 220px;">' +
+        '</div>' +
+        '</div>' +
+        '<div style="max-height: 280px; overflow-y: auto; padding: 0.85rem;" id="reportDgcCommentsContainer">';
 
       commentsList.forEach((cmt, idx) => {
         const text = typeof cmt === 'string' ? cmt : (cmt.noi_dung || cmt.content || JSON.stringify(cmt));
-        sectionHtml += 
+        sectionHtml +=
           '<div class="report-comment-item" style="padding: 0.65rem 0.85rem; background: #F8FAFC; border-left: 3px solid var(--brand-primary); border-radius: 4px; margin-bottom: 0.5rem; font-size: 0.82rem; color: #334155; line-height: 1.5;">' +
-            '<div style="font-weight: 700; color: var(--brand-primary); font-size: 0.75rem; margin-bottom: 0.2rem;">Ý kiến #' + (idx + 1) + '</div>' +
-            text +
+          '<div style="font-weight: 700; color: var(--brand-primary); font-size: 0.75rem; margin-bottom: 0.2rem;">Ý kiến #' + (idx + 1) + '</div>' +
+          text +
           '</div>';
       });
 
@@ -12461,7 +12520,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Class Format Filter
     if (classFmtSelect) {
-      classFmtSelect.innerHTML = 
+      classFmtSelect.innerHTML =
         '<option value="">Tất cả hình thức</option>' +
         '<option value="Trực tiếp">Trực tiếp</option>' +
         '<option value="Trực tiếp kết hợp Trực tuyến">Trực tiếp kết hợp Trực tuyến</option>' +
@@ -12481,7 +12540,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Program Format Filter
     if (progFmtSelect) {
-      progFmtSelect.innerHTML = 
+      progFmtSelect.innerHTML =
         '<option value="">Tất cả hình thức</option>' +
         '<option value="Trực tiếp">Trực tiếp</option>' +
         '<option value="Trực tiếp kết hợp Trực tuyến">Trực tiếp kết hợp Trực tuyến</option>' +
@@ -12893,4 +12952,3 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 
-  
