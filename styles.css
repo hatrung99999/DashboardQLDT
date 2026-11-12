@@ -349,6 +349,62 @@ body {
   flex-wrap: wrap;
 }
 
+.slicer-time-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.85rem;
+  flex-wrap: wrap;
+  padding-bottom: 0.2rem;
+}
+
+.date-range-inputs.screen-date-range {
+  gap: 0.45rem;
+}
+
+.date-range-inputs.screen-date-range .input-group {
+  padding: 0.32rem 0.6rem;
+  background: #F8FAFC;
+  border-radius: 6px;
+}
+
+.date-range-inputs.screen-date-range .input-group label {
+  font-size: 0.72rem;
+}
+
+.date-range-inputs.screen-date-range .input-group input[type="date"] {
+  font-size: 0.82rem;
+}
+
+.btn-apply-date {
+  padding: 0.4rem 0.8rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.btn-clear-date {
+  display: none;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.38rem 0.65rem;
+  font-size: 0.76rem;
+  font-weight: 700;
+  border-radius: 6px;
+  background: #FFF1F2;
+  color: var(--brand-primary);
+  border: 1px solid #FECDD3;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: var(--transition);
+}
+
+.btn-clear-date:hover {
+  background: #FFE4E6;
+  border-color: #FDA4AF;
+}
+
 .input-group {
   display: flex;
   align-items: center;
@@ -1302,10 +1358,11 @@ tbody tr:hover {
     font-size: 0.8rem;
   }
 
-  #btnApplyCustomDate {
-    flex: 1 1 100%;
+  #btnApplyCustomDate,
+  .btn-apply-date {
+    flex: 1 1 auto;
     justify-content: center;
-    padding: 0.5rem;
+    padding: 0.45rem 0.75rem;
   }
 
   /* Mobile Filter Toggle */
@@ -2377,7 +2434,8 @@ tbody tr:hover {
 }
 
 .preset-btn,
-.gv-preset-btn {
+.gv-preset-btn,
+.dgc-preset-btn {
   background: var(--bg-input);
   border: 1px solid var(--border-color);
   color: var(--text-secondary);
@@ -2392,14 +2450,16 @@ tbody tr:hover {
 }
 
 .preset-btn:hover,
-.gv-preset-btn:hover {
+.gv-preset-btn:hover,
+.dgc-preset-btn:hover {
   border-color: var(--brand-primary);
   color: var(--brand-primary);
   background: #FFF1F2;
 }
 
 .preset-btn.active,
-.gv-preset-btn.active {
+.gv-preset-btn.active,
+.dgc-preset-btn.active {
   background: var(--brand-primary);
   color: #FFFFFF;
   border-color: var(--brand-primary);
@@ -2441,7 +2501,8 @@ tbody tr:hover {
 }
 
 .selector-item select,
-.selector-item input[type="text"] {
+.selector-item input[type="text"],
+.selector-item input[type="date"] {
   background: #FFFFFF;
   border: 1px solid var(--border-color);
   color: var(--text-primary);
@@ -2456,9 +2517,39 @@ tbody tr:hover {
 }
 
 .selector-item select:focus,
-.selector-item input[type="text"]:focus {
+.selector-item input[type="text"]:focus,
+.selector-item input[type="date"]:focus {
   border-color: var(--brand-primary);
   box-shadow: 0 0 0 2px rgba(140, 29, 64, 0.12);
+}
+
+.time-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: #FFFFFF;
+  border: 1px solid #F59E0B;
+  color: #92400E;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.time-filter-chip button {
+  background: transparent;
+  border: none;
+  color: #B45309;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  font-size: 0.8rem;
+  display: inline-flex;
+  align-items: center;
+}
+
+.time-filter-chip button:hover {
+  color: var(--brand-primary);
 }
 
 .selector-item.actions-cell {
@@ -2587,8 +2678,21 @@ tbody tr:hover {
   border-radius: var(--radius-sm);
 }
 
+.time-charts-grid-row.time-charts-grid-asymmetric {
+  display: grid;
+  grid-template-columns: minmax(340px, 4fr) minmax(520px, 8fr);
+  gap: 1.25rem;
+  align-items: stretch;
+}
+
+@media (max-width: 1100px) {
+  .time-charts-grid-row.time-charts-grid-asymmetric {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ===================================================
-   PRINT STYLES FOR BÁO CÁO CHUNG (GENERAL REPORT)
+   PRINT STYLES FOR BÁO CÁO CHUNG (100% DASHBOARD FIDELITY ON A4)
    =================================================== */
 @media screen {
   .print-only {
@@ -2599,16 +2703,24 @@ tbody tr:hover {
 @media print {
   @page {
     size: A4 portrait;
-    margin: 12mm 15mm 12mm 15mm;
+    margin: 2cm 2cm 2cm 2.5cm;
   }
 
-  body {
-    background: #FFFFFF !important;
-    color: #000000 !important;
-    font-size: 10pt !important;
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+  * {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
+  }
+
+  html,
+  body {
+    background: #FFFFFF !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+  }
+
+  #screenGeneralReport.active {
+    zoom: 0.54;
   }
 
   .app-header,
@@ -2617,6 +2729,7 @@ tbody tr:hover {
   .report-control-bar,
   .filter-panel,
   .no-print,
+  .print-only,
   #toastContainer,
   .modal-overlay {
     display: none !important;
@@ -2631,52 +2744,199 @@ tbody tr:hover {
     display: block !important;
     padding: 0 !important;
     margin: 0 !important;
+    width: 100% !important;
   }
 
-  .print-only {
+  .dashboard-container {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
     display: block !important;
   }
 
-  .card, .chart-card {
+  .report-sections-stack,
+  #reportCsvcCriteriaBars {
+    display: block !important;
+  }
+
+  #reportCsvcCriteriaBars > div {
+    margin-bottom: 0.75rem !important;
+  }
+
+  /* Lock Desktop Multi-Column Grids Identical to Dashboard */
+  .modal-grid,
+  #reportMetadataGrid,
+  #reportTimeMetadataGrid {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 0.75rem 1.25rem !important;
+  }
+
+  .report-kpi-grid {
+    display: grid !important;
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+    gap: 0.75rem !important;
+  }
+
+  .report-kpi-grid-6 {
+    display: grid !important;
+    grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+    gap: 0.65rem !important;
+  }
+
+  .report-kpi-grid-3 {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 0.75rem !important;
+  }
+
+  .report-csvc-location-grid {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1.05fr) !important;
+    gap: 0.9rem !important;
+    align-items: start !important;
+  }
+
+  .time-charts-grid-row {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 1rem !important;
+  }
+
+  .time-charts-grid-row.time-charts-grid-asymmetric {
+    grid-template-columns: minmax(0, 4fr) minmax(0, 8fr) !important;
+  }
+
+  .card,
+  .chart-card {
     box-shadow: none !important;
-    border: 1px solid #D1D5DB !important;
+    margin-bottom: 0.85rem !important;
+  }
+
+  /* Expand All Scrollable Tables & Comment Lists Fully */
+  #screenGeneralReport .table-container,
+  #screenGeneralReport #reportNddtTableContainer,
+  #screenGeneralReport #reportDgcCommentsContainer,
+  #screenGeneralReport .time-programs-table-wrapper {
+    max-height: none !important;
+    height: auto !important;
+    overflow: visible !important;
+    display: block !important;
+  }
+
+  #screenGeneralReport .data-table {
+    width: 100% !important;
+  }
+
+  #screenGeneralReport .data-table th,
+  #screenGeneralReport .data-table td {
+    padding: 0.38rem 0.4rem !important;
+  }
+
+  #screenGeneralReport .data-table th {
+    white-space: normal !important;
+    line-height: 1.25 !important;
+  }
+
+  #reportProgramComparisonTable th,
+  #reportProgramComparisonTable td,
+  #reportProgramClassesTable th,
+  #reportProgramClassesTable td {
+    min-width: 0 !important;
+  }
+
+  #screenGeneralReport .data-table .badge-format-hybrid,
+  #screenGeneralReport .data-table .badge-format-direct,
+  #screenGeneralReport .data-table .badge-format-online {
+    white-space: normal !important;
+    display: inline-block !important;
+    text-align: center !important;
+    line-height: 1.2 !important;
+  }
+
+  #reportCsvcLocationTable th,
+  #reportCsvcLocationTable td {
+    white-space: normal !important;
+    padding: 0.35rem 0.3rem !important;
+    font-size: 0.72rem !important;
+  }
+
+  #reportTimeProgramsTable {
+    min-width: 0 !important;
+    width: 100% !important;
+    table-layout: fixed !important;
+  }
+
+  #screenGeneralReport .data-table thead {
+    display: table-header-group !important;
+  }
+
+  #screenGeneralReport .data-table th,
+  #screenGeneralReport .data-table tfoot {
+    position: static !important;
+    box-shadow: none !important;
+  }
+
+  #screenGeneralReport .data-table tr {
     break-inside: avoid !important;
     page-break-inside: avoid !important;
-    margin-bottom: 10pt !important;
-    padding: 10pt !important;
-    background: #FFFFFF !important;
   }
 
-  .data-table {
+  /* Smart Pagination: Flow Large Cards, Keep Visual Units Intact */
+  #screenGeneralReport .report-flow-section {
+    break-inside: auto !important;
+    page-break-inside: auto !important;
+  }
+
+  #reportOverviewCard,
+  #screenGeneralReport .report-print-visual,
+  #screenGeneralReport .kpi-card,
+  #screenGeneralReport .chart-card,
+  #screenGeneralReport .time-charts-grid-row,
+  #screenGeneralReport .report-comment-item {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  #screenGeneralReport .report-print-heading,
+  #screenGeneralReport h2,
+  #screenGeneralReport h3 {
+    break-after: avoid !important;
+    page-break-after: avoid !important;
+  }
+
+  /* Prevent Canvas Clipping & Fit Multi-Location / Wide Charts */
+  #screenGeneralReport #reportCsvcScrollOuter,
+  #screenGeneralReport .chart-scroll-outer {
+    overflow: visible !important;
     width: 100% !important;
-    border-collapse: collapse !important;
   }
 
-  .data-table th,
-  .data-table td {
-    padding: 4pt 6pt !important;
-    font-size: 8.5pt !important;
-    border: 1px solid #CBD5E1 !important;
-    color: #000000 !important;
+  #screenGeneralReport #reportCsvcScrollInner,
+  #screenGeneralReport .chart-scroll-inner {
+    width: 100% !important;
   }
 
-  .data-table th {
-    background: #F1F5F9 !important;
-    font-weight: 700 !important;
+  #screenGeneralReport canvas {
+    max-width: 100% !important;
   }
 
-  .kpi-card-light {
-    border: 1px solid #E2E8F0 !important;
-    box-shadow: none !important;
-    background: #FFFFFF !important;
+  #screenGeneralReport .report-print-chart-img {
+    display: block !important;
+    width: 100% !important;
+    height: auto !important;
+    max-width: 100% !important;
   }
 
-  .kpi-val-light {
-    font-size: 16pt !important;
-  }
-
-  .gauge-wrapper {
-    height: 60pt !important;
+  /* Hide Interactive-Only Controls Inside Report Cards When Printing */
+  #reportGvTableSearch,
+  #reportDgcCommentSearch,
+  #nddtTableToggleText,
+  .report-slicer-group,
+  #pphtFormatSlicersGroup,
+  .report-interactive-hint {
+    display: none !important;
   }
 }
 
@@ -2719,7 +2979,7 @@ tbody tr:hover {
   align-items: start;
 }
 
-@media (max-width: 1024px) {
+@media screen and (max-width: 1024px) {
   .report-csvc-location-grid {
     grid-template-columns: 1fr !important;
   }
@@ -2734,30 +2994,146 @@ tbody tr:hover {
   white-space: nowrap !important;
 }
 
-/* Executive KPI Cards 5-column Grid */
+/* Executive KPI Cards 6-column, 5-column & 3-column Grids */
+.report-kpi-grid-6 {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
 .report-kpi-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 0.85rem;
 }
 
-@media (max-width: 1200px) {
+.report-kpi-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+@media screen and (max-width: 1320px) {
+  .report-kpi-grid-6 {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+}
+
+@media screen and (max-width: 1200px) {
   .report-kpi-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
   }
 }
 
-@media (max-width: 768px) {
-  .report-kpi-grid {
+@media screen and (max-width: 900px) {
+  .report-kpi-grid-3 {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
 }
 
-@media (max-width: 480px) {
-  .report-kpi-grid {
+@media screen and (max-width: 768px) {
+  .report-kpi-grid,
+  .report-kpi-grid-6 {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media screen and (max-width: 560px) {
+  .report-kpi-grid-3 {
     grid-template-columns: 1fr !important;
   }
 }
+
+@media screen and (max-width: 480px) {
+  .report-kpi-grid,
+  .report-kpi-grid-6 {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* =========================================================================
+   TIME-BASED TRAINING ANALYTICS TABLES (NO HORIZONTAL SCROLL ON DESKTOP)
+   ========================================================================= */
+.time-programs-table-wrapper {
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+#reportTimeProgramsTable {
+  table-layout: fixed !important;
+  width: 100% !important;
+  min-width: 0 !important;
+}
+
+#reportTimeProgramsTable th,
+#reportTimeProgramsTable td {
+  padding: 0.5rem 0.3rem !important;
+  font-size: 0.77rem !important;
+  vertical-align: middle !important;
+  box-sizing: border-box !important;
+}
+
+#reportTimeProgramsTable th {
+  white-space: normal !important;
+  line-height: 1.25 !important;
+  word-break: normal !important;
+  overflow-wrap: break-word !important;
+}
+
+#reportTimeProgramsTable td {
+  white-space: normal !important;
+  word-break: normal !important;
+  overflow-wrap: break-word !important;
+}
+
+#reportTimeProgramsTable .badge-format-hybrid,
+#reportTimeProgramsTable .badge-format-direct,
+#reportTimeProgramsTable .badge-format-online {
+  white-space: normal !important;
+  word-break: normal !important;
+  display: inline-block !important;
+  text-align: center !important;
+  line-height: 1.2 !important;
+  padding: 0.22rem 0.35rem !important;
+  font-size: 0.65rem !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+#reportTimeProgramsTable .btn-view-program {
+  white-space: normal !important;
+  word-break: normal !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 0.25rem !important;
+  text-align: center !important;
+  line-height: 1.2 !important;
+  padding: 0.28rem 0.35rem !important;
+  font-size: 0.7rem !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+@media screen and (max-width: 1120px) {
+  .time-programs-table-wrapper {
+    overflow-x: auto;
+  }
+  #reportTimeProgramsTable {
+    min-width: 1060px !important;
+  }
+}
+
+/* ===================================================
+   PROGRAM REPORT: DISPLAY ALL TABLE ROWS (NO VERTICAL SCROLL)
+   =================================================== */
+#reportContentArea.program-report-mode .table-container,
+#reportContentArea.program-report-mode #reportDgcCommentsContainer {
+  max-height: none !important;
+  height: auto !important;
+  overflow-y: visible !important;
+}
+
 
 
 

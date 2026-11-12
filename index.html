@@ -19,7 +19,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
   <!-- Dashboard Stylesheet -->
-  <link rel="stylesheet" href="styles.css?v=9669_v39">
+  <link rel="stylesheet" href="styles.css?v=9669_v52">
 </head>
 
 <body>
@@ -38,23 +38,8 @@
         </div>
       </div>
 
-      <!-- Header Controls: Date Filter & Realtime Google Sheet Sync -->
+      <!-- Header Controls: Realtime Google Sheet Sync -->
       <div class="header-right-actions">
-        <div class="date-range-inputs">
-          <div class="input-group">
-            <label for="startDate">TỪ</label>
-            <input type="date" id="startDate" value="2026-01-01">
-          </div>
-          <span style="color: var(--text-muted); font-weight: 700;">—</span>
-          <div class="input-group">
-            <label for="endDate">ĐẾN</label>
-            <input type="date" id="endDate" value="2026-12-31">
-          </div>
-          <button id="btnApplyCustomDate" class="btn btn-primary" style="padding: 0.45rem 0.85rem; font-size: 0.8rem;">
-            Áp dụng
-          </button>
-        </div>
-
         <div class="sync-actions-group">
           <button id="btnSyncNow" class="btn btn-sync" title="Bấm để đồng bộ dữ liệu mới nhất từ Google Sheet">
             <i class="fa-solid fa-arrows-rotate" id="syncIcon"></i>
@@ -111,18 +96,35 @@
         </div>
       </div>
 
-      <!-- Quick Preset Filter Pills -->
-      <div class="preset-pills-wrapper">
-        <div class="preset-pills">
-          <span class="pill active" data-preset="today">Hôm nay</span>
-          <span class="pill" data-preset="all">Tất cả năm 2026</span>
-          <span class="pill" data-preset="q1">Quý 1 (T1-T3)</span>
-          <span class="pill" data-preset="q2">Quý 2 (T4-T6)</span>
-          <span class="pill" data-preset="q3">Quý 3 (T7-T9)</span>
-          <span class="pill" data-preset="q4">Quý 4 (T10-T12)</span>
-          <span class="pill" data-preset="completed">Đã diễn ra</span>
-          <span class="pill" data-preset="ongoing">Đang diễn ra</span>
-          <span class="pill" data-preset="upcoming">Sắp diễn ra</span>
+      <!-- Date Range & Quick Preset Filter Pills -->
+      <div class="slicer-time-row">
+        <div class="date-range-inputs screen-date-range" title="Lọc theo Ngày kết thúc lớp (Từ ngày ≤ Ngày kết thúc ≤ Đến ngày)">
+          <div class="input-group">
+            <label for="startDate">TỪ</label>
+            <input type="date" id="startDate" value="2026-01-01">
+          </div>
+          <span style="color: var(--text-muted); font-weight: 700;">—</span>
+          <div class="input-group">
+            <label for="endDate">ĐẾN</label>
+            <input type="date" id="endDate" value="2026-12-31">
+          </div>
+          <button type="button" id="btnApplyCustomDate" class="btn btn-primary btn-apply-date">
+            Áp dụng
+          </button>
+        </div>
+
+        <div class="preset-pills-wrapper">
+          <div class="preset-pills">
+            <span class="pill active" data-preset="today">Hôm nay</span>
+            <span class="pill" data-preset="all">Tất cả năm 2026</span>
+            <span class="pill" data-preset="q1">Quý 1 (T1-T3)</span>
+            <span class="pill" data-preset="q2">Quý 2 (T4-T6)</span>
+            <span class="pill" data-preset="q3">Quý 3 (T7-T9)</span>
+            <span class="pill" data-preset="q4">Quý 4 (T10-T12)</span>
+            <span class="pill" data-preset="completed">Đã diễn ra</span>
+            <span class="pill" data-preset="ongoing">Đang diễn ra</span>
+            <span class="pill" data-preset="upcoming">Sắp diễn ra</span>
+          </div>
         </div>
       </div>
 
@@ -329,15 +331,35 @@
           </div>
         </div>
 
-        <!-- Quick Preset Filter Pills -->
-        <div class="preset-pills-wrapper">
-          <div class="preset-pills" id="nddtPresetPills">
-            <span class="pill active" data-preset="all">Tất cả</span>
-            <span class="pill" data-preset="2026">Năm 2026</span>
-            <span class="pill" data-preset="q1">Quý 1</span>
-            <span class="pill" data-preset="q2">Quý 2</span>
-            <span class="pill" data-preset="q3">Quý 3</span>
-            <span class="pill" data-preset="q4">Quý 4</span>
+        <!-- Date Range & Quick Preset Filter Pills -->
+        <div class="slicer-time-row">
+          <div class="date-range-inputs screen-date-range" title="Lọc theo Ngày kết thúc lớp (Từ ngày ≤ Ngày kết thúc ≤ Đến ngày)">
+            <div class="input-group">
+              <label for="nddtStartDate">TỪ</label>
+              <input type="date" id="nddtStartDate">
+            </div>
+            <span style="color: var(--text-muted); font-weight: 700;">—</span>
+            <div class="input-group">
+              <label for="nddtEndDate">ĐẾN</label>
+              <input type="date" id="nddtEndDate">
+            </div>
+            <button type="button" id="btnApplyNddtDate" class="btn btn-primary btn-apply-date">
+              Áp dụng
+            </button>
+            <button type="button" id="btnClearNddtDate" class="btn-clear-date" title="Bỏ lọc khoảng ngày">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </div>
+
+          <div class="preset-pills-wrapper">
+            <div class="preset-pills" id="nddtPresetPills">
+              <span class="pill active" data-preset="all">Tất cả</span>
+              <span class="pill" data-preset="2026">Năm 2026</span>
+              <span class="pill" data-preset="q1">Quý 1</span>
+              <span class="pill" data-preset="q2">Quý 2</span>
+              <span class="pill" data-preset="q3">Quý 3</span>
+              <span class="pill" data-preset="q4">Quý 4</span>
+            </div>
           </div>
         </div>
 
@@ -580,15 +602,35 @@
           </div>
         </div>
 
-        <!-- Quick Preset Filter Pills -->
-        <div class="preset-pills-wrapper">
-          <div class="preset-pills" id="pphtdtPresetPills">
-            <span class="pill active" data-preset="all">Tất cả</span>
-            <span class="pill" data-preset="2026">Năm 2026</span>
-            <span class="pill" data-preset="q1">Quý 1</span>
-            <span class="pill" data-preset="q2">Quý 2</span>
-            <span class="pill" data-preset="q3">Quý 3</span>
-            <span class="pill" data-preset="q4">Quý 4</span>
+        <!-- Date Range & Quick Preset Filter Pills -->
+        <div class="slicer-time-row">
+          <div class="date-range-inputs screen-date-range" title="Lọc theo Ngày kết thúc lớp (Từ ngày ≤ Ngày kết thúc ≤ Đến ngày)">
+            <div class="input-group">
+              <label for="pphtdtStartDate">TỪ</label>
+              <input type="date" id="pphtdtStartDate">
+            </div>
+            <span style="color: var(--text-muted); font-weight: 700;">—</span>
+            <div class="input-group">
+              <label for="pphtdtEndDate">ĐẾN</label>
+              <input type="date" id="pphtdtEndDate">
+            </div>
+            <button type="button" id="btnApplyPphtdtDate" class="btn btn-primary btn-apply-date">
+              Áp dụng
+            </button>
+            <button type="button" id="btnClearPphtdtDate" class="btn-clear-date" title="Bỏ lọc khoảng ngày">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </div>
+
+          <div class="preset-pills-wrapper">
+            <div class="preset-pills" id="pphtdtPresetPills">
+              <span class="pill active" data-preset="all">Tất cả</span>
+              <span class="pill" data-preset="2026">Năm 2026</span>
+              <span class="pill" data-preset="q1">Quý 1</span>
+              <span class="pill" data-preset="q2">Quý 2</span>
+              <span class="pill" data-preset="q3">Quý 3</span>
+              <span class="pill" data-preset="q4">Quý 4</span>
+            </div>
           </div>
         </div>
 
@@ -821,15 +863,35 @@
           </div>
         </div>
 
-        <!-- Quick Preset Filter Pills -->
-        <div class="preset-pills-wrapper">
-          <div class="preset-pills" id="csvcPresetPills">
-            <span class="pill active" data-preset="all">Tất cả</span>
-            <span class="pill" data-preset="2026">Năm 2026</span>
-            <span class="pill" data-preset="q1">Quý 1</span>
-            <span class="pill" data-preset="q2">Quý 2</span>
-            <span class="pill" data-preset="q3">Quý 3</span>
-            <span class="pill" data-preset="q4">Quý 4</span>
+        <!-- Date Range & Quick Preset Filter Pills -->
+        <div class="slicer-time-row">
+          <div class="date-range-inputs screen-date-range" title="Lọc theo Ngày kết thúc lớp (Từ ngày ≤ Ngày kết thúc ≤ Đến ngày)">
+            <div class="input-group">
+              <label for="csvcStartDate">TỪ</label>
+              <input type="date" id="csvcStartDate">
+            </div>
+            <span style="color: var(--text-muted); font-weight: 700;">—</span>
+            <div class="input-group">
+              <label for="csvcEndDate">ĐẾN</label>
+              <input type="date" id="csvcEndDate">
+            </div>
+            <button type="button" id="btnApplyCsvcDate" class="btn btn-primary btn-apply-date">
+              Áp dụng
+            </button>
+            <button type="button" id="btnClearCsvcDate" class="btn-clear-date" title="Bỏ lọc khoảng ngày">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </div>
+
+          <div class="preset-pills-wrapper">
+            <div class="preset-pills" id="csvcPresetPills">
+              <span class="pill active" data-preset="all">Tất cả</span>
+              <span class="pill" data-preset="2026">Năm 2026</span>
+              <span class="pill" data-preset="q1">Quý 1</span>
+              <span class="pill" data-preset="q2">Quý 2</span>
+              <span class="pill" data-preset="q3">Quý 3</span>
+              <span class="pill" data-preset="q4">Quý 4</span>
+            </div>
           </div>
         </div>
 
@@ -1068,6 +1130,28 @@
             <i class="fa-solid fa-filter"></i>
             <span>BỘ LỌC ĐÁNH GIÁ GIẢNG VIÊN</span>
           </div>
+        </div>
+
+        <!-- Date Range & Quick Presets Row -->
+        <div class="slicer-time-row" style="margin-bottom: 0.6rem;">
+          <div class="date-range-inputs screen-date-range" title="Lọc theo Ngày kết thúc lớp (Từ ngày ≤ Ngày kết thúc ≤ Đến ngày)">
+            <div class="input-group">
+              <label for="gvStartDate">TỪ</label>
+              <input type="date" id="gvStartDate">
+            </div>
+            <span style="color: var(--text-muted); font-weight: 700;">—</span>
+            <div class="input-group">
+              <label for="gvEndDate">ĐẾN</label>
+              <input type="date" id="gvEndDate">
+            </div>
+            <button type="button" id="btnApplyGvDate" class="btn btn-primary btn-apply-date">
+              Áp dụng
+            </button>
+            <button type="button" id="btnClearGvDate" class="btn-clear-date" title="Bỏ lọc khoảng ngày">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </div>
+
           <div class="slicer-presets">
             <button type="button" class="preset-btn gv-preset-btn active" data-gv-preset="all">Tất cả</button>
             <button type="button" class="preset-btn gv-preset-btn" data-gv-preset="2026">Năm 2026</button>
@@ -1398,17 +1482,37 @@
           </div>
         </div>
 
-        <!-- Date Presets -->
-        <div class="preset-group" style="display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.85rem;">
-          <button type="button" class="btn btn-sm dgc-preset-btn active" data-dgc-preset="all">Tất cả</button>
-          <button type="button" class="btn btn-sm dgc-preset-btn" data-dgc-preset="today">Hôm nay</button>
-          <button type="button" class="btn btn-sm dgc-preset-btn" data-dgc-preset="thisWeek">Tuần này</button>
-          <button type="button" class="btn btn-sm dgc-preset-btn" data-dgc-preset="thisMonth">Tháng này</button>
-          <button type="button" class="btn btn-sm dgc-preset-btn" data-dgc-preset="q1">Quý 1</button>
-          <button type="button" class="btn btn-sm dgc-preset-btn" data-dgc-preset="q2">Quý 2</button>
-          <button type="button" class="btn btn-sm dgc-preset-btn" data-dgc-preset="q3">Quý 3</button>
-          <button type="button" class="btn btn-sm dgc-preset-btn" data-dgc-preset="q4">Quý 4</button>
-          <button type="button" class="btn btn-sm dgc-preset-btn" data-dgc-preset="thisYear">Năm 2026</button>
+        <!-- Date Range & Date Presets -->
+        <div class="slicer-time-row" style="margin-bottom: 0.85rem;">
+          <div class="date-range-inputs screen-date-range" title="Lọc theo Ngày kết thúc lớp (Từ ngày ≤ Ngày kết thúc ≤ Đến ngày)">
+            <div class="input-group">
+              <label for="dgcStartDate">TỪ</label>
+              <input type="date" id="dgcStartDate">
+            </div>
+            <span style="color: var(--text-muted); font-weight: 700;">—</span>
+            <div class="input-group">
+              <label for="dgcEndDate">ĐẾN</label>
+              <input type="date" id="dgcEndDate">
+            </div>
+            <button type="button" id="btnApplyDgcDate" class="btn btn-primary btn-apply-date">
+              Áp dụng
+            </button>
+            <button type="button" id="btnClearDgcDate" class="btn-clear-date" title="Bỏ lọc khoảng ngày">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </div>
+
+          <div class="preset-group" style="display: flex; flex-wrap: wrap; gap: 0.4rem;">
+            <button type="button" class="btn btn-sm dgc-preset-btn active" data-dgc-preset="all">Tất cả</button>
+            <button type="button" class="btn btn-sm dgc-preset-btn" data-dgc-preset="today">Hôm nay</button>
+            <button type="button" class="btn btn-sm dgc-preset-btn" data-dgc-preset="thisWeek">Tuần này</button>
+            <button type="button" class="btn btn-sm dgc-preset-btn" data-dgc-preset="thisMonth">Tháng này</button>
+            <button type="button" class="btn btn-sm dgc-preset-btn" data-dgc-preset="q1">Quý 1</button>
+            <button type="button" class="btn btn-sm dgc-preset-btn" data-dgc-preset="q2">Quý 2</button>
+            <button type="button" class="btn btn-sm dgc-preset-btn" data-dgc-preset="q3">Quý 3</button>
+            <button type="button" class="btn btn-sm dgc-preset-btn" data-dgc-preset="q4">Quý 4</button>
+            <button type="button" class="btn btn-sm dgc-preset-btn" data-dgc-preset="thisYear">Năm 2026</button>
+          </div>
         </div>
 
         <!-- Selectors Row -->
@@ -1742,6 +1846,9 @@
               <button type="button" id="btnReportModeProgram" class="btn btn-sm" style="font-size: 0.8rem; padding: 0.35rem 0.85rem; border: none; border-radius: 6px; font-weight: 700; cursor: pointer; background: transparent; color: #475569;">
                 <i class="fa-solid fa-graduation-cap"></i> Báo cáo theo Chương trình
               </button>
+              <button type="button" id="btnReportModeTime" class="btn btn-sm" style="font-size: 0.8rem; padding: 0.35rem 0.85rem; border: none; border-radius: 6px; font-weight: 700; cursor: pointer; background: transparent; color: #475569;">
+                <i class="fa-solid fa-calendar-days"></i> Báo cáo theo Thời gian
+              </button>
             </div>
 
             <!-- Export Actions -->
@@ -1821,7 +1928,7 @@
               <strong style="font-size: 0.9rem; color: #1E293B;">TRA CỨU VÀ CHỌN CHƯƠNG TRÌNH ĐÀO TẠO</strong>
               <span id="reportProgramAvailableBadge" class="badge" style="background: #E0F2FE; color: #0284C7; font-size: 0.75rem; padding: 2px 6px;">0 chương trình</span>
             </div>
-            <span style="font-size: 0.78rem; color: var(--text-muted);">Tổng hợp dữ liệu toàn bộ các lớp thuộc chương trình (Bình quân gia quyền)</span>
+            <span style="font-size: 0.78rem; color: var(--text-muted);">Tổng hợp dữ liệu toàn bộ các lớp thuộc chương trình</span>
           </div>
 
           <div class="filter-grid" style="display: grid; grid-template-columns: 2.2fr 1fr 1fr 1fr auto; gap: 0.75rem; align-items: end;">
@@ -1867,6 +1974,121 @@
             </div>
           </div>
         </div>
+
+        <!-- MODE 3: TIME-BASED ANALYTICS SELECTOR AREA -->
+        <div id="reportTimeSelectorArea" style="display: none;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <i class="fa-solid fa-chart-column" style="color: var(--brand-primary); font-size: 1.1rem;"></i>
+              <strong style="font-size: 0.95rem; color: #1E293B;">BÁO CÁO ĐÀO TẠO THEO THỜI GIAN (THÁNG / QUÝ / NĂM)</strong>
+              <span id="reportTimeScopeBadge" class="badge" style="background: #FFF1F2; color: var(--brand-primary); font-size: 0.75rem; padding: 3px 8px; font-weight: 700; border: 1px solid #FECDD3;">Toàn bộ năm 2026</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <span style="font-size: 0.78rem; font-weight: 700; color: #64748B;">CẤP ĐỘ THỜI GIAN:</span>
+              <div class="btn-group" id="reportTimeGranularityGroup" style="display: inline-flex; background: #F1F5F9; padding: 2px; border-radius: 6px; border: 1px solid #CBD5E1;">
+                <button type="button" id="btnTimeGranMonth" class="btn btn-sm" style="font-size: 0.75rem; padding: 0.25rem 0.75rem; border: none; border-radius: 4px; font-weight: 700; cursor: pointer; background: transparent; color: #475569;">
+                  THÁNG
+                </button>
+                <button type="button" id="btnTimeGranQuarter" class="btn btn-sm active" style="font-size: 0.75rem; padding: 0.25rem 0.75rem; border: none; border-radius: 4px; font-weight: 700; cursor: pointer; background: var(--brand-primary); color: white;">
+                  QUÝ
+                </button>
+                <button type="button" id="btnTimeGranYear" class="btn btn-sm" style="font-size: 0.75rem; padding: 0.25rem 0.75rem; border: none; border-radius: 4px; font-weight: 700; cursor: pointer; background: transparent; color: #475569;">
+                  NĂM
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="filter-grid" style="display: grid; grid-template-columns: 0.9fr 1.3fr 1.6fr 1.2fr 1.1fr auto; gap: 0.75rem; align-items: end;">
+            <!-- Year selector -->
+            <div class="selector-item">
+              <label for="selectTimeYear"><i class="fa-solid fa-calendar-check"></i> Năm đào tạo</label>
+              <select id="selectTimeYear" style="font-weight: 700; color: var(--brand-primary);">
+                <option value="2026">2026</option>
+              </select>
+            </div>
+
+            <!-- Period selector -->
+            <div class="selector-item">
+              <label for="selectTimePeriod" id="lblTimePeriod"><i class="fa-solid fa-clock"></i> Chọn Kỳ báo cáo</label>
+              <select id="selectTimePeriod" style="font-weight: 700; color: var(--brand-primary);">
+                <!-- Populated dynamically based on granularity -->
+              </select>
+            </div>
+
+            <!-- Program filter -->
+            <div class="selector-item">
+              <label for="filterTimeProgram"><i class="fa-solid fa-graduation-cap"></i> Chương trình</label>
+              <select id="filterTimeProgram">
+                <option value="">Tất cả chương trình</option>
+              </select>
+            </div>
+
+            <!-- Delivery format filter -->
+            <div class="selector-item">
+              <label for="filterTimeFormat"><i class="fa-solid fa-chalkboard-user"></i> Hình thức đào tạo</label>
+              <select id="filterTimeFormat">
+                <option value="">Tất cả hình thức</option>
+                <option value="direct">Trực tiếp</option>
+                <option value="hybrid">Trực tiếp kết hợp Trực tuyến</option>
+              </select>
+            </div>
+
+            <!-- Location filter -->
+            <div class="selector-item">
+              <label for="filterTimeLocation"><i class="fa-solid fa-location-dot"></i> Địa điểm tổ chức</label>
+              <select id="filterTimeLocation">
+                <option value="">Tất cả địa điểm</option>
+              </select>
+            </div>
+
+            <!-- Actions -->
+            <div class="selector-item actions-cell" style="display: flex; align-items: flex-end; gap: 0.4rem;">
+              <button type="button" id="btnApplyTimeReport" class="btn" style="background: var(--brand-primary); color: white; font-weight: 700; padding: 0.5rem 0.85rem; font-size: 0.82rem; border-radius: 6px; white-space: nowrap;">
+                <i class="fa-solid fa-filter"></i> Xem báo cáo
+              </button>
+              <button type="button" id="btnResetTimeFilters" class="btn" style="background: #F1F5F9; color: #475569; font-weight: 600; padding: 0.5rem 0.75rem; font-size: 0.82rem; border-radius: 6px; border: 1px solid #CBD5E1; white-space: nowrap;" title="Đặt lại bộ lọc">
+                <i class="fa-solid fa-rotate-right"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- Custom Date Range Selector (Từ ngày – Đến ngày) & Quick Presets -->
+          <div class="time-custom-range-bar" style="margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px dashed var(--border-color); display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem;">
+            <div style="display: flex; align-items: flex-end; flex-wrap: wrap; gap: 0.55rem;">
+              <div class="selector-item" style="flex: 0 0 auto; min-width: 155px;">
+                <label for="inputTimeDateFrom"><i class="fa-regular fa-calendar"></i> Từ ngày (Kết thúc lớp)</label>
+                <input type="date" id="inputTimeDateFrom">
+              </div>
+              <span style="color: #64748B; font-weight: 700; padding-bottom: 0.42rem;">—</span>
+              <div class="selector-item" style="flex: 0 0 auto; min-width: 155px;">
+                <label for="inputTimeDateTo"><i class="fa-regular fa-calendar-check"></i> Đến ngày (Kết thúc lớp)</label>
+                <input type="date" id="inputTimeDateTo">
+              </div>
+              <div style="display: flex; align-items: center; gap: 0.4rem;">
+                <button type="button" id="btnApplyTimeDateRange" class="btn btn-sm" style="background: #0F5132; color: white; font-weight: 700; padding: 0.42rem 0.85rem; font-size: 0.78rem; border-radius: 6px; border: none; cursor: pointer; white-space: nowrap;">
+                  <i class="fa-solid fa-check"></i> Áp dụng khoảng ngày
+                </button>
+                <button type="button" id="btnClearTimeDateRange" class="btn btn-sm" style="display: none; background: #FFF1F2; color: var(--brand-primary); font-weight: 700; padding: 0.42rem 0.7rem; font-size: 0.78rem; border-radius: 6px; border: 1px solid #FECDD3; cursor: pointer; white-space: nowrap;" title="Xóa bộ lọc khoảng ngày tùy chỉnh">
+                  <i class="fa-solid fa-xmark"></i> Bỏ khoảng ngày
+                </button>
+              </div>
+            </div>
+
+            <div class="slicer-presets" style="display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap;">
+              <span style="font-size: 0.72rem; font-weight: 700; color: #64748B; margin-right: 0.15rem;">Chọn nhanh:</span>
+              <button type="button" class="preset-btn time-range-preset-btn" data-range="h1" title="6 tháng đầu năm (01/01 – 30/06)">6 tháng đầu năm</button>
+              <button type="button" class="preset-btn time-range-preset-btn" data-range="h2" title="6 tháng cuối năm (01/07 – 31/12)">6 tháng cuối năm</button>
+              <button type="button" class="preset-btn time-range-preset-btn" data-range="last3m" title="3 tháng gần nhất có dữ liệu">3 tháng gần nhất</button>
+              <button type="button" class="preset-btn time-range-preset-btn" data-range="ytd" title="Từ đầu năm đến ngày lớp mới nhất">Từ đầu năm (YTD)</button>
+            </div>
+          </div>
+
+          <!-- Active Filter Scope & Removable Filter Chips -->
+          <div id="reportTimeActiveFiltersBar" style="display: none; margin-top: 0.65rem; padding: 0.45rem 0.75rem; background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 6px; font-size: 0.78rem; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.45rem;">
+            <!-- Rendered dynamically -->
+          </div>
+        </div>
       </section>
 
       <!-- ADMINISTRATIVE HEADER FOR PRINT (PRINT ONLY) -->
@@ -1904,12 +2126,15 @@
           Phân hệ Báo cáo chung liên kết và tổng hợp tự động số liệu từ 5 phân hệ đánh giá: 
           <em>Nội dung đào tạo, Phương pháp & Hình thức, Tổ chức & CSVC, Đánh giá Giảng viên</em> và <em>Đánh giá chung cuối khóa</em>.
         </p>
-        <div style="display: inline-flex; gap: 0.75rem;">
+        <div style="display: inline-flex; gap: 0.75rem; flex-wrap: wrap; justify-content: center;">
           <button type="button" class="btn btn-sm" onclick="document.getElementById('btnReportModeClass').click();" style="background: #F1F5F9; color: #334155; font-weight: 700; padding: 0.45rem 1rem;">
             <i class="fa-solid fa-chalkboard-user"></i> Chọn Lớp học
           </button>
           <button type="button" class="btn btn-sm" onclick="document.getElementById('btnReportModeProgram').click();" style="background: var(--brand-primary); color: white; font-weight: 700; padding: 0.45rem 1rem;">
             <i class="fa-solid fa-graduation-cap"></i> Chọn Chương trình
+          </button>
+          <button type="button" class="btn btn-sm" onclick="document.getElementById('btnReportModeTime').click();" style="background: #0284C7; color: white; font-weight: 700; padding: 0.45rem 1rem;">
+            <i class="fa-solid fa-calendar-days"></i> Báo cáo Thời gian
           </button>
         </div>
       </div>
@@ -1944,8 +2169,8 @@
         </section>
 
         <!-- SPECIAL SECTION FOR PROGRAM MODE: CLASS LIST & CROSS-CLASS COMPARISON -->
-        <section class="card" id="reportProgramComparisonSection" style="margin-bottom: 1.25rem; display: none;">
-          <div class="card-header" style="flex-wrap: wrap; gap: 0.5rem; justify-content: space-between; align-items: center; margin-bottom: 0.85rem;">
+        <section class="card report-flow-section" id="reportProgramComparisonSection" style="margin-bottom: 1.25rem; display: none;">
+          <div class="card-header report-print-heading" style="flex-wrap: wrap; gap: 0.5rem; justify-content: space-between; align-items: center; margin-bottom: 0.85rem;">
             <div>
               <h3 style="display: flex; align-items: center; gap: 0.5rem;">
                 <i class="fa-solid fa-list-check" style="color: var(--brand-primary);"></i>
@@ -1959,10 +2184,10 @@
 
           <!-- Table 1: Cross-Class 5-Module Score Comparison Table -->
           <div style="margin-bottom: 1.25rem;">
-            <div style="font-size: 0.88rem; font-weight: 800; color: var(--brand-primary); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.4rem;">
+            <div class="report-print-heading" style="font-size: 0.88rem; font-weight: 800; color: var(--brand-primary); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.4rem;">
               <i class="fa-solid fa-table-columns"></i> BẢNG SO SÁNH KẾT QUẢ ĐÁNH GIÁ 5 PHÂN HỆ GIỮA CÁC LỚP
             </div>
-            <div class="table-container" style="max-height: 380px; overflow-y: auto;">
+            <div class="table-container">
               <table class="data-table" id="reportProgramComparisonTable">
                 <thead>
                   <tr>
@@ -1987,10 +2212,10 @@
 
           <!-- Table 2: Detailed Class List Table with drill-down button -->
           <div>
-            <div style="font-size: 0.88rem; font-weight: 800; color: #1E293B; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.4rem;">
+            <div class="report-print-heading" style="font-size: 0.88rem; font-weight: 800; color: #1E293B; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.4rem;">
               <i class="fa-solid fa-clipboard-list"></i> DANH SÁCH CHI TIẾT CÁC LỚP HỌC THUỘC CHƯƠNG TRÌNH
             </div>
-            <div class="table-container" style="max-height: 360px; overflow-y: auto;">
+            <div class="table-container">
               <table class="data-table" id="reportProgramClassesTable">
                 <thead>
                   <tr>
@@ -2016,51 +2241,380 @@
         </section>
 
         <!-- 5 COMPREHENSIVE EVALUATION SECTIONS -->
-        <div style="display: flex; flex-direction: column; gap: 1.25rem;">
+        <div class="report-sections-stack" style="display: flex; flex-direction: column; gap: 1.25rem;">
           <!-- SECTION I: NỘI DUNG ĐÀO TẠO -->
-          <section class="card" id="reportNddtSection">
+          <section class="card report-flow-section" id="reportNddtSection">
             <!-- Dynamically populated -->
           </section>
 
           <!-- SECTION II: PHƯƠNG PHÁP & HÌNH THỨC -->
-          <section class="card" id="reportPphtSection">
+          <section class="card report-flow-section" id="reportPphtSection">
             <!-- Dynamically populated -->
           </section>
 
           <!-- SECTION III: TỔ CHỨC & CSVC -->
-          <section class="card" id="reportCsvcSection">
+          <section class="card report-flow-section" id="reportCsvcSection">
             <!-- Dynamically populated -->
           </section>
 
           <!-- SECTION IV: ĐÁNH GIÁ GIẢNG VIÊN -->
-          <section class="card" id="reportGvSection">
+          <section class="card report-flow-section" id="reportGvSection">
             <!-- Dynamically populated -->
           </section>
 
           <!-- SECTION V: ĐÁNH GIÁ CHUNG -->
-          <section class="card" id="reportDgcSection">
+          <section class="card report-flow-section" id="reportDgcSection">
             <!-- Dynamically populated -->
           </section>
         </div>
+      </div>
 
-        <!-- ADMINISTRATIVE SIGNATURE BLOCK (PRINT ONLY) -->
-        <section class="report-signature-block print-only" style="margin-top: 2rem; padding-top: 1.5rem; page-break-inside: avoid;">
-          <div style="display: flex; justify-content: space-between; text-align: center;">
-            <div style="width: 45%;">
-              <div style="font-weight: 700; text-transform: uppercase; font-size: 11pt;">NGƯỜI LẬP BÁO CÁO</div>
-              <div style="font-size: 9.5pt; font-style: italic; color: #64748B;">(Ký, ghi rõ họ tên)</div>
-              <div style="height: 70px;"></div>
-              <div style="font-weight: 700; font-size: 11pt;">Bộ phận Phân tích Dữ liệu Đào tạo</div>
+      <!-- MODE 3: TIME-BASED ANALYTICS CONTENT AREA -->
+      <div id="reportTimeContentArea" style="display: none;">
+        <!-- OVERVIEW CARD: SCOPE HEADER & EXECUTIVE INSIGHTS -->
+        <section class="card report-flow-section" id="reportTimeOverviewCard" style="margin-bottom: 1.25rem;">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem; margin-bottom: 0.85rem;">
+            <div>
+              <span id="reportTimeTargetTypeBadge" class="badge" style="background: var(--brand-primary); color: white; font-size: 0.75rem; padding: 3px 8px;">
+                BÁO CÁO THEO THỜI GIAN
+              </span>
+              <h2 id="reportTimeTargetTitle" style="font-size: 1.25rem; font-weight: 800; color: #1E293B; margin: 0.4rem 0 0 0;">
+                BÁO CÁO PHÂN TÍCH ĐÀO TẠO NĂM 2026
+              </h2>
             </div>
-            <div style="width: 45%;">
-              <div style="font-weight: 700; text-transform: uppercase; font-size: 11pt;">LÃNH ĐẠO PHÒNG QLĐT & THƯ VIỆN</div>
-              <div style="font-size: 9.5pt; font-style: italic; color: #64748B;">(Ký, ghi rõ họ tên)</div>
-              <div style="height: 70px;"></div>
-              <div style="font-weight: 700; font-size: 11pt;">Trưởng / Phó Trưởng Phòng</div>
+            <div id="reportTimeActionPills" style="display: flex; gap: 0.5rem; align-items: center;" class="no-print">
+              <!-- Dynamically rendered badges or quick links -->
+            </div>
+          </div>
+
+          <!-- Metadata Grid -->
+          <div class="modal-grid report-print-visual" id="reportTimeMetadataGrid" style="margin-bottom: 1.25rem;">
+            <!-- Dynamically populated -->
+          </div>
+
+          <!-- Executive Storytelling & Insights Card -->
+          <div id="reportTimeInsightsCard" class="report-print-visual" style="background: linear-gradient(135deg, #FFF1F2 0%, #FFFBEB 100%); border: 1px solid #FECDD3; border-radius: 8px; padding: 1rem 1.25rem; margin-bottom: 1.25rem;">
+            <!-- Rendered dynamically -->
+          </div>
+
+          <!-- 11 Executive KPI Cards Grid (3 Domains) -->
+          <div id="reportTimeKpiGrid">
+            <!-- Dynamically populated -->
+          </div>
+        </section>
+
+        <!-- 6 CORE VISUALIZATIONS SECTION -->
+        <div class="report-sections-stack" style="display: flex; flex-direction: column; gap: 1.25rem; margin-bottom: 1.25rem;">
+          <!-- ROW 1: Visual 1 & Visual 2 -->
+          <div class="time-charts-grid-row report-print-visual" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(480px, 1fr)); gap: 1.25rem;">
+            <!-- Visual 1: Training Volume & Attendance Trend -->
+            <section class="card chart-card">
+              <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+                <h3 style="font-size: 0.95rem; font-weight: 800; color: #1E293B; display: flex; align-items: center; gap: 0.5rem; margin: 0;">
+                  <i class="fa-solid fa-chart-line" style="color: var(--brand-primary);"></i>
+                  QUY MÔ ĐÀO TẠO & XU HƯỚNG HỌC VIÊN
+                </h3>
+                <span class="badge" style="background: #E0F2FE; color: #0284C7; font-size: 0.72rem; padding: 2px 6px;">Số lớp & Lượt HV</span>
+              </div>
+              <div style="position: relative; height: 320px; width: 100%;">
+                <canvas id="timeVolumeTrendChart"></canvas>
+              </div>
+            </section>
+
+            <!-- Visual 2: Delivery Modes Breakdown -->
+            <section class="card chart-card">
+              <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+                <h3 style="font-size: 0.95rem; font-weight: 800; color: #1E293B; display: flex; align-items: center; gap: 0.5rem; margin: 0;">
+                  <i class="fa-solid fa-chart-pie" style="color: #7E22CE;"></i>
+                  CƠ CẤU HÌNH THỨC ĐÀO TẠO QUA CÁC KỲ
+                </h3>
+                <span class="badge" style="background: #F3E8FF; color: #7E22CE; font-size: 0.72rem; padding: 2px 6px;">Tỷ trọng 100%</span>
+              </div>
+              <div style="position: relative; height: 320px; width: 100%;">
+                <canvas id="timeFormatCompositionChart"></canvas>
+              </div>
+            </section>
+          </div>
+
+          <!-- ROW 2: Visual 3 & Visual 4 -->
+          <div class="time-charts-grid-row report-print-visual" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(480px, 1fr)); gap: 1.25rem;">
+            <!-- Visual 3: Quality Trend Across 5 Modules -->
+            <section class="card chart-card">
+              <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
+                <h3 style="font-size: 0.95rem; font-weight: 800; color: #1E293B; display: flex; align-items: center; gap: 0.5rem; margin: 0;">
+                  <i class="fa-solid fa-arrow-trend-up" style="color: #059669;"></i>
+                  XU HƯỚNG CHẤT LƯỢNG 5 PHÂN HỆ ĐÁNH GIÁ
+                </h3>
+                <div class="btn-group no-print" style="display: inline-flex; background: #F1F5F9; padding: 2px; border-radius: 6px; border: 1px solid #CBD5E1;">
+                  <button type="button" id="btnTimeQualityScoreRaw" class="btn btn-sm active" style="font-size: 0.72rem; padding: 0.2rem 0.55rem; border: none; border-radius: 4px; font-weight: 700; cursor: pointer; background: var(--brand-primary); color: white;">
+                    Điểm gốc
+                  </button>
+                  <button type="button" id="btnTimeQualityScoreNorm" class="btn btn-sm" style="font-size: 0.72rem; padding: 0.2rem 0.55rem; border: none; border-radius: 4px; font-weight: 700; cursor: pointer; background: transparent; color: #475569;">
+                    Chuẩn hóa (%)
+                  </button>
+                </div>
+              </div>
+              <div style="position: relative; height: 320px; width: 100%;">
+                <canvas id="timeQualityTrendChart"></canvas>
+              </div>
+            </section>
+
+            <!-- Visual 4: Rating Distribution Over Time -->
+            <section class="card chart-card">
+              <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
+                <h3 style="font-size: 0.95rem; font-weight: 800; color: #1E293B; display: flex; align-items: center; gap: 0.5rem; margin: 0;">
+                  <i class="fa-solid fa-chart-column" style="color: #D97706;"></i>
+                  PHÂN BỐ 4 MỨC ĐÁNH GIÁ QUA CÁC KỲ
+                </h3>
+                <div class="no-print" style="display: inline-flex; align-items: center; gap: 0.35rem;">
+                  <select id="selectTimeRatingDistModule" style="font-size: 0.75rem; padding: 0.2rem 0.5rem; border-radius: 6px; border: 1px solid #CBD5E1; font-weight: 600; color: #1E293B;">
+                    <option value="all">Toàn bộ phân hệ</option>
+                    <option value="nddt">Nội dung đào tạo</option>
+                    <option value="ppht">Phương pháp & Hình thức</option>
+                    <option value="csvc">Cơ sở vật chất</option>
+                  </select>
+                </div>
+              </div>
+              <div style="position: relative; height: 320px; width: 100%;">
+                <canvas id="timeRatingDistributionChart"></canvas>
+              </div>
+            </section>
+          </div>
+
+          <!-- ROW 3: Visual 5 & Visual 6 -->
+          <div class="time-charts-grid-row time-charts-grid-asymmetric report-print-visual">
+            <!-- Visual 5: Direct vs Hybrid Quality Comparison -->
+            <section class="card chart-card">
+              <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+                <h3 style="font-size: 0.95rem; font-weight: 800; color: #1E293B; display: flex; align-items: center; gap: 0.5rem; margin: 0;">
+                  <i class="fa-solid fa-code-compare" style="color: #0284C7;"></i>
+                  SO SÁNH CHẤT LƯỢNG: TRỰC TIẾP VS TRỰC TUYẾN/KẾT HỢP
+                </h3>
+                <span class="badge" style="background: #E0F2FE; color: #0284C7; font-size: 0.72rem; padding: 2px 6px;">5 Phân hệ</span>
+              </div>
+              <div style="position: relative; height: 400px; width: 100%;">
+                <canvas id="timeFormatComparisonChart"></canvas>
+              </div>
+            </section>
+
+            <!-- Visual 6: Lecturer Evaluation (matching Đánh giá giảng viên screen) -->
+            <section class="card chart-card" id="timeGvEvaluationCard">
+              <div class="card-header" style="display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: space-between; align-items: flex-start; margin-bottom: 0.75rem;">
+                <div>
+                  <h3 style="font-size: 0.95rem; font-weight: 800; color: #1E293B; display: flex; align-items: center; gap: 0.5rem; margin: 0;">
+                    <i class="fa-solid fa-chart-line" style="color: var(--brand-primary);"></i>
+                    ĐÁNH GIÁ GIẢNG VIÊN
+                  </h3>
+                  <p style="font-size: 0.76rem; color: var(--text-muted); margin: 0.2rem 0 0 0;">
+                    Phân tích điểm trung bình 3 tiêu chí đánh giá (dạng đường), tổng số lớp và số tiết giảng dạy (dạng cột)
+                  </p>
+                </div>
+                <div style="display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap;">
+                  <div class="report-slicer-group" style="display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap;">
+                    <!-- Slicer đối tượng: Giảng viên / Đơn vị -->
+                    <div class="btn-group" style="display: inline-flex; background: #F1F5F9; padding: 2px; border-radius: 6px; border: 1px solid #E2E8F0;">
+                      <button type="button" id="btnTimeGvToggleLecturer" class="btn btn-sm active" style="font-size: 0.74rem; padding: 0.24rem 0.55rem; border: none; border-radius: 4px; font-weight: 700; cursor: pointer; background: var(--brand-primary); color: white;">
+                        <i class="fa-solid fa-user-tie"></i> Theo Giảng viên
+                      </button>
+                      <button type="button" id="btnTimeGvToggleUnit" class="btn btn-sm" style="font-size: 0.74rem; padding: 0.24rem 0.55rem; border: none; border-radius: 4px; font-weight: 700; cursor: pointer; background: transparent; color: #475569;">
+                        <i class="fa-solid fa-building-columns"></i> Theo Đơn vị / Nguồn
+                      </button>
+                    </div>
+
+                    <!-- Slicer con: Tiêu chí lọc Top -->
+                    <div class="btn-group gv-rank-slicer" style="display: inline-flex; background: #F1F5F9; padding: 2px; border-radius: 6px; border: 1px solid #CBD5E1;">
+                      <button type="button" id="btnTimeGvRankGpa" class="btn btn-sm active" data-time-gv-rank="gpa" title="Lọc theo Top Điểm GPA cao nhất" style="font-size: 0.74rem; padding: 0.24rem 0.55rem; border: none; border-radius: 4px; font-weight: 700; cursor: pointer; background: #8C1D40; color: white;">
+                        <i class="fa-solid fa-star" style="color: #FBBF24;"></i> Top Điểm GPA
+                      </button>
+                      <button type="button" id="btnTimeGvRankClasses" class="btn btn-sm" data-time-gv-rank="classes" title="Lọc theo Top Số lớp giảng dạy" style="font-size: 0.74rem; padding: 0.24rem 0.55rem; border: none; border-radius: 4px; font-weight: 700; cursor: pointer; background: transparent; color: #475569;">
+                        <i class="fa-solid fa-chalkboard-user" style="color: #0284C7;"></i> Top Số lớp
+                      </button>
+                      <button type="button" id="btnTimeGvRankHours" class="btn btn-sm" data-time-gv-rank="hours" title="Lọc theo Top Số tiết giảng dạy" style="font-size: 0.74rem; padding: 0.24rem 0.55rem; border: none; border-radius: 4px; font-weight: 700; cursor: pointer; background: transparent; color: #475569;">
+                        <i class="fa-solid fa-clock" style="color: #059669;"></i> Top Số tiết
+                      </button>
+                    </div>
+
+                    <!-- Slicer giới hạn số lượng Top -->
+                    <div style="display: inline-flex; align-items: center; gap: 0.25rem;">
+                      <select id="selectTimeGvTopLimit" class="form-select form-select-sm" title="Chọn số lượng hiển thị" style="font-size: 0.74rem; padding: 0.22rem 0.45rem; border-radius: 6px; border: 1px solid #CBD5E1; background: white; font-weight: 700; color: #1E293B; cursor: pointer;">
+                        <option value="15" selected>Top 15</option>
+                        <option value="10">Top 10</option>
+                        <option value="20">Top 20</option>
+                        <option value="30">Top 30</option>
+                        <option value="all">Tất cả</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div class="scroll-chart-hint" style="font-size: 0.74rem; font-weight: 700; color: var(--brand-primary); background: #FFF1F2; padding: 0.2rem 0.55rem; border-radius: 12px; border: 1px solid #FECDD3; display: inline-flex; align-items: center; gap: 0.35rem;">
+                    <i class="fa-solid fa-arrows-left-right"></i> <span id="timeGvScrollHintText">Hiển thị <strong id="timeGvScrollCountHint">0</strong> mục</span>
+                  </div>
+                </div>
+              </div>
+              <div id="timeGvEmptyState" style="display: none; height: 420px; align-items: center; justify-content: center; flex-direction: column; color: #64748B; gap: 0.4rem; background: #F8FAFC; border: 1px dashed #CBD5E1; border-radius: 8px;">
+                <i class="fa-solid fa-chalkboard-user" style="font-size: 1.75rem; color: #CBD5E1;"></i>
+                <span style="font-size: 0.85rem; font-weight: 600;">Không có dữ liệu đánh giá giảng viên trong kỳ báo cáo đã chọn</span>
+              </div>
+              <div class="chart-scroll-outer" id="timeGvComparisonScrollOuter">
+                <div class="chart-scroll-inner" id="timeGvComparisonScrollInner" style="min-width: 100%; height: 420px; position: relative;">
+                  <canvas id="timeGvAnalyticsChart"></canvas>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+
+        <!-- TIME-BASED SUMMARY TABLE CARD -->
+        <section class="card report-flow-section" id="reportTimeSummaryTableCard" style="margin-bottom: 1.25rem;">
+          <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.85rem; flex-wrap: wrap; gap: 0.5rem;">
+            <div>
+              <h3 style="font-size: 1rem; font-weight: 800; color: #1E293B; display: flex; align-items: center; gap: 0.5rem; margin: 0;">
+                <i class="fa-solid fa-table-list" style="color: var(--brand-primary);"></i>
+                BẢNG TỔNG HỢP & ĐỐI CHIẾU KẾT QUẢ ĐÀO TẠO THEO KỲ
+              </h3>
+              <p style="font-size: 0.78rem; color: var(--text-muted); margin: 0.2rem 0 0 0;">
+                Tổng hợp các chỉ số quy mô và chất lượng đào tạo qua từng mốc thời gian
+              </p>
+            </div>
+            <span style="font-size: 0.75rem; color: #64748B; font-style: italic;">Nhấp vào dòng hoặc nút Thao tác để xem danh sách lớp học</span>
+          </div>
+
+          <div class="table-container" style="overflow-x: auto;">
+            <table class="data-table" id="reportTimeSummaryTable">
+              <thead>
+                <tr>
+                  <th style="width: 3%; text-align: center;">STT</th>
+                  <th style="width: 13%;">KỲ BÁO CÁO</th>
+                  <th style="width: 8%; text-align: center;" title="Số chương trình đào tạo">SỐ CHƯƠNG TRÌNH</th>
+                  <th style="width: 6%; text-align: center;">SỐ LỚP</th>
+                  <th style="width: 8%; text-align: center;">LƯỢT HV</th>
+                  <th style="width: 10%; text-align: center;">TỈ LỆ THAM DỰ</th>
+                  <th style="width: 6%; text-align: center;">PHIẾU</th>
+                  <th style="width: 7%; text-align: center;">PHẢN HỒI</th>
+                  <th style="width: 7%; text-align: center;" title="Nội dung đào tạo (Thang 4)">NDĐT (4.0)</th>
+                  <th style="width: 7%; text-align: center;" title="Phương pháp & Hình thức (Thang 4)">PPHT (4.0)</th>
+                  <th style="width: 7%; text-align: center;" title="Tổ chức & CSVC (Thang 4)">CSVC (4.0)</th>
+                  <th style="width: 6%; text-align: center;" title="Giảng viên (Thang 5)">GV (5.0)</th>
+                  <th style="width: 6%; text-align: center;" title="Đánh giá chung (Thang 5)">ĐGC (5.0)</th>
+                  <th style="width: 6%; text-align: center;" class="no-print">THAO TÁC</th>
+                </tr>
+              </thead>
+              <tbody id="reportTimeSummaryTableBody">
+                <!-- Rendered dynamically -->
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- DRILL-DOWN: DETAILED PROGRAM & CLASS LISTS FOR SELECTED PERIOD -->
+        <section class="card report-flow-section" id="reportTimeClassDrilldownSection" style="margin-bottom: 1.25rem; display: none;">
+          <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
+            <div>
+              <h3 style="font-size: 1rem; font-weight: 800; color: #1E293B; display: flex; align-items: center; gap: 0.5rem; margin: 0;">
+                <i class="fa-solid fa-list-check" style="color: var(--brand-primary);"></i>
+                <span id="reportTimeDrilldownTitle">CHI TIẾT CHƯƠNG TRÌNH &amp; LỚP HỌC TRONG KỲ</span>
+              </h3>
+              <p id="reportTimeDrilldownSubtitle" style="font-size: 0.8rem; color: var(--text-muted); margin: 0.25rem 0 0 0;">
+                Tra cứu và đối chiếu chi tiết các chương trình, lớp học tổ chức trong kỳ báo cáo đã chọn
+              </p>
+            </div>
+            <div class="no-print">
+              <button type="button" id="btnTimeReturnToSummary" class="btn btn-sm" style="background: #F1F5F9; color: #334155; font-weight: 700; border: 1px solid #CBD5E1; padding: 0.35rem 0.85rem; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; gap: 0.35rem;">
+                <i class="fa-solid fa-arrow-left"></i> Quay lại Bảng tổng hợp
+              </button>
+            </div>
+          </div>
+
+          <!-- TABLE 1: DANH SÁCH CHI TIẾT CHƯƠNG TRÌNH TRONG KỲ -->
+          <div style="margin-bottom: 1.5rem;">
+            <div style="font-size: 0.9rem; font-weight: 800; color: var(--brand-primary); margin-bottom: 0.55rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;">
+              <span style="display: flex; align-items: center; gap: 0.45rem;">
+                <i class="fa-solid fa-graduation-cap"></i> DANH SÁCH CHI TIẾT CHƯƠNG TRÌNH TRONG KỲ
+              </span>
+              <span id="reportTimeProgramsCountBadge" class="badge" style="background: #F3E8FF; color: #7C3AED; font-size: 0.74rem; padding: 2px 8px;">0 chương trình</span>
+            </div>
+            <div class="table-container time-programs-table-wrapper" style="max-height: 440px;">
+              <table class="data-table" id="reportTimeProgramsTable">
+                <thead>
+                  <tr>
+                    <th style="width: 3%; text-align: center;">STT</th>
+                    <th style="width: 8%;">MÃ CHƯƠNG TRÌNH</th>
+                    <th style="width: 19.5%;">TÊN CHƯƠNG TRÌNH</th>
+                    <th style="width: 4.5%; text-align: center;">SỐ LỚP</th>
+                    <th style="width: 8.5%; text-align: center;">HÌNH THỨC</th>
+                    <th style="width: 5.5%; text-align: center;">HV KẾ HOẠCH</th>
+                    <th style="width: 5.5%; text-align: center;">HV THỰC TẾ</th>
+                    <th style="width: 7.5%; text-align: center;">TỈ LỆ THAM DỰ</th>
+                    <th style="width: 5%; text-align: center;">PHIẾU</th>
+                    <th style="width: 5%; text-align: center;">NDĐT</th>
+                    <th style="width: 5%; text-align: center;">PPHT</th>
+                    <th style="width: 5%; text-align: center;">CSVC</th>
+                    <th style="width: 5%; text-align: center;">GV</th>
+                    <th style="width: 5%; text-align: center;">ĐGC</th>
+                    <th style="width: 8%; text-align: center;" class="no-print">THAO TÁC</th>
+                  </tr>
+                </thead>
+                <tbody id="reportTimeProgramsTableBody">
+                  <!-- Rendered dynamically -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- TABLE 2: DANH SÁCH CHI TIẾT CÁC LỚP HỌC TRONG KỲ -->
+          <div>
+            <div style="font-size: 0.9rem; font-weight: 800; color: #1E293B; margin-bottom: 0.55rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;">
+              <span style="display: flex; align-items: center; gap: 0.45rem;">
+                <i class="fa-solid fa-chalkboard-user"></i> DANH SÁCH CHI TIẾT CÁC LỚP HỌC TRONG KỲ
+              </span>
+              <span id="reportTimeClassesCountBadge" class="badge" style="background: #E0F2FE; color: #0284C7; font-size: 0.74rem; padding: 2px 8px;">0 lớp học</span>
+            </div>
+            <div class="table-container" style="max-height: 440px; overflow: auto;">
+              <table class="data-table" id="reportTimeClassesTable">
+                <thead>
+                  <tr>
+                    <th style="width: 3%; text-align: center;">STT</th>
+                    <th style="width: 11%;">MÃ LỚP</th>
+                    <th style="width: 18%;">TÊN CHƯƠNG TRÌNH</th>
+                    <th style="width: 12%; text-align: center;">HÌNH THỨC</th>
+                    <th style="width: 11%; text-align: center;">THỜI GIAN</th>
+                    <th style="width: 10%;">ĐỊA ĐIỂM</th>
+                    <th style="width: 6%; text-align: center;">HV THỰC TẾ</th>
+                    <th style="width: 6%; text-align: center;">PHIẾU</th>
+                    <th style="width: 6%; text-align: center;">NDĐT</th>
+                    <th style="width: 6%; text-align: center;">PPHT</th>
+                    <th style="width: 6%; text-align: center;">CSVC</th>
+                    <th style="width: 6%; text-align: center;">GV</th>
+                    <th style="width: 6%; text-align: center;">ĐGC</th>
+                    <th style="width: 8%; text-align: center;" class="no-print">THAO TÁC</th>
+                  </tr>
+                </thead>
+                <tbody id="reportTimeClassesTableBody">
+                  <!-- Rendered dynamically -->
+                </tbody>
+              </table>
             </div>
           </div>
         </section>
       </div>
+
+      <!-- ADMINISTRATIVE SIGNATURE BLOCK (PRINT ONLY) -->
+      <section class="report-signature-block print-only" style="margin-top: 2rem; padding-top: 1.5rem; page-break-inside: avoid;">
+        <div style="display: flex; justify-content: space-between; text-align: center;">
+          <div style="width: 45%;">
+            <div style="font-weight: 700; text-transform: uppercase; font-size: 11pt;">NGƯỜI LẬP BÁO CÁO</div>
+            <div style="font-size: 9.5pt; font-style: italic; color: #64748B;">(Ký, ghi rõ họ tên)</div>
+            <div style="height: 70px;"></div>
+            <div style="font-weight: 700; font-size: 11pt;">Bộ phận Phân tích Dữ liệu Đào tạo</div>
+          </div>
+          <div style="width: 45%;">
+            <div style="font-weight: 700; text-transform: uppercase; font-size: 11pt;">LÃNH ĐẠO PHÒNG QLĐT & THƯ VIỆN</div>
+            <div style="font-size: 9.5pt; font-style: italic; color: #64748B;">(Ký, ghi rõ họ tên)</div>
+            <div style="height: 70px;"></div>
+            <div style="font-weight: 700; font-size: 11pt;">Trưởng / Phó Trưởng Phòng</div>
+          </div>
+        </div>
+      </section>
     </main>
 
     <!-- FOOTER -->
@@ -2284,7 +2838,7 @@
   <!-- JavaScript Files -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="data.js?v=9669_v29"></script>
-  <script src="app.js?v=9669_v39"></script>
+  <script src="app.js?v=9669_v52"></script>
 </body>
 
 </html>

@@ -324,6 +324,213 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const TODAY_STR = getTodayGMT7Str();
 
+  // ==========================================
+  // UNIFIED TIME FILTER & DATE ENGINE (All Screens)
+  // ==========================================
+
+  /**
+   * Normalize various date string formats (YYYY-MM-DD, YYYY/MM/DD, DD/MM/YYYY) into ISO YYYY-MM-DD.
+   */
+  function toIsoDateKey(val) {
+    if (!val) return '';
+    const str = String(val).trim();
+    const isoMatch = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+    if (isoMatch) {
+      return isoMatch[1] + '-' + isoMatch[2].padStart(2, '0') + '-' + isoMatch[3].padStart(2, '0');
+    }
+    const vnMatch = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+    if (vnMatch) {
+      return vnMatch[3] + '-' + vnMatch[2].padStart(2, '0') + '-' + vnMatch[1].padStart(2, '0');
+    }
+    return '';
+  }
+
+  /**
+   * Shift an ISO YYYY-MM-DD date string by deltaDays in UTC without DST drift.
+   */
+  function shiftIsoDateDays(isoStr, deltaDays) {
+    const parts = toIsoDateKey(isoStr).split('-').map(Number);
+    if (parts.length !== 3 || parts.some(isNaN)) return '';
+    const dt = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]) + deltaDays * 86400000);
+    return dt.getUTCFullYear() + '-' + String(dt.getUTCMonth() + 1).padStart(2, '0') + '-' + String(dt.getUTCDate()).padStart(2, '0');
+  }
+
+  /**
+   * Extract normalized [startIso, endIso] bounds for any class/evaluation record (with endIso fallback to startIso).
+   */
+  function resolveItemDateBounds(item) {
+    if (!item) return { startIso: '', endIso: '' };
+    const startIso = toIsoDateKey(item.ngay_bd_iso || item.startDate || item.ngay_bd || item.ngay_bd_raw);
+    const endIso = toIsoDateKey(item.ngay_kt_iso || item.endDate || item.ngay_kt || item.ngay_kt_raw) || startIso;
+    return { startIso: startIso, endIso: endIso || startIso };
+  }
+
+  /**
+   * Map a named time preset into normalized [from, to] ISO date bounds.
+   */
+  function resolvePresetDateBounds(preset, todayIso, options) {
+    const opts = options || {};
+    const year = opts.year || '2026';
+    const today = toIsoDateKey(todayIso) || TODAY_STR;
+    if (preset === 'today' || preset === 'ongoing') return { from: today, to: today };
+    if (preset === '2026' || preset === 'thisYear' || (preset === 'all' && opts.allIsYear)) {
+      return { from: year + '-01-01', to: year + '-12-31' };
+    }
+    if (preset === 'q1') return { from: year + '-01-01', to: year + '-03-31' };
+    if (preset === 'q2') return { from: year + '-04-01', to: year + '-06-30' };
+    if (preset === 'q3') return { from: year + '-07-01', to: year + '-09-30' };
+    if (preset === 'q4') return { from: year + '-10-01', to: year + '-12-31' };
+    if (preset === 'thisWeek') {
+      const p = today.split('-').map(Number);
+      const dt = new Date(Date.UTC(p[0], p[1] - 1, p[2]));
+      const day = dt.getUTCDay() || 7;
+      return { from: shiftIsoDateDays(today, 1 - day), to: shiftIsoDateDays(today, 7 - day) };
+    }
+    if (preset === 'thisMonth') {
+      const p = today.split('-').map(Number);
+      const lastDay = new Date(Date.UTC(p[0], p[1], 0)).getUTCDate();
+      const ym = today.slice(0, 7);
+      return { from: ym + '-01', to: ym + '-' + String(lastDay).padStart(2, '0') };
+    }
+    if (preset === 'completed') return { from: year + '-01-01', to: today };
+    if (preset === 'upcoming') return { from: shiftIsoDateDays(today, 1), to: year + '-12-31' };
+    return { from: '', to: '' };
+  }
+
+  /**
+   * Unified period/date-range filter across all screens:
+   * - Period & custom date range filter strictly by Class End Date (Từ ngày <= Ngày KT <= Đến ngày).
+   * - Operational 'today'/'ongoing' keeps active classes containing today (BĐ <= today <= KT); 'upcoming' keeps classes starting after today.
+   */
+  function matchesItemTimeFilter(item, stateObj, todayIso, options) {
+    if (!stateObj) return true;
+    const preset = stateObj.preset || '';
+    const today = toIsoDateKey(todayIso) || TODAY_STR;
+    const { startIso, endIso } = resolveItemDateBounds(item);
+
+    if (preset === 'today' || preset === 'ongoing') {
+      return !!(startIso && endIso && startIso <= today && endIso >= today);
+    }
+    if (preset === 'upcoming') {
+      if (!startIso) return false;
+      let upFrom = toIsoDateKey(stateObj.startDate);
+      let upTo = toIsoDateKey(stateObj.endDate);
+      if (upFrom && upTo && upFrom > upTo) { const t = upFrom; upFrom = upTo; upTo = t; }
+      if (startIso <= today) return false;
+      if (upFrom && endIso && endIso < upFrom) return false;
+      if (upTo && endIso && endIso > upTo) return false;
+      return true;
+    }
+
+    let from = toIsoDateKey(stateObj.startDate);
+    let to = toIsoDateKey(stateObj.endDate);
+    if (!from && !to && preset && preset !== 'all') {
+      const resolved = resolvePresetDateBounds(preset, today, options);
+      from = resolved.from;
+      to = resolved.to;
+    }
+    if (from && to && from > to) {
+      const tmp = from; from = to; to = tmp;
+    }
+    if (!from && !to) return true;
+    if (!endIso) return false;
+    if (from && endIso < from) return false;
+    if (to && endIso > to) return false;
+    return true;
+  }
+
+  function getScreenDateElements(cfg) {
+    return {
+      startInp: cfg.startInputId ? document.getElementById(cfg.startInputId) : null,
+      endInp: cfg.endInputId ? document.getElementById(cfg.endInputId) : null,
+      applyBtn: cfg.applyBtnId ? document.getElementById(cfg.applyBtnId) : null,
+      clearBtn: cfg.clearBtnId ? document.getElementById(cfg.clearBtnId) : null,
+      pills: cfg.pillSelector ? Array.from(document.querySelectorAll(cfg.pillSelector)) : []
+    };
+  }
+
+  function syncScreenDateRangeUi(cfg) {
+    if (!cfg || !cfg.stateObj) return;
+    const { startInp, endInp, clearBtn, pills } = getScreenDateElements(cfg);
+    if (startInp) startInp.value = cfg.stateObj.startDate || '';
+    if (endInp) endInp.value = cfg.stateObj.endDate || '';
+    if (clearBtn) {
+      clearBtn.style.display = (cfg.stateObj.startDate || cfg.stateObj.endDate) ? 'inline-flex' : 'none';
+    }
+    const attrKey = cfg.pillAttr || 'preset';
+    pills.forEach(p => {
+      const pVal = p.dataset ? p.dataset[attrKey] : '';
+      p.classList.toggle('active', !!cfg.stateObj.preset && pVal === cfg.stateObj.preset);
+    });
+  }
+
+  function resetScreenDateRangeUi(cfg) {
+    if (!cfg || !cfg.stateObj) return;
+    cfg.stateObj.preset = 'all';
+    const resolved = resolvePresetDateBounds('all', TODAY_STR, { allIsYear: !!cfg.allIsYear });
+    cfg.stateObj.startDate = resolved.from;
+    cfg.stateObj.endDate = resolved.to;
+    syncScreenDateRangeUi(cfg);
+  }
+
+  function bindScreenDateRangeControls(cfg) {
+    const { startInp, endInp, applyBtn, clearBtn, pills } = getScreenDateElements(cfg);
+    const attrKey = cfg.pillAttr || 'preset';
+
+    pills.forEach(pill => {
+      pill.addEventListener('click', (e) => {
+        const target = e.currentTarget || pill;
+        const key = (target && target.dataset && target.dataset[attrKey]) || 'all';
+        cfg.stateObj.preset = key;
+        const resolved = resolvePresetDateBounds(key, TODAY_STR, { allIsYear: !!cfg.allIsYear });
+        cfg.stateObj.startDate = resolved.from;
+        cfg.stateObj.endDate = resolved.to;
+        syncScreenDateRangeUi(cfg);
+        if (typeof cfg.onApply === 'function') cfg.onApply();
+      });
+    });
+
+    const handleCustomApply = () => {
+      let from = startInp ? toIsoDateKey(startInp.value) : '';
+      let to = endInp ? toIsoDateKey(endInp.value) : '';
+      if (from && to && from > to) {
+        const tmp = from; from = to; to = tmp;
+        if (typeof showToast === 'function') {
+          showToast('Đã tự động sắp xếp Từ ngày ≤ Đến ngày', 'info');
+        }
+      }
+      if (!from && !to) {
+        resetScreenDateRangeUi(cfg);
+      } else {
+        cfg.stateObj.preset = '';
+        cfg.stateObj.startDate = from;
+        cfg.stateObj.endDate = to;
+        syncScreenDateRangeUi(cfg);
+      }
+      if (typeof cfg.onApply === 'function') cfg.onApply();
+    };
+
+    if (applyBtn) applyBtn.addEventListener('click', handleCustomApply);
+    [startInp, endInp].forEach(inp => {
+      if (!inp) return;
+      inp.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter') {
+          if (typeof ev.preventDefault === 'function') ev.preventDefault();
+          handleCustomApply();
+        }
+      });
+    });
+
+    if (clearBtn) {
+      clearBtn.addEventListener('click', () => {
+        resetScreenDateRangeUi(cfg);
+        if (typeof cfg.onApply === 'function') cfg.onApply();
+      });
+    }
+
+    syncScreenDateRangeUi(cfg);
+  }
+
   // Active View State ('overview' | 'lecturer')
   let activeView = 'overview';
 
@@ -341,6 +548,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   let gvState = {
     preset: 'all',
+    startDate: '',
+    endDate: '',
     program: '',
     nguon: '',
     donVi: '',
@@ -460,6 +669,8 @@ document.addEventListener('DOMContentLoaded', () => {
   let nddtCurrentSort = { column: 'ngay_bd', dir: 'desc' };
   let nddtState = {
     preset: 'all',
+    startDate: '',
+    endDate: '',
     program: '',
     format: '',
     cbql: '',
@@ -479,6 +690,8 @@ document.addEventListener('DOMContentLoaded', () => {
   let pphtdtCurrentSort = { column: 'ngay_bd', dir: 'desc' };
   let pphtdtState = {
     preset: 'all',
+    startDate: '',
+    endDate: '',
     program: '',
     format: '',
     cbql: '',
@@ -498,6 +711,8 @@ document.addEventListener('DOMContentLoaded', () => {
   let csvcCompareMode = 'location';
   let csvcState = {
     preset: 'all',
+    startDate: '',
+    endDate: '',
     program: '',
     location: '',
     format: '',
@@ -1288,14 +1503,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Filter Class Overview
   function applyFilters() {
     filteredClasses = allClasses.filter(c => {
-      if (state.startDate || state.endDate) {
-        const classStart = c.ngay_bd;
-        const classEnd = c.ngay_kt;
-
-        if (!classStart || !classEnd) return false;
-        if (state.endDate && classStart > state.endDate) return false;
-        if (state.startDate && classEnd < state.startDate) return false;
-      }
+      if (!matchesItemTimeFilter(c, state, TODAY_STR, { allIsYear: true })) return false;
 
       if (state.location && c.dia_diem !== state.location) return false;
       if (state.format && getDisplayFormat(c) !== state.format) return false;
@@ -1312,6 +1520,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       return true;
     });
+    window.filteredClasses = filteredClasses;
 
     updateKPIs();
     renderCharts();
@@ -1666,66 +1875,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Event Listeners for Filters (Screen 1: Tình hình lớp học)
   function attachEventListeners() {
-    // Shared Date Presets (Scoped to Screen 1 only so Screens 2-4 preset pills are untouched)
-    document.querySelectorAll('#screenClassStatus .preset-pills .pill').forEach(pill => {
-      pill.addEventListener('click', (e) => {
-        document.querySelectorAll('#screenClassStatus .preset-pills .pill').forEach(p => p.classList.remove('active'));
-        e.currentTarget.classList.add('active');
-
-        const preset = e.currentTarget.dataset.preset;
-        state.preset = preset;
-
-        if (preset === 'today') {
-          state.startDate = TODAY_STR;
-          state.endDate = TODAY_STR;
-        } else if (preset === 'all') {
-          state.startDate = '2026-01-01';
-          state.endDate = '2026-12-31';
-        } else if (preset === 'q1') {
-          state.startDate = '2026-01-01';
-          state.endDate = '2026-03-31';
-        } else if (preset === 'q2') {
-          state.startDate = '2026-04-01';
-          state.endDate = '2026-06-30';
-        } else if (preset === 'q3') {
-          state.startDate = '2026-07-01';
-          state.endDate = '2026-09-30';
-        } else if (preset === 'q4') {
-          state.startDate = '2026-10-01';
-          state.endDate = '2026-12-31';
-        } else if (preset === 'completed') {
-          state.startDate = '2026-01-01';
-          state.endDate = TODAY_STR;
-        } else if (preset === 'ongoing') {
-          state.startDate = TODAY_STR;
-          state.endDate = TODAY_STR;
-        } else if (preset === 'upcoming') {
-          state.startDate = TODAY_STR;
-          state.endDate = '2026-12-31';
-        }
-
-        const startInp = document.getElementById('startDate');
-        const endInp = document.getElementById('endDate');
-        if (startInp) startInp.value = state.startDate;
-        if (endInp) endInp.value = state.endDate;
-
-        applyFilters();
-      });
+    bindScreenDateRangeControls({
+      stateObj: state,
+      startInputId: 'startDate',
+      endInputId: 'endDate',
+      applyBtnId: 'btnApplyCustomDate',
+      clearBtnId: null,
+      pillSelector: '#screenClassStatus .preset-pills .pill',
+      pillAttr: 'preset',
+      allIsYear: true,
+      onApply: applyFilters
     });
-
-    // Custom Date Range
-    const btnApplyCustomDate = document.getElementById('btnApplyCustomDate');
-    if (btnApplyCustomDate) {
-      btnApplyCustomDate.addEventListener('click', () => {
-        const startInp = document.getElementById('startDate');
-        const endInp = document.getElementById('endDate');
-        if (startInp) state.startDate = startInp.value;
-        if (endInp) state.endDate = endInp.value;
-        document.querySelectorAll('#screenClassStatus .preset-pills .pill').forEach(p => p.classList.remove('active'));
-
-        applyFilters();
-      });
-    }
 
     // Mobile Toggle
     const btnToggleMobile = document.getElementById('btnToggleMobileFilter');
@@ -2121,15 +2281,19 @@ document.addEventListener('DOMContentLoaded', () => {
     if (btnBmNew) btnBmNew.addEventListener('click', () => switchNddtTemplate('new'));
     if (btnBmOld) btnBmOld.addEventListener('click', () => switchNddtTemplate('old'));
 
-    // Preset pills
-    document.querySelectorAll('#nddtPresetPills .pill').forEach(pill => {
-      pill.addEventListener('click', () => {
-        document.querySelectorAll('#nddtPresetPills .pill').forEach(p => p.classList.remove('active'));
-        pill.classList.add('active');
-        nddtState.preset = pill.dataset.preset;
-        applyNddtFilters();
-      });
-    });
+    // Preset pills & Date range inputs (unified End Date rule)
+    const nddtDateCfg = {
+      stateObj: nddtState,
+      startInputId: 'nddtStartDate',
+      endInputId: 'nddtEndDate',
+      applyBtnId: 'btnApplyNddtDate',
+      clearBtnId: 'btnClearNddtDate',
+      pillSelector: '#nddtPresetPills .pill',
+      pillAttr: 'preset',
+      allIsYear: false,
+      onApply: applyNddtFilters
+    };
+    bindScreenDateRangeControls(nddtDateCfg);
 
     // Dropdowns
     const progSelect = document.getElementById('filterNddtProgram');
@@ -2177,17 +2341,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnReset = document.getElementById('btnResetNddtFilters');
     if (btnReset) {
       btnReset.addEventListener('click', () => {
-        nddtState.preset = 'all';
+        resetScreenDateRangeUi(nddtDateCfg);
         nddtState.program = '';
         nddtState.format = '';
         nddtState.cbql = '';
         nddtState.ratingLevel = '';
         nddtState.searchQuery = '';
-
-        document.querySelectorAll('#nddtPresetPills .pill').forEach(p => {
-          if (p.dataset.preset === 'all') p.classList.add('active');
-          else p.classList.remove('active');
-        });
 
         if (progSelect) progSelect.value = '';
         if (fmtSelect) fmtSelect.value = '';
@@ -2245,25 +2404,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function applyNddtFilters() {
     filteredNddtItems = allNddtItems.filter(item => {
-      // 1. Preset Time Filter
-      if (nddtState.preset !== 'all') {
-        const dateStr = item.ngay_bd || '';
-        if (nddtState.preset === '2026') {
-          if (!dateStr.startsWith('2026') && !(item.ngay_bd_raw && item.ngay_bd_raw.includes('2026'))) return false;
-        } else if (nddtState.preset === 'q1') {
-          const m = parseInt(dateStr.slice(5, 7), 10);
-          if (!(m >= 1 && m <= 3)) return false;
-        } else if (nddtState.preset === 'q2') {
-          const m = parseInt(dateStr.slice(5, 7), 10);
-          if (!(m >= 4 && m <= 6)) return false;
-        } else if (nddtState.preset === 'q3') {
-          const m = parseInt(dateStr.slice(5, 7), 10);
-          if (!(m >= 7 && m <= 9)) return false;
-        } else if (nddtState.preset === 'q4') {
-          const m = parseInt(dateStr.slice(5, 7), 10);
-          if (!(m >= 10 && m <= 12)) return false;
-        }
-      }
+      // 1. Unified Time / Date Range Filter (Ngày kết thúc lớp)
+      if (!matchesItemTimeFilter(item, nddtState, TODAY_STR)) return false;
 
       // 2. Program Filter
       if (nddtState.program && item.chuong_trinh !== nddtState.program) return false;
@@ -2290,6 +2432,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       return true;
     });
+    window.filteredNddtItems = filteredNddtItems;
 
     updateNddtKPIs();
     renderNddtCharts();
@@ -3152,15 +3295,19 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function attachPphtdtEventListeners() {
-    // 1. Preset Time Pills
-    document.querySelectorAll('#pphtdtPresetPills .pill').forEach(pill => {
-      pill.addEventListener('click', () => {
-        document.querySelectorAll('#pphtdtPresetPills .pill').forEach(p => p.classList.remove('active'));
-        pill.classList.add('active');
-        pphtdtState.preset = pill.dataset.preset || 'all';
-        applyPphtdtFilters();
-      });
-    });
+    // 1. Preset Time Pills & Date Range Filter (unified End Date rule)
+    const pphtdtDateCfg = {
+      stateObj: pphtdtState,
+      startInputId: 'pphtdtStartDate',
+      endInputId: 'pphtdtEndDate',
+      applyBtnId: 'btnApplyPphtdtDate',
+      clearBtnId: 'btnClearPphtdtDate',
+      pillSelector: '#pphtdtPresetPills .pill',
+      pillAttr: 'preset',
+      allIsYear: false,
+      onApply: applyPphtdtFilters
+    };
+    bindScreenDateRangeControls(pphtdtDateCfg);
 
     // 2. Dropdown Filters
     const progSelect = document.getElementById('filterPphtdtProgram');
@@ -3208,17 +3355,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnReset = document.getElementById('btnResetPphtdtFilters');
     if (btnReset) {
       btnReset.addEventListener('click', () => {
-        pphtdtState.preset = 'all';
+        resetScreenDateRangeUi(pphtdtDateCfg);
         pphtdtState.program = '';
         pphtdtState.format = '';
         pphtdtState.cbql = '';
         pphtdtState.ratingLevel = '';
         pphtdtState.searchQuery = '';
-
-        document.querySelectorAll('#pphtdtPresetPills .pill').forEach(p => {
-          if (p.dataset.preset === 'all') p.classList.add('active');
-          else p.classList.remove('active');
-        });
 
         if (progSelect) progSelect.value = '';
         if (fmtSelect) fmtSelect.value = '';
@@ -3258,25 +3400,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function applyPphtdtFilters() {
     filteredPphtdtItems = allPphtdtItems.filter(item => {
-      // 1. Preset Time Filter
-      if (pphtdtState.preset !== 'all') {
-        const dateStr = item.ngay_bd || '';
-        if (pphtdtState.preset === '2026') {
-          if (!dateStr.startsWith('2026') && !(item.ngay_bd_raw && item.ngay_bd_raw.includes('2026'))) return false;
-        } else if (pphtdtState.preset === 'q1') {
-          const m = parseInt(dateStr.slice(5, 7), 10);
-          if (!(m >= 1 && m <= 3)) return false;
-        } else if (pphtdtState.preset === 'q2') {
-          const m = parseInt(dateStr.slice(5, 7), 10);
-          if (!(m >= 4 && m <= 6)) return false;
-        } else if (pphtdtState.preset === 'q3') {
-          const m = parseInt(dateStr.slice(5, 7), 10);
-          if (!(m >= 7 && m <= 9)) return false;
-        } else if (pphtdtState.preset === 'q4') {
-          const m = parseInt(dateStr.slice(5, 7), 10);
-          if (!(m >= 10 && m <= 12)) return false;
-        }
-      }
+      // 1. Unified Time / Date Range Filter (Ngày kết thúc lớp)
+      if (!matchesItemTimeFilter(item, pphtdtState, TODAY_STR)) return false;
 
       // 2. Program Filter
       if (pphtdtState.program && item.chuong_trinh !== pphtdtState.program) return false;
@@ -3303,6 +3428,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       return true;
     });
+    window.filteredPphtdtItems = filteredPphtdtItems;
 
     updatePphtdtKPIs();
     renderPphtdtCharts();
@@ -4344,15 +4470,19 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function attachCsvcEventListeners() {
-    // 1. Preset Time Pills
-    document.querySelectorAll('#csvcPresetPills .pill').forEach(pill => {
-      pill.addEventListener('click', () => {
-        document.querySelectorAll('#csvcPresetPills .pill').forEach(p => p.classList.remove('active'));
-        pill.classList.add('active');
-        csvcState.preset = pill.dataset.preset || 'all';
-        applyCsvcFilters();
-      });
-    });
+    // 1. Preset Time Pills & Date Range Filter (unified End Date rule)
+    const csvcDateCfg = {
+      stateObj: csvcState,
+      startInputId: 'csvcStartDate',
+      endInputId: 'csvcEndDate',
+      applyBtnId: 'btnApplyCsvcDate',
+      clearBtnId: 'btnClearCsvcDate',
+      pillSelector: '#csvcPresetPills .pill',
+      pillAttr: 'preset',
+      allIsYear: false,
+      onApply: applyCsvcFilters
+    };
+    bindScreenDateRangeControls(csvcDateCfg);
 
     // 2. Dropdown Filters
     const progSelect = document.getElementById('filterCsvcProgram');
@@ -4408,18 +4538,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnReset = document.getElementById('btnResetCsvcFilters');
     if (btnReset) {
       btnReset.addEventListener('click', () => {
-        csvcState.preset = 'all';
+        resetScreenDateRangeUi(csvcDateCfg);
         csvcState.program = '';
         csvcState.location = '';
         csvcState.format = '';
         csvcState.cbql = '';
         csvcState.ratingLevel = '';
         csvcState.searchQuery = '';
-
-        document.querySelectorAll('#csvcPresetPills .pill').forEach(p => {
-          if (p.dataset.preset === 'all') p.classList.add('active');
-          else p.classList.remove('active');
-        });
 
         if (progSelect) progSelect.value = '';
         if (locSelect) locSelect.value = '';
@@ -4488,22 +4613,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function applyCsvcFilters() {
     filteredCsvcItems = allCsvcItems.filter(item => {
-      // 1. Time Preset Filter (Date Range)
-      if (csvcState.preset && csvcState.preset !== 'all') {
-        const dStr = item.ngay_bd_raw || item.ngay_bd;
-        if (dStr) {
-          const parts = dStr.split('/');
-          if (parts.length === 3) {
-            const m = parseInt(parts[1], 10);
-            const y = parseInt(parts[2], 10);
-            if (csvcState.preset === '2026' && y !== 2026) return false;
-            if (csvcState.preset === 'q1' && (m < 1 || m > 3)) return false;
-            if (csvcState.preset === 'q2' && (m < 4 || m > 6)) return false;
-            if (csvcState.preset === 'q3' && (m < 7 || m > 9)) return false;
-            if (csvcState.preset === 'q4' && (m < 10 || m > 12)) return false;
-          }
-        }
-      }
+      // 1. Unified Time / Date Range Filter (Ngày kết thúc lớp)
+      if (!matchesItemTimeFilter(item, csvcState, TODAY_STR)) return false;
 
       // 2. Program Filter
       if (csvcState.program && item.chuong_trinh !== csvcState.program) return false;
@@ -4537,6 +4648,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       return true;
     });
+    window.filteredCsvcItems = filteredCsvcItems;
 
     updateCsvcKPIs();
     renderCsvcCharts();
@@ -5436,15 +5548,19 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function attachGvEventListeners() {
-    // 1. Preset Buttons
-    document.querySelectorAll('.gv-preset-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('.gv-preset-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        gvState.preset = btn.dataset.gvPreset || 'all';
-        applyGvFilters();
-      });
-    });
+    // 1. Preset Buttons & Date Range Filter (unified End Date rule)
+    const gvDateCfg = {
+      stateObj: gvState,
+      startInputId: 'gvStartDate',
+      endInputId: 'gvEndDate',
+      applyBtnId: 'btnApplyGvDate',
+      clearBtnId: 'btnClearGvDate',
+      pillSelector: '.gv-preset-btn',
+      pillAttr: 'gvPreset',
+      allIsYear: false,
+      onApply: applyGvFilters
+    };
+    bindScreenDateRangeControls(gvDateCfg);
 
     // 2. Dropdown Filters
     const progSelect = document.getElementById('filterGvProgram');
@@ -5512,8 +5628,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnReset = document.getElementById('btnResetGvFilter');
     if (btnReset) {
       btnReset.addEventListener('click', () => {
-        gvState = {
+        Object.assign(gvState, {
           preset: 'all',
+          startDate: '',
+          endDate: '',
           program: '',
           nguon: '',
           donVi: '',
@@ -5521,11 +5639,9 @@ document.addEventListener('DOMContentLoaded', () => {
           lecturer: '',
           ratingLevel: '',
           searchQuery: ''
-        };
+        });
         // Reset inputs
-        document.querySelectorAll('.gv-preset-btn').forEach(b => b.classList.remove('active'));
-        const defaultPreset = document.querySelector('.gv-preset-btn[data-gv-preset="all"]');
-        if (defaultPreset) defaultPreset.classList.add('active');
+        syncScreenDateRangeUi(gvDateCfg);
 
         if (progSelect) progSelect.value = '';
         if (nguonSelect) nguonSelect.value = '';
@@ -5667,23 +5783,8 @@ document.addEventListener('DOMContentLoaded', () => {
   function applyGvFilters() {
     let filtered = [...allGvItems];
 
-    // 1. Time Preset Filter
-    if (gvState.preset && gvState.preset !== 'all') {
-      filtered = filtered.filter(item => {
-        if (!item.ngay_bd) return true;
-        const parts = item.ngay_bd.split('/');
-        if (parts.length < 3) return true;
-        const month = parseInt(parts[1], 10);
-        const year = parseInt(parts[2], 10);
-
-        if (gvState.preset === '2026') return year === 2026;
-        if (gvState.preset === 'q1') return year === 2026 && month >= 1 && month <= 3;
-        if (gvState.preset === 'q2') return year === 2026 && month >= 4 && month <= 6;
-        if (gvState.preset === 'q3') return year === 2026 && month >= 7 && month <= 9;
-        if (gvState.preset === 'q4') return year === 2026 && month >= 10 && month <= 12;
-        return true;
-      });
-    }
+    // 1. Unified Time / Date Range Filter (Ngày kết thúc lớp)
+    filtered = filtered.filter(item => matchesItemTimeFilter(item, gvState, TODAY_STR));
 
     // 2. Program Filter
     if (gvState.program) {
@@ -7027,15 +7128,19 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function attachDgcEventListeners() {
-    // 1. Preset Buttons
-    document.querySelectorAll('.dgc-preset-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('.dgc-preset-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        dgcState.preset = btn.dataset.dgcPreset || 'all';
-        applyDgcFilters();
-      });
-    });
+    // 1. Preset Buttons & Date Range Filter (unified End Date rule)
+    const dgcDateCfg = {
+      stateObj: dgcState,
+      startInputId: 'dgcStartDate',
+      endInputId: 'dgcEndDate',
+      applyBtnId: 'btnApplyDgcDate',
+      clearBtnId: 'btnClearDgcDate',
+      pillSelector: '.dgc-preset-btn',
+      pillAttr: 'dgcPreset',
+      allIsYear: false,
+      onApply: applyDgcFilters
+    };
+    bindScreenDateRangeControls(dgcDateCfg);
 
     // 2. Dropdown Filters
     const progSelect = document.getElementById('filterDgcProgram');
@@ -7083,7 +7188,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnReset = document.getElementById('btnResetDgcFilter');
     if (btnReset) {
       btnReset.addEventListener('click', () => {
-        dgcState = {
+        Object.assign(dgcState, {
           preset: 'all',
           startDate: '',
           endDate: '',
@@ -7092,11 +7197,9 @@ document.addEventListener('DOMContentLoaded', () => {
           cbql: '',
           ratingLevel: '',
           searchQuery: ''
-        };
-        // Reset button states
-        document.querySelectorAll('.dgc-preset-btn').forEach(b => b.classList.remove('active'));
-        const defaultPreset = document.querySelector('.dgc-preset-btn[data-dgc-preset="all"]');
-        if (defaultPreset) defaultPreset.classList.add('active');
+        });
+        // Reset button states & date inputs
+        syncScreenDateRangeUi(dgcDateCfg);
 
         if (progSelect) progSelect.value = '';
         if (fmtSelect) fmtSelect.value = '';
@@ -7261,33 +7364,8 @@ document.addEventListener('DOMContentLoaded', () => {
   function applyDgcFilters() {
     let filtered = [...allDgcItems];
 
-    // 1. Time Preset Filter
-    if (dgcState.preset && dgcState.preset !== 'all') {
-      const today = getTodayGMT7Str();
-      filtered = filtered.filter(item => {
-        const dt = item.ngay_bd || (item.ngay_bd_raw ? parseDateStrISO(item.ngay_bd_raw) : '');
-        if (!dt) return true;
-        if (dgcState.preset === 'today') return dt === today;
-        if (dgcState.preset === 'thisWeek') {
-          const cur = new Date(today);
-          const day = cur.getDay() || 7;
-          const mon = new Date(cur); mon.setDate(cur.getDate() - day + 1);
-          const sun = new Date(cur); sun.setDate(cur.getDate() - day + 7);
-          const monStr = mon.toISOString().slice(0, 10);
-          const sunStr = sun.toISOString().slice(0, 10);
-          return dt >= monStr && dt <= sunStr;
-        }
-        if (dgcState.preset === 'thisMonth') {
-          return dt.slice(0, 7) === today.slice(0, 7);
-        }
-        if (dgcState.preset === 'q1') return dt >= '2026-01-01' && dt <= '2026-03-31';
-        if (dgcState.preset === 'q2') return dt >= '2026-04-01' && dt <= '2026-06-30';
-        if (dgcState.preset === 'q3') return dt >= '2026-07-01' && dt <= '2026-09-30';
-        if (dgcState.preset === 'q4') return dt >= '2026-10-01' && dt <= '2026-12-31';
-        if (dgcState.preset === 'thisYear' || dgcState.preset === '2026') return dt.startsWith('2026');
-        return true;
-      });
-    }
+    // 1. Unified Time / Date Range Filter (Ngày kết thúc lớp)
+    filtered = filtered.filter(item => matchesItemTimeFilter(item, dgcState, TODAY_STR));
 
     // 2. Program Filter
     if (dgcState.program) {
@@ -7349,6 +7427,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     filteredDgcItems = filtered;
+    window.filteredDgcItems = filteredDgcItems;
 
     // Update Header Sort Icons
     document.querySelectorAll('#dgcClassesTable th[data-dgc-sort]').forEach(th => {
@@ -8385,7 +8464,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // ==========================================
 
   window.reportState = window.reportState || {
-    mode: 'class', // 'class' | 'program'
+    mode: 'class', // 'class' | 'program' | 'time'
     selectedClass: '',
     selectedProgram: '',
     previousProgram: '', // Stores program code when drilling down to a class
@@ -8398,6 +8477,21 @@ document.addEventListener('DOMContentLoaded', () => {
     compareMetric: 'all',
     currentClassData: null,
     currentProgramData: null,
+    currentTimeData: null,
+    timeGranularity: 'quarter', // 'month' | 'quarter' | 'year'
+    timeYear: '2026',
+    timePeriod: 'all',
+    timeDateFrom: '',
+    timeDateTo: '',
+    timeProgram: '',
+    timeFormat: '',
+    timeLocation: '',
+    timeQualityMode: 'raw', // 'raw' | 'norm'
+    timeRatingDistModule: 'all', // 'all' | 'nddt' | 'ppht' | 'csvc'
+    timeGvCompareMode: 'lecturer', // 'lecturer' | 'unit'
+    timeGvRankMetric: 'gpa', // 'gpa' | 'classes' | 'hours'
+    timeGvTopLimit: '15', // '10' | '15' | '20' | '30' | 'all'
+    timeDrilldownPeriod: null,
     pphtFormatFilter: 'all', // 'all' | 'direct' | 'hybrid'
     nddtFormatFilter: 'all'
   };
@@ -8412,7 +8506,13 @@ document.addEventListener('DOMContentLoaded', () => {
     csvcLocation: null,
     gvComparison: null,
     dgcKtChart: null,
-    dgcKnChart: null
+    dgcKnChart: null,
+    timeVolumeTrend: null,
+    timeFormatComposition: null,
+    timeQualityTrend: null,
+    timeRatingDistribution: null,
+    timeFormatComparison: null,
+    timeGvAnalytics: null
   };
   var reportCharts = window.reportCharts;
 
@@ -9116,6 +9216,380 @@ document.addEventListener('DOMContentLoaded', () => {
     };
   }
 
+  /**
+   * Aggregate GV evaluation records by Unit / Partner with strict hour deduplication.
+   */
+  function aggregateGvUnitList(matches) {
+    if (!Array.isArray(matches) || matches.length === 0) return [];
+    const unitMap = new Map();
+
+    matches.forEach(g => {
+      if (!g) return;
+      const unitName = (g.don_vi || g.donVi || 'Khác / Chưa rõ').trim() || 'Khác / Chưa rõ';
+      const rawName = (g.ten_gv || g.name || 'Chưa rõ').trim();
+      const gvKey = (typeof normalizeLecturerKey === 'function')
+        ? normalizeLecturerKey(rawName)
+        : rawName.toLowerCase();
+      const normMl = normalizeReportClassKey(g.ma_lop || '');
+      const normContent = normalizeContentKey(g.noi_dung_giang || g.mon || '');
+      const unitHourKey = gvKey + '__' + normMl + '__' + (normContent || 'chung');
+      const hours = Number(g.so_tiet) || 0;
+
+      if (!unitMap.has(unitName)) {
+        unitMap.set(unitName, {
+          unit: unitName,
+          teachingUnits: new Map(),
+          lecturers: new Set(),
+          classes: new Set(),
+          v1: 0, s1: 0,
+          v2: 0, s2: 0,
+          v3: 0, s3: 0,
+          vTb: 0, sTb: 0
+        });
+      }
+
+      const u = unitMap.get(unitName);
+      if (gvKey) u.lecturers.add(gvKey);
+      if (normMl) u.classes.add(normMl);
+
+      if (!u.teachingUnits.has(unitHourKey) || u.teachingUnits.get(unitHourKey) < hours) {
+        u.teachingUnits.set(unitHourKey, hours);
+      }
+
+      const v1 = Number(g.tong_phieu_ktcm) || 0;
+      const v2 = Number(g.tong_phieu_knsp) || 0;
+      const v3 = Number(g.tong_phieu_tdtp) || 0;
+      const vTb = Number(g.tong_phieu) || Math.max(v1, v2, v3);
+      if (v1 > 0 && Number(g.diem_ktcm) > 0) { u.v1 += v1; u.s1 += Number(g.diem_ktcm) * v1; }
+      if (v2 > 0 && Number(g.diem_knsp) > 0) { u.v2 += v2; u.s2 += Number(g.diem_knsp) * v2; }
+      if (v3 > 0 && Number(g.diem_tdtp) > 0) { u.v3 += v3; u.s3 += Number(g.diem_tdtp) * v3; }
+      if (vTb > 0 && Number(g.diem_tb) > 0) { u.vTb += vTb; u.sTb += Number(g.diem_tb) * vTb; }
+    });
+
+    return Array.from(unitMap.values()).map(u => {
+      let totHours = 0;
+      u.teachingUnits.forEach(h => { totHours += h; });
+      const sc1 = u.v1 > 0 ? Number((u.s1 / u.v1).toFixed(2)) : 0;
+      const sc2 = u.v2 > 0 ? Number((u.s2 / u.v2).toFixed(2)) : 0;
+      const sc3 = u.v3 > 0 ? Number((u.s3 / u.v3).toFixed(2)) : 0;
+      let cSum = 0; let cCount = 0;
+      if (sc1 > 0) { cSum += sc1; cCount++; }
+      if (sc2 > 0) { cSum += sc2; cCount++; }
+      if (sc3 > 0) { cSum += sc3; cCount++; }
+      const scAll = cCount > 0 ? Number((cSum / cCount).toFixed(2)) : (u.vTb > 0 ? Number((u.sTb / u.vTb).toFixed(2)) : 0);
+
+      return {
+        name: u.unit,
+        ten_gv: u.unit,
+        donVi: u.unit,
+        don_vi: u.unit,
+        gvCount: u.lecturers.size,
+        classesCount: u.classes.size || 1,
+        totalHours: totHours,
+        so_tiet: totHours,
+        totalVotes: Math.max(u.v1, u.v2, u.v3, u.vTb),
+        diem_ktcm: sc1,
+        diem_knsp: sc2,
+        diem_tdtp: sc3,
+        diem_tb: scAll
+      };
+    });
+  }
+
+  /**
+   * Sort and limit aggregated lecturer/unit evaluation records by active ranking metric.
+   */
+  function sortAndLimitGvEvaluationList(list, rankMetric, topLimit) {
+    const items = Array.isArray(list) ? list.slice() : [];
+    if (rankMetric === 'classes') {
+      items.sort((a, b) => (b.classesCount - a.classesCount) || (b.totalHours - a.totalHours) || (b.diem_tb - a.diem_tb));
+    } else if (rankMetric === 'hours') {
+      items.sort((a, b) => (b.totalHours - a.totalHours) || (b.classesCount - a.classesCount) || (b.diem_tb - a.diem_tb));
+    } else {
+      items.sort((a, b) => (b.diem_tb - a.diem_tb) || (b.classesCount - a.classesCount) || (b.totalHours - a.totalHours));
+    }
+
+    const totalCount = items.length;
+    let displayList = items;
+    let isLimited = false;
+    if (topLimit && topLimit !== 'all') {
+      const limit = parseInt(topLimit, 10);
+      if (!isNaN(limit) && limit > 0 && limit < totalCount) {
+        displayList = items.slice(0, limit);
+        isLimited = true;
+      }
+    }
+    return { displayList, totalCount, isLimited };
+  }
+
+  /**
+   * Attach idempotent horizontal mouse-drag scrolling to wide chart containers.
+   */
+  function enableHorizontalDragScroll(scrollOuter) {
+    if (!scrollOuter || scrollOuter._hasDragScroll || typeof scrollOuter.addEventListener !== 'function') return;
+    scrollOuter._hasDragScroll = true;
+    let isDown = false;
+    let startX = 0;
+    let scrollLeft = 0;
+
+    scrollOuter.addEventListener('mousedown', (e) => {
+      isDown = true;
+      startX = e.pageX - (scrollOuter.offsetLeft || 0);
+      scrollLeft = scrollOuter.scrollLeft || 0;
+    });
+    scrollOuter.addEventListener('mouseleave', () => { isDown = false; });
+    scrollOuter.addEventListener('mouseup', () => { isDown = false; });
+    scrollOuter.addEventListener('mousemove', (e) => {
+      if (!isDown) return;
+      if (typeof e.preventDefault === 'function') e.preventDefault();
+      const x = e.pageX - (scrollOuter.offsetLeft || 0);
+      scrollOuter.scrollLeft = scrollLeft - (x - startX) * 1.5;
+    });
+  }
+
+  /**
+   * Build the Chart.js configuration matching the Đánh giá giảng viên screen visual.
+   */
+  function buildGvEvaluationComboChartConfig(displayList, compareMode) {
+    const labels = displayList.map(it => it.name || it.ten_gv || 'Chưa rõ');
+    const ktcmData = displayList.map(it => (it.diem_ktcm > 0 ? Number(Number(it.diem_ktcm).toFixed(2)) : null));
+    const knspData = displayList.map(it => (it.diem_knsp > 0 ? Number(Number(it.diem_knsp).toFixed(2)) : null));
+    const tdtpData = displayList.map(it => (it.diem_tdtp > 0 ? Number(Number(it.diem_tdtp).toFixed(2)) : null));
+    const hoursData = displayList.map(it => Number(it.totalHours || it.hours || 0));
+    const classCountData = displayList.map(it => Number(it.classesCount || 0));
+
+    const maxHours = Math.max(...hoursData, 10);
+    const suggestedMaxHours = Math.max(Math.ceil(maxHours * 1.25), 20);
+    const allScores = [...ktcmData, ...knspData, ...tdtpData].filter(v => v !== null && v > 0);
+    const minScore = allScores.length > 0 && Math.min(...allScores) < 3.5
+      ? Math.max(1.0, Math.floor((Math.min(...allScores) - 0.25) * 4) / 4)
+      : 3.5;
+
+    return {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            type: 'line',
+            label: '1. Chuyên môn (KTCM)',
+            data: ktcmData,
+            borderColor: '#8C1D40',
+            backgroundColor: '#8C1D40',
+            borderWidth: 2.8,
+            pointRadius: 5,
+            pointHoverRadius: 7,
+            pointStyle: 'circle',
+            pointBackgroundColor: '#FFFFFF',
+            pointBorderColor: '#8C1D40',
+            pointBorderWidth: 2.5,
+            tension: 0.25,
+            spanGaps: true,
+            yAxisID: 'yScores',
+            order: 1
+          },
+          {
+            type: 'line',
+            label: '2. Sư phạm (KNSP)',
+            data: knspData,
+            borderColor: '#0284C7',
+            backgroundColor: '#0284C7',
+            borderWidth: 2.8,
+            pointRadius: 5,
+            pointHoverRadius: 7,
+            pointStyle: 'rectRot',
+            pointBackgroundColor: '#FFFFFF',
+            pointBorderColor: '#0284C7',
+            pointBorderWidth: 2.5,
+            tension: 0.25,
+            spanGaps: true,
+            yAxisID: 'yScores',
+            order: 1
+          },
+          {
+            type: 'line',
+            label: '3. Tác phong (TDTP)',
+            data: tdtpData,
+            borderColor: '#059669',
+            backgroundColor: '#059669',
+            borderWidth: 2.8,
+            pointRadius: 5,
+            pointHoverRadius: 7,
+            pointStyle: 'triangle',
+            pointBackgroundColor: '#FFFFFF',
+            pointBorderColor: '#059669',
+            pointBorderWidth: 2.5,
+            tension: 0.25,
+            spanGaps: true,
+            yAxisID: 'yScores',
+            order: 1
+          },
+          {
+            type: 'bar',
+            label: 'Tổng số tiết',
+            data: hoursData,
+            backgroundColor: 'rgba(148, 163, 184, 0.22)',
+            borderColor: 'rgba(100, 116, 139, 0.45)',
+            borderWidth: 1.2,
+            borderRadius: 4,
+            barPercentage: 0.55,
+            categoryPercentage: 0.7,
+            yAxisID: 'yVolume',
+            order: 2
+          },
+          {
+            type: 'bar',
+            label: 'Tổng số lớp',
+            data: classCountData,
+            backgroundColor: 'rgba(217, 119, 6, 0.2)',
+            borderColor: 'rgba(217, 119, 6, 0.45)',
+            borderWidth: 1.2,
+            borderRadius: 4,
+            barPercentage: 0.55,
+            categoryPercentage: 0.7,
+            yAxisID: 'yVolume',
+            order: 2
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: 'top',
+            labels: {
+              boxWidth: 13,
+              padding: 10,
+              font: { size: 10.5, weight: '700' },
+              usePointStyle: true
+            }
+          },
+          tooltip: {
+            mode: 'index',
+            intersect: false,
+            callbacks: {
+              title: function (items) {
+                if (!items || items.length === 0) return '';
+                const it = displayList[items[0].dataIndex];
+                if (!it) return '';
+                if (compareMode === 'unit') {
+                  return (it.name || '') + ' (' + (it.gvCount || 0) + ' GV)';
+                }
+                return (it.name || '') + (it.donVi ? ' (' + it.donVi + ')' : '');
+              },
+              beforeBody: function (items) {
+                if (!items || items.length === 0) return [];
+                const it = displayList[items[0].dataIndex];
+                if (!it) return [];
+                return [
+                  '📚 Số lớp giảng dạy: ' + (it.classesCount || 0) + ' lớp',
+                  '⏱️ Số tiết giảng dạy: ' + (it.totalHours || 0) + ' tiết',
+                  '⭐ Điểm TB chung: ' + (it.diem_tb > 0 ? Number(it.diem_tb).toFixed(2) + ' / 5.0' : 'Chưa có phiếu'),
+                  '--------------------------------'
+                ];
+              },
+              label: function (context) {
+                const ds = context.dataset;
+                const val = context.parsed.y;
+                if (val === null || val === undefined) return '';
+                if (ds.yAxisID === 'yVolume') {
+                  if (ds.label.includes('lớp')) return ds.label + ': ' + val + ' lớp';
+                  return ds.label + ': ' + val + ' tiết';
+                }
+                return ds.label + ': ' + Number(val).toFixed(2) + ' / 5.0';
+              }
+            }
+          }
+        },
+        scales: {
+          yScores: {
+            type: 'linear',
+            position: 'left',
+            min: minScore,
+            max: 5.0,
+            ticks: {
+              stepSize: 0.25,
+              callback: function (v) { return Number(v).toFixed(2); },
+              font: { size: 10.5, weight: '700' },
+              color: '#8C1D40'
+            },
+            title: {
+              display: true,
+              text: 'Điểm đánh giá (1.0 - 5.0)',
+              font: { size: 10, weight: '700' },
+              color: '#8C1D40'
+            },
+            grid: { color: '#F1F5F9' }
+          },
+          yVolume: {
+            type: 'linear',
+            position: 'right',
+            beginAtZero: true,
+            suggestedMax: suggestedMaxHours,
+            ticks: {
+              font: { size: 10, weight: '600' },
+              color: '#475569',
+              callback: function (v) { return Number.isInteger(v) ? v : ''; }
+            },
+            title: {
+              display: true,
+              text: 'Số tiết / Số lớp',
+              font: { size: 10, weight: '700' },
+              color: '#475569'
+            },
+            grid: { display: false }
+          },
+          x: {
+            ticks: {
+              font: { size: 10.5, weight: '600' },
+              color: '#1E293B',
+              maxRotation: 45,
+              minRotation: 30,
+              autoSkip: false
+            },
+            grid: { display: false }
+          }
+        }
+      }
+    };
+  }
+
+  /**
+   * Resolve true survey ballot count for a class across evaluation modules (never fall back to hv_thuc_te).
+   */
+  function resolveSurveyVotesCount(pphtVotes, nddtVotes, csvcVotes, dgcVotes, gvMaxVotes) {
+    const candidates = [pphtVotes, nddtVotes, csvcVotes, dgcVotes, gvMaxVotes];
+    for (let i = 0; i < candidates.length; i++) {
+      const val = Number(candidates[i]) || 0;
+      if (val > 0) return val;
+    }
+    return 0;
+  }
+
+  /**
+   * Compute survey response rate strictly across classes with valid responses:
+   * totalVotes / surveyedHvThucTe * 100 (classes without responses are excluded from denominator).
+   */
+  function computeSurveyResponseRate(totalVotes, surveyedHvThucTe, capAt100) {
+    const votes = Number(totalVotes) || 0;
+    const hv = Number(surveyedHvThucTe) || 0;
+    if (votes <= 0 || hv <= 0) return 0;
+    const pct = Number(((votes / hv) * 100).toFixed(1));
+    return capAt100 ? Math.min(100, pct) : pct;
+  }
+
+  /**
+   * Render survey ballot count table cell, showing muted placeholder when no evaluations exist.
+   */
+  function renderVotesCountCell(votes, emptySymbol) {
+    const v = Number(votes) || 0;
+    if (v > 0) {
+      return '<td style="text-align: center; font-weight: 700; color: #1E293B;">' + v.toLocaleString('vi-VN') + '</td>';
+    }
+    return '<td style="text-align: center; font-weight: 700; color: #94A3B8;" title="Không có phiếu đánh giá">' + (emptySymbol || '-') + '</td>';
+  }
+
   // --- CORE AGGREGATOR 1: DETAILED CLASS REPORT ---
   function getDetailedClassReport(keyOrCode) {
     if (!keyOrCode) return null;
@@ -9472,10 +9946,15 @@ document.addEventListener('DOMContentLoaded', () => {
       };
     }
 
-    // Total survey votes for this class
+    // Total survey votes for this class (strictly from actual survey modules, never hv_thuc_te)
     const votesFromPpht = pphtData ? (pphtData.votes || pphtData.tong_phieu || 0) : 0;
     const votesFromNddt = nddtData ? (nddtData.votes || nddtData.tong_phieu || 0) : 0;
-    const votes = votesFromPpht > 0 ? votesFromPpht : (votesFromNddt > 0 ? votesFromNddt : (baseClass.hv_thuc_te || 0));
+    const votesFromCsvc = csvcData ? (csvcData.votes || csvcData.so_phieu || csvcData.tong_phieu || 0) : 0;
+    const votesFromDgc = dgcData ? (dgcData.votes || dgcData.tong_phieu || 0) : 0;
+    const votesFromGvMax = (Array.isArray(gvList) && gvList.length > 0)
+      ? Math.max(0, ...gvList.map(g => Number(g.totalVotes || g.tong_phieu) || 0))
+      : 0;
+    const votes = resolveSurveyVotesCount(votesFromPpht, votesFromNddt, votesFromCsvc, votesFromDgc, votesFromGvMax);
     const responseRate = hvThucTeTotal > 0 ? Math.min(100, Number(((votes / hvThucTeTotal) * 100).toFixed(1))) : 0;
 
     return {
@@ -9565,11 +10044,31 @@ document.addEventListener('DOMContentLoaded', () => {
     const gvMatches = getRepGv().filter(g => normClassSet.has(normalizeReportClassKey(g.ma_lop)));
     const dgcMatches = getRepDgc().filter(d => normClassSet.has(normalizeReportClassKey(d.ma_lop)));
 
-    // Total votes & response rate
-    const votesFromNddt = nddtMatches.reduce((acc, n) => acc + (n.tong_phieu || 0), 0);
-    const votesFromPpht = pphtMatches.reduce((acc, p) => acc + (p.tong_phieu || 0), 0);
-    const totalVotes = votesFromNddt > 0 ? votesFromNddt : (votesFromPpht > 0 ? votesFromPpht : totalHvThucTe);
-    const responseRate = totalHvThucTe > 0 ? Math.min(100, Number(((totalVotes / totalHvThucTe) * 100).toFixed(1))) : 0;
+    // Total votes & response rate (only classes with survey responses contribute to responseRate denominator)
+    let totalVotes = 0;
+    let surveyedHvThucTe = 0;
+    distinctClassCodes.forEach(clsCode => {
+      const nMl = normalizeReportClassKey(clsCode);
+      const clsPpht = pphtMatches.filter(p => normalizeReportClassKey(p.ma_lop) === nMl).reduce((s, p) => s + (Number(p.tong_phieu) || 0), 0);
+      const clsNddt = nddtMatches.filter(n => normalizeReportClassKey(n.ma_lop) === nMl).reduce((s, n) => s + (Number(n.tong_phieu) || 0), 0);
+      const clsCsvc = csvcMatches.filter(cs => normalizeReportClassKey(cs.ma_lop) === nMl).reduce((s, cs) => s + (Number(cs.tong_phieu || cs.so_phieu) || 0), 0);
+      const clsDgc = dgcMatches.filter(d => normalizeReportClassKey(d.ma_lop) === nMl).reduce((s, d) => s + (Number(d.tong_phieu || d.so_phieu) || 0), 0);
+      const clsGvList = gvMatches.filter(g => normalizeReportClassKey(g.ma_lop) === nMl);
+      const clsGvMax = clsGvList.length > 0 ? Math.max(0, ...clsGvList.map(g => Number(g.tong_phieu) || 0)) : 0;
+      const clsVotes = resolveSurveyVotesCount(clsPpht, clsNddt, clsCsvc, clsDgc, clsGvMax);
+      totalVotes += clsVotes;
+      if (clsVotes > 0) {
+        const clsHvSeen = new Set();
+        programClassesRaw.filter(c => normalizeReportClassKey(c.ma_lop) === nMl).forEach(c => {
+          const cType = (typeof getCohortType === 'function') ? getCohortType(c.hinh_thuc_hoc || c.hinh_thuc_dt) : (c.hinh_thuc_hoc || '');
+          if (!clsHvSeen.has(cType)) {
+            clsHvSeen.add(cType);
+            surveyedHvThucTe += Number(c.hv_thuc_te) || 0;
+          }
+        });
+      }
+    });
+    const responseRate = computeSurveyResponseRate(totalVotes, surveyedHvThucTe, true);
 
     // Build classes list for Table 1 and Table 2 (guaranteeing exactly 1 row per cohort)
     const classItems = [];
@@ -9618,7 +10117,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const classDgc = dgcMatches.find(d => normalizeReportClassKey(d.ma_lop) === normMl);
 
-      const v = (classPpht && classPpht.tong_phieu) || (classNddt && classNddt.tong_phieu) || (classCsvc && (classCsvc.tong_phieu || classCsvc.so_phieu)) || 0;
+      const gvMax = classGv.length > 0 ? Math.max(0, ...classGv.map(g => Number(g.tong_phieu) || 0)) : 0;
+      const v = resolveSurveyVotesCount(
+        classPpht && classPpht.tong_phieu,
+        classNddt && classNddt.tong_phieu,
+        classCsvc && (classCsvc.tong_phieu || classCsvc.so_phieu),
+        classDgc && (classDgc.tong_phieu || classDgc.so_phieu),
+        gvMax
+      );
       const hvTt = Number(c.hv_thuc_te) || 0;
       const rRate = hvTt > 0 ? Number(((v / hvTt) * 100).toFixed(1)) : (v > 0 ? 100 : 0);
 
@@ -9989,6 +10495,7 @@ document.addEventListener('DOMContentLoaded', () => {
       classes: classItems,
       hvKh: totalHvKh,
       hvThucTe: totalHvThucTe,
+      surveyedHvThucTe: surveyedHvThucTe,
       votes: totalVotes,
       responseRate: responseRate,
       nddt: nddtProgram,
@@ -10043,46 +10550,46 @@ document.addEventListener('DOMContentLoaded', () => {
       if (isProgram) {
         metaHtml =
           '<div class="meta-item">' +
-          '<span class="meta-label">Tên chương trình đào tạo:</span>' +
+          '<span class="meta-label">Tên chương trình đào tạo: </span>' +
           '<span class="meta-val" style="font-weight: 700; color: #1E293B;">' + (data.programName || data.programCode) + '</span>' +
           '</div>' +
           '<div class="meta-item">' +
-          '<span class="meta-label">Mã chương trình:</span>' +
+          '<span class="meta-label">Mã chương trình: </span>' +
           '<span class="meta-val" style="font-weight: 800; color: var(--brand-primary);">' + data.programCode + '</span>' +
           '</div>' +
           '<div class="meta-item">' +
-          '<span class="meta-label">Quy mô tổ chức:</span>' +
+          '<span class="meta-label">Quy mô tổ chức: </span>' +
           '<span class="meta-val" style="font-weight: 600;">' + data.classesCount + ' lớp học (' + data.classes.filter(c => c.votes > 0).length + ' lớp có khảo sát)</span>' +
           '</div>' +
           '<div class="meta-item">' +
-          '<span class="meta-label">Thời gian tổng hợp:</span>' +
+          '<span class="meta-label">Thời gian tổng hợp: </span>' +
           '<span class="meta-val">Năm kế hoạch 2026</span>' +
           '</div>';
       } else {
         const fmtBadge = getReportFormatBadge(data.format);
         metaHtml =
           '<div class="meta-item">' +
-          '<span class="meta-label">Lớp học:</span>' +
+          '<span class="meta-label">Lớp học: </span>' +
           '<span class="meta-val" style="font-weight: 800; color: var(--brand-primary);">' + data.classCode + '</span>' +
           '</div>' +
           '<div class="meta-item">' +
-          '<span class="meta-label">Chương trình:</span>' +
+          '<span class="meta-label">Chương trình: </span>' +
           '<span class="meta-val" style="font-weight: 700;">' + (data.className || data.programCode) + '</span>' +
           '</div>' +
           '<div class="meta-item">' +
-          '<span class="meta-label">Hình thức đào tạo:</span>' +
+          '<span class="meta-label">Hình thức đào tạo: </span>' +
           '<span class="meta-val">' + fmtBadge + '</span>' +
           '</div>' +
           '<div class="meta-item">' +
-          '<span class="meta-label">Thời gian tổ chức:</span>' +
+          '<span class="meta-label">Thời gian tổ chức: </span>' +
           '<span class="meta-val">' + (typeof formatReportDateRange === 'function' ? formatReportDateRange(data.startDate, data.endDate, 'Theo kế hoạch 2026') : (data.startDate ? (data.startDate + (data.endDate ? ' - ' + data.endDate : '')) : 'Theo kế hoạch 2026')) + '</span>' +
           '</div>' +
           '<div class="meta-item">' +
-          '<span class="meta-label">Địa điểm:</span>' +
+          '<span class="meta-label">Địa điểm: </span>' +
           '<span class="meta-val">' + (data.location || 'Trường ĐT&BDNV') + '</span>' +
           '</div>' +
           '<div class="meta-item">' +
-          '<span class="meta-label">Cán bộ quản lý:</span>' +
+          '<span class="meta-label">Cán bộ quản lý: </span>' +
           '<span class="meta-val">' + (data.cbql || 'Ban Quản lý Đào tạo') + '</span>' +
           '</div>';
       }
@@ -10315,7 +10822,7 @@ document.addEventListener('DOMContentLoaded', () => {
             '<td style="font-weight: 700; color: var(--brand-primary);">' + c.classCode + '</td>' +
             '<td style="text-align: center;">' + getReportFormatBadge(c.format) + '</td>' +
             '<td style="text-align: center; font-size: 0.8rem; color: #475569; white-space: nowrap;">' + timeRangeStr + '</td>' +
-            '<td style="text-align: center; font-weight: 700; color: #1E293B;">' + (c.votes || 0) + '</td>' +
+            renderVotesCountCell(c.votes, '—') +
             renderGradientScoreCell(nddtScore, 4.0, 'linear-gradient(90deg, #059669, #10B981)', '#0F5132') +
             renderGradientScoreCell(pphtScore, 4.0, 'linear-gradient(90deg, #0284C7, #38BDF8)', '#0369A1') +
             renderGradientScoreCell(csvcScore, 4.0, 'linear-gradient(90deg, #D97706, #F59E0B)', '#B45309') +
@@ -10374,16 +10881,20 @@ document.addEventListener('DOMContentLoaded', () => {
     reportState.selectedClass = classCode;
 
     // Switch buttons UI
-    const btnClass = document.getElementById('btnReportModeClass');
-    const btnProgram = document.getElementById('btnReportModeProgram');
-    if (btnClass && btnProgram) {
-      btnClass.classList.add('active');
-      btnProgram.classList.remove('active');
+    if (typeof syncReportModeUI === 'function') {
+      syncReportModeUI('class');
+    } else {
+      const btnClass = document.getElementById('btnReportModeClass');
+      const btnProgram = document.getElementById('btnReportModeProgram');
+      if (btnClass && btnProgram) {
+        btnClass.classList.add('active');
+        btnProgram.classList.remove('active');
+      }
+      const selClass = (document.getElementById('reportClassSelectorArea') || document.getElementById('selectorReportClass'));
+      const selProgram = (document.getElementById('reportProgramSelectorArea') || document.getElementById('selectorReportProgram'));
+      if (selClass) selClass.style.display = 'block';
+      if (selProgram) selProgram.style.display = 'none';
     }
-    const selClass = (document.getElementById('reportClassSelectorArea') || document.getElementById('selectorReportClass'));
-    const selProgram = (document.getElementById('reportProgramSelectorArea') || document.getElementById('selectorReportProgram'));
-    if (selClass) selClass.style.display = 'block';
-    if (selProgram) selProgram.style.display = 'none';
 
     // Update select dropdown
     const classSelect = document.getElementById('selectReportClass');
@@ -10404,16 +10915,20 @@ document.addEventListener('DOMContentLoaded', () => {
     reportState.selectedProgram = progCode;
 
     // Switch buttons UI
-    const btnClass = document.getElementById('btnReportModeClass');
-    const btnProgram = document.getElementById('btnReportModeProgram');
-    if (btnClass && btnProgram) {
-      btnProgram.classList.add('active');
-      btnClass.classList.remove('active');
+    if (typeof syncReportModeUI === 'function') {
+      syncReportModeUI('program');
+    } else {
+      const btnClass = document.getElementById('btnReportModeClass');
+      const btnProgram = document.getElementById('btnReportModeProgram');
+      if (btnClass && btnProgram) {
+        btnProgram.classList.add('active');
+        btnClass.classList.remove('active');
+      }
+      const selClass = (document.getElementById('reportClassSelectorArea') || document.getElementById('selectorReportClass'));
+      const selProgram = (document.getElementById('reportProgramSelectorArea') || document.getElementById('selectorReportProgram'));
+      if (selClass) selClass.style.display = 'none';
+      if (selProgram) selProgram.style.display = 'block';
     }
-    const selClass = (document.getElementById('reportClassSelectorArea') || document.getElementById('selectorReportClass'));
-    const selProgram = (document.getElementById('reportProgramSelectorArea') || document.getElementById('selectorReportProgram'));
-    if (selClass) selClass.style.display = 'none';
-    if (selProgram) selProgram.style.display = 'block';
 
     const progSelect = document.getElementById('selectReportProgram');
     if (progSelect) {
@@ -10436,6 +10951,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (!hasData) {
       containerElem.innerHTML =
+        '<div class="report-print-visual">' +
         '<div style="border-bottom: 1px solid #E2E8F0; padding-bottom: 0.65rem; margin-bottom: 0.85rem;">' +
         '<h3 style="margin: 0; font-size: 1.05rem; font-weight: 800; color: var(--brand-primary); display: flex; align-items: center; gap: 0.5rem;">' +
         '<i class="fa-solid fa-book-open"></i> ' + title +
@@ -10444,6 +10960,7 @@ document.addEventListener('DOMContentLoaded', () => {
         '<div style="padding: 1.5rem; background: #F8FAFC; border: 1px dashed #CBD5E1; border-radius: 8px; text-align: center; color: var(--text-muted); font-style: italic;">' +
         '<i class="fa-solid fa-circle-exclamation" style="margin-right: 0.4rem; color: #94A3B8;"></i> ' +
         'Chưa có dữ liệu đánh giá nội dung đào tạo' +
+        '</div>' +
         '</div>';
       return;
     }
@@ -10499,7 +11016,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Build Executive Layout: Tầng 1 (KPI) + Tầng 2 (Stacked Chart) + Tầng 3 (Collapsible Table)
     let sectionHtml =
-      '<div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #E2E8F0; padding-bottom: 0.65rem; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">' +
+      '<div class="report-print-visual">' +
+      '<div class="report-print-heading" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #E2E8F0; padding-bottom: 0.65rem; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">' +
       '<div>' +
       '<h3 style="margin: 0; font-size: 1.05rem; font-weight: 800; color: var(--brand-primary); display: flex; align-items: center; gap: 0.5rem;">' +
       '<i class="fa-solid fa-book-open"></i> ' + title +
@@ -10576,14 +11094,15 @@ document.addEventListener('DOMContentLoaded', () => {
       '<i class="fa-solid fa-triangle-exclamation"></i> Cần quan tâm: ' +
       '<span style="color: #1E293B; font-weight: 600;">' + lowestCrit.name + ' (' + lowestCrit.score.toFixed(2) + '/4.00)</span>' +
       '</div>' +
-      '<div style="margin-left: auto; font-size: 0.75rem; color: #64748B; font-style: italic;">' +
+      '<div class="report-interactive-hint" style="margin-left: auto; font-size: 0.75rem; color: #64748B; font-style: italic;">' +
       '<i class="fa-solid fa-hand-pointer"></i> Di chuột hoặc nhấp vào biểu đồ/chú giải để tương tác phân tích' +
+      '</div>' +
       '</div>' +
       '</div>' +
       '</div>' +
 
       // TẦNG 2: 100% HORIZONTAL STACKED BAR CHART
-      '<div style="background: white; border: 1px solid #E2E8F0; border-radius: 8px; padding: 1.15rem; margin-bottom: 1.15rem;">' +
+      '<div class="report-print-visual" style="background: white; border: 1px solid #E2E8F0; border-radius: 8px; padding: 1.15rem; margin-bottom: 1.15rem;">' +
       '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.85rem; flex-wrap: wrap; gap: 0.5rem;">' +
       '<div style="font-size: 0.88rem; font-weight: 800; color: #1E293B; display: flex; align-items: center; gap: 0.4rem;">' +
       '<i class="fa-solid fa-chart-column" style="color: var(--brand-primary);"></i> PHÂN BỐ TỶ LỆ 4 MỨC ĐÁNH GIÁ THEO TIÊU CHÍ (100%)' +
@@ -10601,8 +11120,8 @@ document.addEventListener('DOMContentLoaded', () => {
       '</div>' +
 
       // TẦNG 3: BẢNG CHI TIẾT TỔNG HỢP
-      '<div style="background: white; border: 1px solid #E2E8F0; border-radius: 8px; overflow: hidden;">' +
-      '<div style="padding: 0.75rem 1rem; background: #F8FAFC; display: flex; justify-content: space-between; align-items: center; cursor: pointer; border-bottom: 1px solid #E2E8F0;" onclick="toggleNddtTableDetails()">' +
+      '<div class="report-print-visual" style="background: white; border: 1px solid #E2E8F0; border-radius: 8px; overflow: hidden;">' +
+      '<div class="report-print-heading" style="padding: 0.75rem 1rem; background: #F8FAFC; display: flex; justify-content: space-between; align-items: center; cursor: pointer; border-bottom: 1px solid #E2E8F0;" onclick="toggleNddtTableDetails()">' +
       '<div style="font-size: 0.85rem; font-weight: 800; color: #1E293B; display: flex; align-items: center; gap: 0.4rem;">' +
       '<i class="fa-solid fa-table-list" style="color: var(--brand-primary);"></i> BẢNG DỮ LIỆU CHI TIẾT SỐ LƯỢNG VÀ TỶ LỆ ĐÁNH GIÁ NỘI DUNG' +
       '</div>' +
@@ -10963,6 +11482,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const hasData = directItem || hybridItem || overallItem;
     if (!hasData) {
       containerElem.innerHTML =
+        '<div class="report-print-visual">' +
         '<div style="border-bottom: 1px solid #E2E8F0; padding-bottom: 0.65rem; margin-bottom: 0.85rem;">' +
         '<h3 style="margin: 0; font-size: 1.05rem; font-weight: 800; color: var(--brand-primary); display: flex; align-items: center; gap: 0.5rem;">' +
         '<i class="fa-solid fa-chalkboard-user"></i> ' + title +
@@ -10971,6 +11491,7 @@ document.addEventListener('DOMContentLoaded', () => {
         '<div style="padding: 1.5rem; background: #F8FAFC; border: 1px dashed #CBD5E1; border-radius: 8px; text-align: center; color: var(--text-muted); font-style: italic;">' +
         '<i class="fa-solid fa-circle-exclamation" style="margin-right: 0.4rem; color: #94A3B8;"></i> ' +
         'Chưa có dữ liệu đánh giá phương pháp & hình thức' +
+        '</div>' +
         '</div>';
       return;
     }
@@ -10988,7 +11509,8 @@ document.addEventListener('DOMContentLoaded', () => {
     containerElem._overallItem = overallItem;
 
     const sectionHtml =
-      '<div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #E2E8F0; padding-bottom: 0.65rem; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">' +
+      '<div class="report-print-visual">' +
+      '<div class="report-print-heading" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #E2E8F0; padding-bottom: 0.65rem; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">' +
       '<div>' +
       '<h3 style="margin: 0; font-size: 1.05rem; font-weight: 800; color: var(--brand-primary); display: flex; align-items: center; gap: 0.5rem;">' +
       '<i class="fa-solid fa-chalkboard-user"></i> ' + title +
@@ -11046,9 +11568,10 @@ document.addEventListener('DOMContentLoaded', () => {
       '</div>' +
       '</div>' +
       '</div>' +
+      '</div>' +
 
       // TẦNG 2: FORMAT SLICERS & 100% HORIZONTAL STACKED BAR CHART
-      '<div style="background: white; border: 1px solid #E2E8F0; border-radius: 8px; padding: 1.15rem; margin-bottom: 1.15rem;">' +
+      '<div class="report-print-visual" style="background: white; border: 1px solid #E2E8F0; border-radius: 8px; padding: 1.15rem; margin-bottom: 1.15rem;">' +
       '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.85rem; flex-wrap: wrap; gap: 0.5rem;">' +
       '<div style="font-size: 0.88rem; font-weight: 800; color: #1E293B; display: flex; align-items: center; gap: 0.4rem;">' +
       '<i class="fa-solid fa-chart-column" style="color: var(--brand-primary);"></i> PHÂN BỐ TỶ LỆ 4 MỨC ĐÁNH GIÁ THEO TIÊU CHÍ (100%)' +
@@ -11076,8 +11599,8 @@ document.addEventListener('DOMContentLoaded', () => {
       '</div>' +
 
       // TẦNG 3: BẢNG CHI TIẾT TỔNG HỢP (IDENTICAL TO PART IV REFERENCE TABLE)
-      '<div style="background: white; border: 1px solid #E2E8F0; border-radius: 8px; overflow: hidden;">' +
-      '<div style="padding: 0.75rem 1rem; background: #F8FAFC; border-bottom: 1px solid #E2E8F0; font-size: 0.85rem; font-weight: 800; color: #1E293B; display: flex; align-items: center; gap: 0.4rem;">' +
+      '<div class="report-print-visual" style="background: white; border: 1px solid #E2E8F0; border-radius: 8px; overflow: hidden;">' +
+      '<div class="report-print-heading" style="padding: 0.75rem 1rem; background: #F8FAFC; border-bottom: 1px solid #E2E8F0; font-size: 0.85rem; font-weight: 800; color: #1E293B; display: flex; align-items: center; gap: 0.4rem;">' +
       '<i class="fa-solid fa-table-list" style="color: var(--brand-primary);"></i> BẢNG TỔNG HỢP ĐÁNH GIÁ PHƯƠNG PHÁP & HÌNH THỨC ĐÀO TẠO' +
       '</div>' +
       '<div class="table-container" style="padding: 0; margin: 0;">' +
@@ -11390,6 +11913,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (!hasData) {
       containerElem.innerHTML =
+        '<div class="report-print-visual">' +
         '<div style="border-bottom: 1px solid #E2E8F0; padding-bottom: 0.65rem; margin-bottom: 0.85rem;">' +
         '<h3 style="margin: 0; font-size: 1.05rem; font-weight: 800; color: var(--brand-primary); display: flex; align-items: center; gap: 0.5rem;">' +
         '<i class="fa-solid fa-hotel"></i> ' + title +
@@ -11398,6 +11922,7 @@ document.addEventListener('DOMContentLoaded', () => {
         '<div style="padding: 1.5rem; background: #F8FAFC; border: 1px dashed #CBD5E1; border-radius: 8px; text-align: center; color: var(--text-muted); font-style: italic;">' +
         '<i class="fa-solid fa-circle-exclamation" style="margin-right: 0.4rem; color: #94A3B8;"></i> ' +
         'Chưa có dữ liệu đánh giá CSVC' +
+        '</div>' +
         '</div>';
       return;
     }
@@ -11453,7 +11978,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     let sectionHtml =
-      '<div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #E2E8F0; padding-bottom: 0.65rem; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">' +
+      '<div class="report-print-visual">' +
+      '<div class="report-print-heading" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #E2E8F0; padding-bottom: 0.65rem; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">' +
       '<div>' +
       '<h3 style="margin: 0; font-size: 1.05rem; font-weight: 800; color: var(--brand-primary); display: flex; align-items: center; gap: 0.5rem;">' +
       '<i class="fa-solid fa-hotel"></i> ' + title +
@@ -11489,6 +12015,7 @@ document.addEventListener('DOMContentLoaded', () => {
           '<div style="font-size: 0.75rem; color: #64748B; margin-top: 0.25rem;">' + subText + '</div>' +
           '</div>';
       }).join('') +
+      '</div>' +
       '</div>';
 
     // IF PROGRAM MODE: LOCATION MULTI-AXIS COMBINATION CHART & DETAILED DATA TABLE (MATCHING "TỔ CHỨC & CSVC" SCREEN)
@@ -11544,8 +12071,8 @@ document.addEventListener('DOMContentLoaded', () => {
       });
 
       sectionHtml +=
-        '<div style="background: white; border: 1px solid #E2E8F0; border-radius: 8px; padding: 1.15rem; margin-bottom: 1.15rem;">' +
-        '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.85rem; flex-wrap: wrap; gap: 0.5rem;">' +
+        '<div class="' + (locCount <= 12 ? 'report-print-visual' : '') + '" style="background: white; border: 1px solid #E2E8F0; border-radius: 8px; padding: 1.15rem; margin-bottom: 1.15rem;">' +
+        '<div class="report-print-heading" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.85rem; flex-wrap: wrap; gap: 0.5rem;">' +
         '<div>' +
         '<div style="font-size: 0.88rem; font-weight: 800; color: #1E293B; display: flex; align-items: center; gap: 0.4rem;">' +
         '<i class="fa-solid fa-map-location-dot" style="color: var(--brand-primary);"></i> SO SÁNH ĐIỂM ĐÁNH GIÁ THEO ĐỊA ĐIỂM' +
@@ -11558,7 +12085,7 @@ document.addEventListener('DOMContentLoaded', () => {
         '<span style="font-size: 0.72rem; background: #F1F5F9; color: #475569; padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: 600;">' +
         '<i class="fa-solid fa-layer-group"></i> ' + locCount + ' địa bàn' +
         '</span>' +
-        (locCount > 3 ? '<span style="font-size: 0.72rem; background: #FFF1F2; color: var(--brand-primary); padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: 600;"><i class="fa-solid fa-arrows-left-right"></i> Kéo ngang biểu đồ</span>' : '') +
+        (locCount > 3 ? '<span class="report-interactive-hint" style="font-size: 0.72rem; background: #FFF1F2; color: var(--brand-primary); padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: 600;"><i class="fa-solid fa-arrows-left-right"></i> Kéo ngang biểu đồ</span>' : '') +
         '</div>' +
         '</div>' +
 
@@ -11580,7 +12107,7 @@ document.addEventListener('DOMContentLoaded', () => {
         '</div>' +
         '<span style="font-size: 0.72rem; color: #64748B; font-weight: 600;">' + locCount + ' địa điểm</span>' +
         '</div>' +
-        '<div style="max-height: 335px; overflow-y: auto; overflow-x: auto;" class="table-container">' +
+        '<div style="' + (isProgram ? 'overflow-x: auto;' : 'max-height: 335px; overflow-y: auto; overflow-x: auto;') + '" class="table-container">' +
         '<table class="data-table" id="reportCsvcLocationTable" style="width: 100%; border-collapse: collapse; margin: 0;">' +
         '<thead style="position: sticky; top: 0; background: #F8FAFC; z-index: 2; border-bottom: 2px solid #E2E8F0;">' +
         '<tr>' +
@@ -11618,7 +12145,7 @@ document.addEventListener('DOMContentLoaded', () => {
       criteriaList.map((c, idx) => {
         const tot = c.total || (c.n4 + c.n3 + c.n2 + c.n1) || 0;
         if (tot === 0) {
-          return '<div style="background: white; border: 1px solid #E2E8F0; border-radius: 8px; padding: 0.85rem 1rem;">' +
+          return '<div class="report-print-visual" style="background: white; border: 1px solid #E2E8F0; border-radius: 8px; padding: 0.85rem 1rem;">' +
             '<div style="display: flex; justify-content: space-between; align-items: center;">' +
             '<span style="font-size: 0.82rem; font-weight: 700; color: #64748B;">' + c.name + '</span>' +
             '<span style="font-size: 0.78rem; font-weight: 600; color: #94A3B8; font-style: italic;"><i class="fa-solid fa-circle-info" style="margin-right: 0.3rem;"></i> Không khảo sát tiêu chí này</span>' +
@@ -11630,7 +12157,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const r2 = ((c.n2 / tot) * 100).toFixed(1);
         const r1 = ((c.n1 / tot) * 100).toFixed(1);
 
-        return '<div style="background: white; border: 1px solid #E2E8F0; border-radius: 8px; padding: 0.85rem 1rem;">' +
+        return '<div class="report-print-visual" style="background: white; border: 1px solid #E2E8F0; border-radius: 8px; padding: 0.85rem 1rem;">' +
           '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.45rem;">' +
           '<span style="font-size: 0.82rem; font-weight: 700; color: #1E293B;">' + c.name + '</span>' +
           '<span style="font-size: 0.82rem; font-weight: 700; color: #15803D;">Tích cực: ' + c.posRate.toFixed(1) + '% &nbsp;•&nbsp; <strong style="font-size: 0.95rem; color: var(--brand-primary);">' + c.score.toFixed(2) + '</strong>/4.0</span>' +
@@ -11947,6 +12474,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (!hasData) {
       containerElem.innerHTML =
+        '<div class="report-print-visual">' +
         '<div style="border-bottom: 1px solid #E2E8F0; padding-bottom: 0.65rem; margin-bottom: 0.85rem;">' +
         '<h3 style="margin: 0; font-size: 1.05rem; font-weight: 800; color: var(--brand-primary); display: flex; align-items: center; gap: 0.5rem;">' +
         '<i class="fa-solid fa-chalkboard-user"></i> ' + title +
@@ -11955,6 +12483,7 @@ document.addEventListener('DOMContentLoaded', () => {
         '<div style="padding: 1.5rem; background: #F8FAFC; border: 1px dashed #CBD5E1; border-radius: 8px; text-align: center; color: var(--text-muted); font-style: italic;">' +
         '<i class="fa-solid fa-circle-exclamation" style="margin-right: 0.4rem; color: #94A3B8;"></i> ' +
         'Chưa có dữ liệu đánh giá giảng viên' +
+        '</div>' +
         '</div>';
       return;
     }
@@ -11964,7 +12493,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const isMultiFormat = hasDirect && hasHybrid;
 
     let sectionHtml =
-      '<div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #E2E8F0; padding-bottom: 0.65rem; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">' +
+      '<div class="report-print-visual">' +
+      '<div class="report-print-heading" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #E2E8F0; padding-bottom: 0.65rem; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">' +
       '<div>' +
       '<h3 style="margin: 0; font-size: 1.05rem; font-weight: 800; color: var(--brand-primary); display: flex; align-items: center; gap: 0.5rem;">' +
       '<i class="fa-solid fa-chalkboard-user"></i> ' + title +
@@ -12019,12 +12549,13 @@ document.addEventListener('DOMContentLoaded', () => {
       '<div style="height: 340px; position: relative;">' +
       '<canvas id="reportGvComparisonChart"></canvas>' +
       '</div>' +
+      '</div>' +
       '</div>';
 
     // DETAILED LECTURER TABLE
     sectionHtml +=
       '<div style="background: white; border: 1px solid #E2E8F0; border-radius: 8px; overflow: hidden;">' +
-      '<div style="padding: 0.75rem 1rem; background: #F8FAFC; border-bottom: 1px solid #E2E8F0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">' +
+      '<div class="report-print-heading" style="padding: 0.75rem 1rem; background: #F8FAFC; border-bottom: 1px solid #E2E8F0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">' +
       '<div style="font-size: 0.85rem; font-weight: 800; color: #1E293B; display: flex; align-items: center; gap: 0.4rem;">' +
       '<i class="fa-solid fa-list-check" style="color: var(--brand-primary);"></i> DANH SÁCH CHI TIẾT ĐÁNH GIÁ TỪNG GIẢNG VIÊN' +
       '</div>' +
@@ -12044,7 +12575,7 @@ document.addEventListener('DOMContentLoaded', () => {
       '<input type="text" id="reportGvTableSearch" placeholder="Tìm theo tên giảng viên..." onkeyup="filterReportGvTable()" style="font-size: 0.78rem; padding: 0.3rem 0.65rem; border: 1px solid #CBD5E1; border-radius: 4px; width: 200px;">' +
       '</div>' +
       '</div>' +
-      '<div class="table-container" style="max-height: 500px; overflow-y: auto; margin: 0; padding: 0;">' +
+      '<div class="table-container" style="' + (isProgram ? 'margin: 0; padding: 0;' : 'max-height: 500px; overflow-y: auto; margin: 0; padding: 0;') + '">' +
       '<table class="data-table" id="reportGvDataTable" style="margin: 0; font-size: 0.82rem;">' +
       '<thead>' +
       '<tr>' +
@@ -12427,6 +12958,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (!hasData) {
       containerElem.innerHTML =
+        '<div class="report-print-visual">' +
         '<div style="border-bottom: 1px solid #E2E8F0; padding-bottom: 0.65rem; margin-bottom: 0.85rem;">' +
         '<h3 style="margin: 0; font-size: 1.05rem; font-weight: 800; color: var(--brand-primary); display: flex; align-items: center; gap: 0.5rem;">' +
         '<i class="fa-solid fa-comments"></i> ' + title +
@@ -12435,6 +12967,7 @@ document.addEventListener('DOMContentLoaded', () => {
         '<div style="padding: 1.5rem; background: #F8FAFC; border: 1px dashed #CBD5E1; border-radius: 8px; text-align: center; color: var(--text-muted); font-style: italic;">' +
         '<i class="fa-solid fa-circle-exclamation" style="margin-right: 0.4rem; color: #94A3B8;"></i> ' +
         'Chưa có dữ liệu đánh giá chung' +
+        '</div>' +
         '</div>';
       return;
     }
@@ -12471,7 +13004,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const commentsList = (dgcData.comments && Array.isArray(dgcData.comments)) ? dgcData.comments : [];
 
     let sectionHtml =
-      '<div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #E2E8F0; padding-bottom: 0.65rem; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">' +
+      '<div class="report-print-visual">' +
+      '<div class="report-print-heading" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #E2E8F0; padding-bottom: 0.65rem; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">' +
       '<div>' +
       '<h3 style="margin: 0; font-size: 1.05rem; font-weight: 800; color: var(--brand-primary); display: flex; align-items: center; gap: 0.5rem;">' +
       '<i class="fa-solid fa-comments"></i> ' + title +
@@ -12515,13 +13049,14 @@ document.addEventListener('DOMContentLoaded', () => {
           '</div>' +
           '</div>';
       }).join('') +
+      '</div>' +
       '</div>';
 
     // STUDENT COMMENTS SECTION
     if (commentsList.length > 0) {
       sectionHtml +=
         '<div style="background: white; border: 1px solid #E2E8F0; border-radius: 8px; overflow: hidden;">' +
-        '<div style="padding: 0.75rem 1rem; background: #F8FAFC; border-bottom: 1px solid #E2E8F0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">' +
+        '<div class="report-print-heading" style="padding: 0.75rem 1rem; background: #F8FAFC; border-bottom: 1px solid #E2E8F0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">' +
         '<div style="font-size: 0.85rem; font-weight: 800; color: #1E293B; display: flex; align-items: center; gap: 0.4rem;">' +
         '<i class="fa-regular fa-comment-dots" style="color: var(--brand-primary);"></i> TỔNG HỢP Ý KIẾN ĐÓNG GÓP CỦA HỌC VIÊN (' + commentsList.length + ' ý kiến)' +
         '</div>' +
@@ -12638,7 +13173,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const emptyState = document.getElementById('reportEmptyState');
     const contentArea = document.getElementById('reportContentArea');
     if (emptyState) emptyState.style.display = 'none';
-    if (contentArea) contentArea.style.display = 'block';
+    if (contentArea) {
+      contentArea.classList.remove('program-report-mode');
+      contentArea.style.display = 'block';
+    }
 
     // Hide program comparison section in class mode
     const progSection = document.getElementById('reportProgramComparisonSection');
@@ -12682,7 +13220,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const emptyState = document.getElementById('reportEmptyState');
     const contentArea = document.getElementById('reportContentArea');
     if (emptyState) emptyState.style.display = 'none';
-    if (contentArea) contentArea.style.display = 'block';
+    if (contentArea) {
+      contentArea.classList.add('program-report-mode');
+      contentArea.style.display = 'block';
+    }
 
     // Render Overview & KPIs
     const overviewCard = document.getElementById('reportOverviewCard');
@@ -12719,31 +13260,2356 @@ document.addEventListener('DOMContentLoaded', () => {
     renderReportDgcSection(dgcSec, data.dgc, { isProgram: true });
   }
 
+  // =========================================================================
+  // --- SUB-MODULE 3: TIME-BASED TRAINING ANALYTICS (BÁO CÁO THEO THỜI GIAN) ---
+  // =========================================================================
+
+  function formatPeriodDisplay(granularity, periodKey, year) {
+    if (!periodKey || periodKey === 'all') {
+      if (granularity === 'month') return 'Tất cả các tháng năm ' + year;
+      if (granularity === 'quarter') return 'Cả 4 Quý năm ' + year;
+      return 'Toàn bộ năm ' + year;
+    }
+    if (granularity === 'month') {
+      const parts = periodKey.split('-');
+      return 'Tháng ' + (parts[1] || periodKey) + '/' + (parts[0] || year);
+    }
+    if (granularity === 'quarter') {
+      const parts = periodKey.split('-Q');
+      const qNum = parts[1] || '1';
+      const roman = qNum === '1' ? 'I' : (qNum === '2' ? 'II' : (qNum === '3' ? 'III' : 'IV'));
+      return 'Quý ' + roman + '/' + (parts[0] || year);
+    }
+    return 'Năm ' + periodKey;
+  }
+
+  function populateTimeReportDropdowns() {
+    const selYear = document.getElementById('selectTimeYear');
+    const selProg = document.getElementById('filterTimeProgram');
+    const selLoc = document.getElementById('filterTimeLocation');
+
+    const allClasses = typeof getAllReportClassList === 'function' ? getAllReportClassList() : [];
+
+    // 1. Years (by End Date matching unified time rule)
+    if (selYear) {
+      const years = new Set();
+      allClasses.forEach(c => {
+        const endIso = resolveItemDateBounds(c).endIso;
+        if (endIso && endIso.length >= 4) {
+          years.add(endIso.slice(0, 4));
+        }
+      });
+      const sortedYears = Array.from(years).sort().reverse();
+      if (sortedYears.length === 0) sortedYears.push('2026');
+      let yrHtml = '';
+      sortedYears.forEach(y => {
+        yrHtml += '<option value="' + y + '"' + (y === (reportState.timeYear || '2026') ? ' selected' : '') + '>Năm ' + y + '</option>';
+      });
+      selYear.innerHTML = yrHtml;
+    }
+
+    // 2. Programs
+    if (selProg) {
+      const progList = typeof getAllReportProgramList === 'function' ? getAllReportProgramList() : [];
+      let progHtml = '<option value="">Tất cả chương trình (' + progList.length + ' CT)</option>';
+      progList.forEach(p => {
+        progHtml += '<option value="' + p.code + '">' + p.code + ' — ' + (p.name || p.code) + '</option>';
+      });
+      selProg.innerHTML = progHtml;
+    }
+
+    // 3. Locations
+    if (selLoc) {
+      const locs = new Set();
+      allClasses.forEach(c => {
+        if (c.dia_diem) {
+          c.dia_diem.split('•').forEach(l => {
+            const trimmed = l.trim();
+            if (trimmed) locs.add(trimmed);
+          });
+        }
+      });
+      const sortedLocs = Array.from(locs).sort();
+      let locHtml = '<option value="">Tất cả địa điểm (' + sortedLocs.length + ' địa điểm)</option>';
+      sortedLocs.forEach(l => {
+        locHtml += '<option value="' + l + '">' + l + '</option>';
+      });
+      selLoc.innerHTML = locHtml;
+    }
+
+    updateTimePeriodOptions();
+  }
+
+  function updateTimePeriodOptions() {
+    const selPeriod = document.getElementById('selectTimePeriod');
+    if (!selPeriod) return;
+
+    const gran = reportState.timeGranularity || 'quarter';
+    const year = reportState.timeYear || '2026';
+    let html = '';
+
+    if (gran === 'month') {
+      html += '<option value="all">Tất cả các tháng trong năm ' + year + '</option>';
+      for (let m = 1; m <= 12; m++) {
+        const mm = m < 10 ? '0' + m : '' + m;
+        const val = year + '-' + mm;
+        html += '<option value="' + val + '">Tháng ' + mm + '/' + year + '</option>';
+      }
+    } else if (gran === 'quarter') {
+      html += '<option value="all">Cả 4 Quý trong năm ' + year + '</option>';
+      html += '<option value="' + year + '-Q1">Quý I / ' + year + ' (Tháng 1 - 3)</option>';
+      html += '<option value="' + year + '-Q2">Quý II / ' + year + ' (Tháng 4 - 6)</option>';
+      html += '<option value="' + year + '-Q3">Quý III / ' + year + ' (Tháng 7 - 9)</option>';
+      html += '<option value="' + year + '-Q4">Quý IV / ' + year + ' (Tháng 10 - 12)</option>';
+    } else {
+      html += '<option value="all">Toàn bộ các năm</option>';
+      html += '<option value="' + year + '">Năm ' + year + '</option>';
+    }
+
+    selPeriod.innerHTML = html;
+    if (reportState.timePeriod) {
+      selPeriod.value = reportState.timePeriod;
+    }
+  }
+
+  function aggregatePeriodClassMetrics(classesList, gvItemsRef) {
+    const totalClasses = classesList.length;
+    const distinctPrograms = new Set();
+    let totalHvKh = 0;
+    let totalHvTt = 0;
+    let surveyedHvTt = 0;
+    let totalVotes = 0;
+    let surveyedClasses = 0;
+
+    let nddtWeightedScore = 0, nddtVotes = 0, nddtWeightedPos = 0;
+    let pphtWeightedScore = 0, pphtVotes = 0, pphtWeightedPos = 0;
+    let csvcWeightedScore = 0, csvcVotes = 0, csvcWeightedPos = 0;
+    let gvWeightedScore = 0, gvVotes = 0;
+    let dgcWeightedScore = 0, dgcVotes = 0, dgcWeightedPos = 0;
+
+    let directClassesCount = 0, hybridClassesCount = 0;
+    let directHvTt = 0, hybridHvTt = 0;
+    let directNddtScore = 0, directNddtVotes = 0;
+    let hybridNddtScore = 0, hybridNddtVotes = 0;
+    let directPphtScore = 0, directPphtVotes = 0;
+    let hybridPphtScore = 0, hybridPphtVotes = 0;
+    let directCsvcScore = 0, directCsvcVotes = 0;
+    let hybridCsvcScore = 0, hybridCsvcVotes = 0;
+    let directGvScore = 0, directGvVotes = 0;
+    let hybridGvScore = 0, hybridGvVotes = 0;
+    let directDgcScore = 0, directDgcVotes = 0;
+    let hybridDgcScore = 0, hybridDgcVotes = 0;
+
+    const ratingDist = {
+      all: { n4: 0, n3: 0, n2: 0, n1: 0, total: 0 },
+      nddt: { n4: 0, n3: 0, n2: 0, n1: 0, total: 0 },
+      ppht: { n4: 0, n3: 0, n2: 0, n1: 0, total: 0 },
+      csvc: { n4: 0, n3: 0, n2: 0, n1: 0, total: 0 }
+    };
+
+    const addDist = (distObj, n4, n3, n2, n1) => {
+      distObj.n4 += (n4 || 0); distObj.n3 += (n3 || 0); distObj.n2 += (n2 || 0); distObj.n1 += (n1 || 0);
+      distObj.total += ((n4 || 0) + (n3 || 0) + (n2 || 0) + (n1 || 0));
+    };
+
+    classesList.forEach(c => {
+      const rawProg = c.programCode || (c.classCode ? c.classCode.split('/')[0] : '');
+      const normProgKey = normalizeReportProgramKey(rawProg);
+      if (normProgKey) distinctPrograms.add(normProgKey);
+
+      const hvTt = c.hvThucTe || 0;
+      totalHvKh += c.hvKh || 0;
+      totalHvTt += hvTt;
+      const v = c.votes || 0;
+      totalVotes += v;
+      if (v > 0) {
+        surveyedClasses++;
+        surveyedHvTt += hvTt;
+      }
+
+      const isHybrid = c.format.includes('kết hợp') || c.format.includes('Trực tuyến') || c.format.includes('Online');
+      if (isHybrid) {
+        hybridClassesCount++;
+        hybridHvTt += c.hvThucTe || 0;
+      } else {
+        directClassesCount++;
+        directHvTt += c.hvThucTe || 0;
+      }
+
+      // NDDT
+      if (c.nddt && c.nddt.score > 0) {
+        const nv = c.nddt.votes || v || 1;
+        nddtWeightedScore += c.nddt.score * nv;
+        nddtWeightedPos += (c.nddt.posRate || 0) * nv;
+        nddtVotes += nv;
+
+        if (isHybrid) {
+          hybridNddtScore += c.nddt.score * nv;
+          hybridNddtVotes += nv;
+        } else {
+          directNddtScore += c.nddt.score * nv;
+          directNddtVotes += nv;
+        }
+
+        ['c1', 'c2', 'c3'].forEach(ck => {
+          if (c.nddt[ck]) {
+            addDist(ratingDist.nddt, c.nddt[ck].n4, c.nddt[ck].n3, c.nddt[ck].n2, c.nddt[ck].n1);
+            addDist(ratingDist.all, c.nddt[ck].n4, c.nddt[ck].n3, c.nddt[ck].n2, c.nddt[ck].n1);
+          }
+        });
+      }
+
+      // PPHT
+      if (c.ppht && c.ppht.score > 0) {
+        const pv = c.ppht.votes || v || 1;
+        pphtWeightedScore += c.ppht.score * pv;
+        pphtWeightedPos += (c.ppht.posRate || 0) * pv;
+        pphtVotes += pv;
+
+        if (isHybrid) {
+          hybridPphtScore += c.ppht.score * pv;
+          hybridPphtVotes += pv;
+        } else {
+          directPphtScore += c.ppht.score * pv;
+          directPphtVotes += pv;
+        }
+
+        if (c.ppht.direct && Array.isArray(c.ppht.direct.criteria)) {
+          c.ppht.direct.criteria.forEach(cr => {
+            addDist(ratingDist.ppht, cr.n4, cr.n3, cr.n2, cr.n1);
+            addDist(ratingDist.all, cr.n4, cr.n3, cr.n2, cr.n1);
+          });
+        }
+        if (c.ppht.online && Array.isArray(c.ppht.online.criteria)) {
+          c.ppht.online.criteria.forEach(cr => {
+            addDist(ratingDist.ppht, cr.n4, cr.n3, cr.n2, cr.n1);
+            addDist(ratingDist.all, cr.n4, cr.n3, cr.n2, cr.n1);
+          });
+        }
+      }
+
+      // CSVC
+      if (c.csvc && c.csvc.score > 0) {
+        const cv = c.csvc.votes || v || 1;
+        csvcWeightedScore += c.csvc.score * cv;
+        csvcWeightedPos += (c.csvc.posRate || 0) * cv;
+        csvcVotes += cv;
+
+        if (isHybrid) {
+          hybridCsvcScore += c.csvc.score * cv;
+          hybridCsvcVotes += cv;
+        } else {
+          directCsvcScore += c.csvc.score * cv;
+          directCsvcVotes += cv;
+        }
+
+        ['c1', 'c2', 'c3'].forEach(ck => {
+          if (c.csvc[ck]) {
+            addDist(ratingDist.csvc, c.csvc[ck].n4, c.csvc[ck].n3, c.csvc[ck].n2, c.csvc[ck].n1);
+            addDist(ratingDist.all, c.csvc[ck].n4, c.csvc[ck].n3, c.csvc[ck].n2, c.csvc[ck].n1);
+          }
+        });
+      }
+
+      // GV
+      if (c.gv && c.gv.overall && c.gv.overall.avgTb > 0) {
+        const gvV = c.gv.overall.totalVotes || v || 1;
+        gvWeightedScore += c.gv.overall.avgTb * gvV;
+        gvVotes += gvV;
+
+        if (isHybrid) {
+          hybridGvScore += c.gv.overall.avgTb * gvV;
+          hybridGvVotes += gvV;
+        } else {
+          directGvScore += c.gv.overall.avgTb * gvV;
+          directGvVotes += gvV;
+        }
+      }
+
+      // DGC
+      if (c.dgc && c.dgc.score > 0) {
+        const dv = c.dgc.votes || v || 1;
+        dgcWeightedScore += c.dgc.score * dv;
+        dgcWeightedPos += (c.dgc.posRate || 0) * dv;
+        dgcVotes += dv;
+
+        if (isHybrid) {
+          hybridDgcScore += c.dgc.score * dv;
+          hybridDgcVotes += dv;
+        } else {
+          directDgcScore += c.dgc.score * dv;
+          directDgcVotes += dv;
+        }
+      }
+    });
+
+    // De-duplicate Lecturer Hours & Aggregate Positive Rate (Mức 4-5)
+    const classCodesSet = new Set(classesList.map(c => normalizeReportClassKey(c.classCode)));
+    const hoursMap = new Map();
+    const activeGvs = new Set();
+    const matchedGvItems = [];
+    let gvCritTotalVotes = 0;
+    let gvCritPosVotes = 0;
+    let gvFallbackWeightedPos = 0;
+    let gvFallbackVotes = 0;
+
+    const gvDataList = Array.isArray(gvItemsRef) ? gvItemsRef : (typeof allGvItems !== 'undefined' ? allGvItems : []);
+    gvDataList.forEach(g => {
+      if (!g.ma_lop || !g.ten_gv) return;
+      const normCls = normalizeReportClassKey(g.ma_lop);
+      if (classCodesSet.has(normCls)) {
+        matchedGvItems.push(g);
+        const gName = g.ten_gv.trim();
+        const content = (g.noi_dung_giang || g.noi_dung || '').trim();
+        const dedupKey = normCls + '___' + gName + '___' + content;
+        const st = Number(g.so_tiet) || 0;
+        if (!hoursMap.has(dedupKey) || hoursMap.get(dedupKey) < st) {
+          hoursMap.set(dedupKey, st);
+        }
+        activeGvs.add(gName);
+
+        const sum1 = (Number(g.c5_ktcm) || 0) + (Number(g.c4_ktcm) || 0) + (Number(g.c3_ktcm) || 0) + (Number(g.c2_ktcm) || 0) + (Number(g.c1_ktcm) || 0);
+        const pos1 = (Number(g.c5_ktcm) || 0) + (Number(g.c4_ktcm) || 0);
+        const sum2 = (Number(g.c5_knsp) || 0) + (Number(g.c4_knsp) || 0) + (Number(g.c3_knsp) || 0) + (Number(g.c2_knsp) || 0) + (Number(g.c1_knsp) || 0);
+        const pos2 = (Number(g.c5_knsp) || 0) + (Number(g.c4_knsp) || 0);
+        const sum3 = (Number(g.c5_tdtp) || 0) + (Number(g.c4_tdtp) || 0) + (Number(g.c3_tdtp) || 0) + (Number(g.c2_tdtp) || 0) + (Number(g.c1_tdtp) || 0);
+        const pos3 = (Number(g.c5_tdtp) || 0) + (Number(g.c4_tdtp) || 0);
+        const critSum = sum1 + sum2 + sum3;
+        if (critSum > 0) {
+          gvCritTotalVotes += critSum;
+          gvCritPosVotes += (pos1 + pos2 + pos3);
+        } else if (g.ty_le_tich_cuc_tb > 0) {
+          const gvRowVotes = Number(g.tong_phieu) || 1;
+          gvFallbackWeightedPos += Number(g.ty_le_tich_cuc_tb) * gvRowVotes;
+          gvFallbackVotes += gvRowVotes;
+        }
+      }
+    });
+
+    const gvPosRate = gvCritTotalVotes > 0
+      ? Number(((gvCritPosVotes / gvCritTotalVotes) * 100).toFixed(1))
+      : (gvFallbackVotes > 0 ? Number((gvFallbackWeightedPos / gvFallbackVotes).toFixed(1)) : 0);
+
+    let totalTeachingHours = 0;
+    hoursMap.forEach(h => totalTeachingHours += h);
+
+    const lecAgg = aggregateLecturerList(matchedGvItems, true);
+    const unitAggList = aggregateGvUnitList(matchedGvItems);
+
+    const topLecturers = lecAgg.lecturers
+      .map(l => ({
+        name: l.name,
+        hours: l.totalHours,
+        classesCount: l.classesCount,
+        avgScore: l.diem_tb
+      }))
+      .sort((a, b) => b.hours - a.hours)
+      .slice(0, 10);
+
+    return {
+      programsCount: distinctPrograms.size,
+      classesCount: totalClasses,
+      hvKh: totalHvKh,
+      hvThucTe: totalHvTt,
+      surveyedHvThucTe: surveyedHvTt,
+      completionRate: totalHvKh > 0 ? Number(((totalHvTt / totalHvKh) * 100).toFixed(1)) : (totalHvTt > 0 ? 100 : 0),
+      votes: totalVotes,
+      responseRate: computeSurveyResponseRate(totalVotes, surveyedHvTt, false),
+      surveyedClassesCount: surveyedClasses,
+      surveyedClassesRate: totalClasses > 0 ? Number(((surveyedClasses / totalClasses) * 100).toFixed(1)) : 0,
+      teachingHours: totalTeachingHours,
+      activeLecturersCount: activeGvs.size,
+      topLecturers: topLecturers,
+      gvEvaluation: {
+        lecturers: lecAgg.lecturers,
+        units: unitAggList
+      },
+      nddt: {
+        score: nddtVotes > 0 ? Number((nddtWeightedScore / nddtVotes).toFixed(2)) : 0,
+        posRate: nddtVotes > 0 ? Number((nddtWeightedPos / nddtVotes).toFixed(1)) : 0,
+        votes: nddtVotes
+      },
+      ppht: {
+        score: pphtVotes > 0 ? Number((pphtWeightedScore / pphtVotes).toFixed(2)) : 0,
+        posRate: pphtVotes > 0 ? Number((pphtWeightedPos / pphtVotes).toFixed(1)) : 0,
+        votes: pphtVotes
+      },
+      csvc: {
+        score: csvcVotes > 0 ? Number((csvcWeightedScore / csvcVotes).toFixed(2)) : 0,
+        posRate: csvcVotes > 0 ? Number((csvcWeightedPos / csvcVotes).toFixed(1)) : 0,
+        votes: csvcVotes
+      },
+      gv: {
+        score: gvVotes > 0 ? Number((gvWeightedScore / gvVotes).toFixed(2)) : 0,
+        posRate: gvPosRate,
+        votes: gvVotes
+      },
+      dgc: {
+        score: dgcVotes > 0 ? Number((dgcWeightedScore / dgcVotes).toFixed(2)) : 0,
+        posRate: dgcVotes > 0 ? Number((dgcWeightedPos / dgcVotes).toFixed(1)) : 0,
+        votes: dgcVotes
+      },
+      formatComparison: {
+        direct: {
+          classesCount: directClassesCount,
+          hvThucTe: directHvTt,
+          nddt: directNddtVotes > 0 ? Number((directNddtScore / directNddtVotes).toFixed(2)) : 0,
+          ppht: directPphtVotes > 0 ? Number((directPphtScore / directPphtVotes).toFixed(2)) : 0,
+          csvc: directCsvcVotes > 0 ? Number((directCsvcScore / directCsvcVotes).toFixed(2)) : 0,
+          gv: directGvVotes > 0 ? Number((directGvScore / directGvVotes).toFixed(2)) : 0,
+          dgc: directDgcVotes > 0 ? Number((directDgcScore / directDgcVotes).toFixed(2)) : 0
+        },
+        hybrid: {
+          classesCount: hybridClassesCount,
+          hvThucTe: hybridHvTt,
+          nddt: hybridNddtVotes > 0 ? Number((hybridNddtScore / hybridNddtVotes).toFixed(2)) : 0,
+          ppht: hybridPphtVotes > 0 ? Number((hybridPphtScore / hybridPphtVotes).toFixed(2)) : 0,
+          csvc: hybridCsvcVotes > 0 ? Number((hybridCsvcScore / hybridCsvcVotes).toFixed(2)) : 0,
+          gv: hybridGvVotes > 0 ? Number((hybridGvScore / hybridGvVotes).toFixed(2)) : 0,
+          dgc: hybridDgcVotes > 0 ? Number((hybridDgcScore / hybridDgcVotes).toFixed(2)) : 0
+        }
+      },
+      ratingDist: ratingDist
+    };
+  }
+
+  /**
+   * Format display label for custom date range [fromIso, toIso].
+   */
+  function formatCustomDateRangeLabel(fromIso, toIso) {
+    if (fromIso && toIso) return formatVnDate(fromIso) + ' – ' + formatVnDate(toIso);
+    if (fromIso) return 'Từ ' + formatVnDate(fromIso);
+    if (toIso) return 'Đến ' + formatVnDate(toIso);
+    return '';
+  }
+
+  /**
+   * Generate continuous period buckets matching granularity across a custom date span [boundFrom, boundTo].
+   */
+  function buildCustomRangeTrendBuckets(gran, scopedClasses, boundFrom, boundTo, gvData, getClassPeriodKey) {
+    const startYear = parseInt(boundFrom.slice(0, 4), 10);
+    const startMonth = parseInt(boundFrom.slice(5, 7), 10);
+    const endYear = parseInt(boundTo.slice(0, 4), 10);
+    const endMonth = parseInt(boundTo.slice(5, 7), 10);
+    const multiYear = startYear !== endYear;
+    const buckets = [];
+
+    if (gran === 'month') {
+      let y = startYear;
+      let m = startMonth;
+      let guard = 0;
+      while ((y < endYear || (y === endYear && m <= endMonth)) && guard < 48) {
+        const mm = m < 10 ? '0' + m : '' + m;
+        const mKey = y + '-' + mm;
+        const subClasses = scopedClasses.filter(c => getClassPeriodKey(c) === mKey);
+        buckets.push({
+          periodKey: mKey,
+          label: 'Tháng ' + mm + '/' + y,
+          shortLabel: multiYear ? ('T' + m + '/' + String(y).slice(2)) : ('T' + m),
+          classes: subClasses,
+          metrics: aggregatePeriodClassMetrics(subClasses, gvData)
+        });
+        m++;
+        if (m > 12) { m = 1; y++; }
+        guard++;
+      }
+    } else if (gran === 'quarter') {
+      let y = startYear;
+      let q = Math.ceil(startMonth / 3);
+      const endQ = Math.ceil(endMonth / 3);
+      let guard = 0;
+      while ((y < endYear || (y === endYear && q <= endQ)) && guard < 20) {
+        const qKey = y + '-Q' + q;
+        const roman = q === 1 ? 'I' : (q === 2 ? 'II' : (q === 3 ? 'III' : 'IV'));
+        const subClasses = scopedClasses.filter(c => getClassPeriodKey(c) === qKey);
+        buckets.push({
+          periodKey: qKey,
+          label: 'Quý ' + roman + '/' + y,
+          shortLabel: multiYear ? ('Q' + q + '/' + String(y).slice(2)) : ('Quý ' + roman),
+          classes: subClasses,
+          metrics: aggregatePeriodClassMetrics(subClasses, gvData)
+        });
+        q++;
+        if (q > 4) { q = 1; y++; }
+        guard++;
+      }
+    } else {
+      let y = startYear;
+      let guard = 0;
+      while (y <= endYear && guard < 15) {
+        const yKey = '' + y;
+        const subClasses = scopedClasses.filter(c => getClassPeriodKey(c) === yKey);
+        buckets.push({
+          periodKey: yKey,
+          label: 'Năm ' + yKey,
+          shortLabel: yKey,
+          classes: subClasses,
+          metrics: aggregatePeriodClassMetrics(subClasses, gvData)
+        });
+        y++;
+        guard++;
+      }
+    }
+    return buckets;
+  }
+
+  function getTimeBasedAnalytics(options) {
+    const opts = options || {};
+    const gran = opts.granularity || reportState.timeGranularity || 'quarter';
+    const year = opts.year || reportState.timeYear || '2026';
+    const period = opts.period !== undefined ? opts.period : (reportState.timePeriod || 'all');
+    const progFilter = (opts.programFilter !== undefined ? opts.programFilter : (reportState.timeProgram || '')).trim();
+    const fmtFilter = (opts.formatFilter !== undefined ? opts.formatFilter : (reportState.timeFormat || '')).trim();
+    const locFilter = (opts.locationFilter !== undefined ? opts.locationFilter : (reportState.timeLocation || '')).trim();
+
+    let dateFrom = toIsoDateKey(opts.dateFrom !== undefined ? opts.dateFrom : reportState.timeDateFrom);
+    let dateTo = toIsoDateKey(opts.dateTo !== undefined ? opts.dateTo : reportState.timeDateTo);
+    if (dateFrom && dateTo && dateFrom > dateTo) {
+      const tmp = dateFrom;
+      dateFrom = dateTo;
+      dateTo = tmp;
+    }
+    const isCustomRange = !!(dateFrom || dateTo);
+
+    const allClasses = typeof getAllReportClassList === 'function' ? getAllReportClassList() : [];
+    const allDetailed = allClasses.map(c => typeof getDetailedClassReport === 'function' ? getDetailedClassReport(c.uniqueKey || c.ma_lop) : c).filter(Boolean);
+
+    const matchesGeneralFilters = (c) => {
+      if (progFilter) {
+        const normFilter = normalizeReportProgramKey(progFilter);
+        const pKey = normalizeReportProgramKey(c.programCode || c.className || '');
+        if (pKey !== normFilter && !c.className.toLowerCase().includes(progFilter.toLowerCase())) return false;
+      }
+      if (fmtFilter) {
+        const isHybrid = c.format.includes('kết hợp') || c.format.includes('Trực tuyến') || c.format.includes('Online');
+        if (fmtFilter === 'direct' && isHybrid) return false;
+        if (fmtFilter === 'hybrid' && !isHybrid) return false;
+      }
+      if (locFilter) {
+        if (!c.location || !c.location.toLowerCase().includes(locFilter.toLowerCase())) return false;
+      }
+      return true;
+    };
+
+    const getClassDateIso = (c) => resolveItemDateBounds(c).endIso;
+
+    const getClassPeriodKey = (c) => {
+      const isoDate = getClassDateIso(c);
+      if (!isoDate || isoDate.length < 7) return '';
+      const yr = isoDate.slice(0, 4);
+      const mo = isoDate.slice(5, 7);
+      if (gran === 'month') return yr + '-' + mo;
+      if (gran === 'quarter') {
+        const qNum = Math.ceil(parseInt(mo, 10) / 3);
+        return yr + '-Q' + qNum;
+      }
+      return yr;
+    };
+
+    const gvData = typeof allGvItems !== 'undefined' ? allGvItems : [];
+    let currentClasses = [];
+    let prevPeriodKey = null;
+    let prevClasses = [];
+    let prevPeriodLabel = '';
+    let periodsTrend = [];
+    let effectivePeriod = period;
+    let periodLabel = '';
+
+    if (isCustomRange) {
+      effectivePeriod = 'all';
+      periodLabel = formatCustomDateRangeLabel(dateFrom, dateTo);
+      currentClasses = allDetailed.filter(c => {
+        const isoDate = getClassDateIso(c);
+        if (!isoDate) return false;
+        if (dateFrom && isoDate < dateFrom) return false;
+        if (dateTo && isoDate > dateTo) return false;
+        return matchesGeneralFilters(c);
+      });
+
+      if (dateFrom && dateTo) {
+        const fParts = dateFrom.split('-').map(Number);
+        const tParts = dateTo.split('-').map(Number);
+        const spanDays = Math.round((Date.UTC(tParts[0], tParts[1] - 1, tParts[2]) - Date.UTC(fParts[0], fParts[1] - 1, fParts[2])) / 86400000);
+        const prevTo = shiftIsoDateDays(dateFrom, -1);
+        const prevFrom = shiftIsoDateDays(prevTo, -spanDays);
+        if (prevFrom && prevTo) {
+          prevPeriodLabel = formatVnDate(prevFrom) + ' – ' + formatVnDate(prevTo);
+          prevClasses = allDetailed.filter(c => {
+            const isoDate = getClassDateIso(c);
+            return isoDate && isoDate >= prevFrom && isoDate <= prevTo && matchesGeneralFilters(c);
+          });
+        }
+      }
+
+      const allSortedDates = allDetailed.map(c => getClassDateIso(c)).filter(Boolean).sort();
+      const boundFrom = dateFrom || allSortedDates[0] || (year + '-01-01');
+      let boundTo = dateTo || allSortedDates[allSortedDates.length - 1] || (year + '-12-31');
+      if (boundTo < boundFrom) boundTo = boundFrom;
+      periodsTrend = buildCustomRangeTrendBuckets(gran, currentClasses, boundFrom, boundTo, gvData, getClassPeriodKey);
+    } else {
+      periodLabel = formatPeriodDisplay(gran, period, year);
+      const yearClasses = allDetailed.filter(c => {
+        const isoDate = getClassDateIso(c);
+        if (!isoDate || isoDate.length < 4) return false;
+        const yr = isoDate.slice(0, 4);
+        if (year && yr !== year) return false;
+        return matchesGeneralFilters(c);
+      });
+
+      if (period && period !== 'all') {
+        currentClasses = yearClasses.filter(c => getClassPeriodKey(c) === period);
+      } else {
+        currentClasses = yearClasses;
+      }
+
+      if (period && period !== 'all') {
+        if (gran === 'quarter') {
+          const parts = period.split('-Q');
+          const qNum = parseInt(parts[1], 10);
+          const yr = parseInt(parts[0], 10);
+          if (qNum > 1) {
+            prevPeriodKey = yr + '-Q' + (qNum - 1);
+            prevPeriodLabel = 'Quý ' + (qNum === 2 ? 'I' : (qNum === 3 ? 'II' : 'III')) + '/' + yr;
+          } else {
+            prevPeriodKey = (yr - 1) + '-Q4';
+            prevPeriodLabel = 'Quý IV/' + (yr - 1);
+          }
+        } else if (gran === 'month') {
+          const parts = period.split('-');
+          const moNum = parseInt(parts[1], 10);
+          const yr = parseInt(parts[0], 10);
+          if (moNum > 1) {
+            const prevMo = (moNum - 1) < 10 ? '0' + (moNum - 1) : '' + (moNum - 1);
+            prevPeriodKey = yr + '-' + prevMo;
+            prevPeriodLabel = 'Tháng ' + prevMo + '/' + yr;
+          } else {
+            prevPeriodKey = (yr - 1) + '-12';
+            prevPeriodLabel = 'Tháng 12/' + (yr - 1);
+          }
+        } else if (gran === 'year') {
+          const yr = parseInt(period, 10);
+          prevPeriodKey = '' + (yr - 1);
+          prevPeriodLabel = 'Năm ' + (yr - 1);
+        }
+      }
+
+      if (prevPeriodKey) {
+        prevClasses = allDetailed.filter(c => {
+          const isoDate = getClassDateIso(c);
+          if (!isoDate || isoDate.length < 4) return false;
+          return getClassPeriodKey(c) === prevPeriodKey && matchesGeneralFilters(c);
+        });
+      }
+
+      if (gran === 'quarter') {
+        for (let q = 1; q <= 4; q++) {
+          const qKey = year + '-Q' + q;
+          const roman = q === 1 ? 'I' : (q === 2 ? 'II' : (q === 3 ? 'III' : 'IV'));
+          const subClasses = yearClasses.filter(c => getClassPeriodKey(c) === qKey);
+          const m = aggregatePeriodClassMetrics(subClasses, gvData);
+          periodsTrend.push({
+            periodKey: qKey,
+            label: 'Quý ' + roman + '/' + year,
+            shortLabel: 'Quý ' + roman,
+            classes: subClasses,
+            metrics: m
+          });
+        }
+      } else if (gran === 'month') {
+        for (let mo = 1; mo <= 12; mo++) {
+          const mm = mo < 10 ? '0' + mo : '' + mo;
+          const mKey = year + '-' + mm;
+          const subClasses = yearClasses.filter(c => getClassPeriodKey(c) === mKey);
+          const m = aggregatePeriodClassMetrics(subClasses, gvData);
+          periodsTrend.push({
+            periodKey: mKey,
+            label: 'Tháng ' + mm + '/' + year,
+            shortLabel: 'T' + mo,
+            classes: subClasses,
+            metrics: m
+          });
+        }
+      } else {
+        const yearSet = new Set();
+        allDetailed.forEach(c => {
+          const isoDate = getClassDateIso(c);
+          if (isoDate && isoDate.length >= 4) yearSet.add(isoDate.slice(0, 4));
+        });
+        const sortedYrs = Array.from(yearSet).sort();
+        sortedYrs.forEach(y => {
+          const subClasses = allDetailed.filter(c => {
+            const isoDate = getClassDateIso(c);
+            return isoDate && isoDate.slice(0, 4) === y && matchesGeneralFilters(c);
+          });
+          const m = aggregatePeriodClassMetrics(subClasses, gvData);
+          periodsTrend.push({
+            periodKey: y,
+            label: 'Năm ' + y,
+            shortLabel: '' + y,
+            classes: subClasses,
+            metrics: m
+          });
+        });
+      }
+    }
+
+    const currentMetrics = aggregatePeriodClassMetrics(currentClasses, gvData);
+    const prevMetrics = prevClasses.length > 0 ? aggregatePeriodClassMetrics(prevClasses, gvData) : null;
+
+    return {
+      granularity: gran,
+      year: year,
+      period: effectivePeriod,
+      periodLabel: periodLabel,
+      isCustomRange: isCustomRange,
+      dateFrom: dateFrom,
+      dateTo: dateTo,
+      programFilter: progFilter,
+      formatFilter: fmtFilter,
+      locationFilter: locFilter,
+      currentClasses: currentClasses,
+      metrics: currentMetrics,
+      prevPeriodKey: prevPeriodKey,
+      prevPeriodLabel: prevPeriodLabel,
+      prevMetrics: prevMetrics,
+      periodsTrend: periodsTrend
+    };
+  }
+
+  function generateTimeInsights(data) {
+    const m = data.metrics;
+    const bullets = [];
+
+    // Bullet 1: Scale & Attendance
+    let scaleText = '<strong>Quy mô đào tạo:</strong> Tổ chức tổng cộng <strong>' + m.classesCount + ' lớp học</strong> với <strong>' + m.hvThucTe.toLocaleString('vi-VN') + ' lượt học viên</strong> tham dự thực tế, đạt tỷ lệ hoàn thành kế hoạch <strong>' + m.completionRate.toFixed(1) + '%</strong>.';
+    if (data.prevMetrics && data.prevMetrics.classesCount > 0) {
+      const deltaCls = (((m.classesCount - data.prevMetrics.classesCount) / data.prevMetrics.classesCount) * 100).toFixed(1);
+      const sign = Number(deltaCls) >= 0 ? '+' : '';
+      scaleText += ' (Quy mô lớp ' + sign + deltaCls + '% so với ' + data.prevPeriodLabel + ').';
+    }
+    bullets.push({ icon: 'fa-graduation-cap', color: 'var(--brand-primary)', text: scaleText });
+
+    // Bullet 2: Survey & Response
+    let surveyText = '<strong>Mức độ tham gia đánh giá:</strong> Thu nhận <strong>' + m.votes.toLocaleString('vi-VN') + ' phiếu khảo sát hợp lệ</strong>, đạt tỷ lệ phản hồi trung bình <strong>' + m.responseRate.toFixed(1) + '%</strong> trên tổng số học viên các lớp có phản hồi.';
+    bullets.push({ icon: 'fa-clipboard-check', color: '#0284C7', text: surveyText });
+
+    // Bullet 3: Quality Performance
+    const scores = [
+      { name: 'Giảng viên', score: m.gv.score, scale: 5.0, norm: (m.gv.score / 5.0) * 100 },
+      { name: 'Phương pháp & Hình thức', score: m.ppht.score, scale: 4.0, norm: (m.ppht.score / 4.0) * 100 },
+      { name: 'Cơ sở vật chất', score: m.csvc.score, scale: 4.0, norm: (m.csvc.score / 4.0) * 100 },
+      { name: 'Nội dung đào tạo', score: m.nddt.score, scale: 4.0, norm: (m.nddt.score / 4.0) * 100 },
+      { name: 'Đánh giá chung', score: m.dgc.score, scale: 5.0, norm: (m.dgc.score / 5.0) * 100 }
+    ].filter(s => s.score > 0).sort((a, b) => b.norm - a.norm);
+
+    if (scores.length > 0) {
+      const top = scores[0];
+      const lowest = scores[scores.length - 1];
+      let qualText = '<strong>Chất lượng đào tạo nổi bật:</strong> Phân hệ đạt đánh giá cao nhất là <strong>' + top.name + ' (' + top.score.toFixed(2) + '/' + top.scale.toFixed(1) + ')</strong>.';
+      if (scores.length > 1 && lowest.name !== top.name) {
+        qualText += ' Phân hệ cần quan tâm cải thiện là <strong>' + lowest.name + ' (' + lowest.score.toFixed(2) + '/' + lowest.scale.toFixed(1) + ')</strong>.';
+      }
+      bullets.push({ icon: 'fa-star', color: '#D97706', text: qualText });
+    }
+
+    // Bullet 4: Delivery Formats
+    const hybCount = m.formatComparison.hybrid.classesCount;
+    const totCount = m.classesCount;
+    const hybRate = totCount > 0 ? ((hybCount / totCount) * 100).toFixed(1) : 0;
+    let fmtText = '<strong>Cơ cấu hình thức đào tạo:</strong> Lớp Trực tiếp kết hợp Trực tuyến chiếm <strong>' + hybRate + '%</strong> (' + hybCount + '/' + totCount + ' lớp).';
+    bullets.push({ icon: 'fa-network-wired', color: '#7E22CE', text: fmtText });
+
+    // Bullet 5: Teaching Hours
+    if (m.teachingHours > 0) {
+      let gvText = '<strong>Đội ngũ Giảng viên:</strong> Toàn hệ thống huy động <strong>' + m.activeLecturersCount + ' giảng viên</strong> tham gia với <strong>' + m.teachingHours.toLocaleString('vi-VN') + ' tiết giảng dạy</strong> (đã loại trùng theo quy tắc nghiệp vụ).';
+      bullets.push({ icon: 'fa-person-chalkboard', color: '#059669', text: gvText });
+    }
+
+    return bullets;
+  }
+
+  function renderTimeExecutiveOverview(data) {
+    const targetTitle = document.getElementById('reportTimeTargetTitle');
+    const badgeType = document.getElementById('reportTimeTargetTypeBadge');
+    const scopeBadge = document.getElementById('reportTimeScopeBadge');
+
+    if (targetTitle) {
+      targetTitle.textContent = 'BÁO CÁO PHÂN TÍCH ĐÀO TẠO — ' + data.periodLabel.toUpperCase();
+    }
+    if (scopeBadge) {
+      scopeBadge.textContent = data.periodLabel;
+    }
+    if (badgeType) {
+      badgeType.textContent = 'BÁO CÁO ' + (data.granularity === 'month' ? 'THEO THÁNG' : (data.granularity === 'quarter' ? 'THEO QUÝ' : 'THEO NĂM'));
+    }
+
+    // Metadata Grid
+    const metaElem = document.getElementById('reportTimeMetadataGrid');
+    if (metaElem) {
+      let filterDesc = 'Tất cả chương trình';
+      if (data.programFilter) filterDesc = 'Chương trình: ' + data.programFilter;
+      let fmtDesc = 'Tất cả hình thức';
+      if (data.formatFilter === 'direct') fmtDesc = 'Trực tiếp';
+      if (data.formatFilter === 'hybrid') fmtDesc = 'Trực tiếp kết hợp Trực tuyến';
+
+      metaElem.innerHTML =
+        '<div class="meta-item">' +
+        '<span class="meta-label">Kỳ báo cáo: </span>' +
+        '<span class="meta-val" style="font-weight: 800; color: var(--brand-primary);">' + data.periodLabel + '</span>' +
+        '</div>' +
+        '<div class="meta-item">' +
+        '<span class="meta-label">Cấp độ phân tích: </span>' +
+        '<span class="meta-val" style="font-weight: 700;">' +
+        (data.granularity === 'month' ? 'Theo Tháng' : (data.granularity === 'quarter' ? 'Theo Quý' : 'Theo Năm')) +
+        (data.isCustomRange ? ' • Khoảng tùy chỉnh' : '') +
+        '</span>' +
+        '</div>' +
+        '<div class="meta-item">' +
+        '<span class="meta-label">Phạm vi hình thức: </span>' +
+        '<span class="meta-val">' + fmtDesc + '</span>' +
+        '</div>' +
+        '<div class="meta-item">' +
+        '<span class="meta-label">Phạm vi chương trình: </span>' +
+        '<span class="meta-val">' + filterDesc + '</span>' +
+        '</div>' +
+        '<div class="meta-item">' +
+        '<span class="meta-label">Quy mô thời kỳ: </span>' +
+        '<span class="meta-val" style="font-weight: 700;">' + data.metrics.classesCount + ' lớp học (' + data.metrics.surveyedClassesCount + ' lớp có khảo sát)</span>' +
+        '</div>' +
+        '<div class="meta-item">' +
+        '<span class="meta-label">Địa điểm tổ chức: </span>' +
+        '<span class="meta-val">' + (data.locationFilter || 'Toàn hệ thống Agribank') + '</span>' +
+        '</div>';
+    }
+
+    // Storytelling Insights Card
+    const insightsCard = document.getElementById('reportTimeInsightsCard');
+    if (insightsCard) {
+      const bullets = generateTimeInsights(data);
+      let insHtml =
+        '<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.65rem; border-bottom: 1px dashed #FECDD3; padding-bottom: 0.4rem;">' +
+        '<div style="font-size: 0.95rem; font-weight: 800; color: var(--brand-primary); display: flex; align-items: center; gap: 0.5rem;">' +
+        '<i class="fa-solid fa-wand-magic-sparkles"></i> ĐIỂM NHẤN HOẠT ĐỘNG & CHẤT LƯỢNG ĐÀO TẠO TRONG KỲ' +
+        '</div>' +
+        '<span style="font-size: 0.72rem; color: #64748B; font-weight: 600;">Executive Insights</span>' +
+        '</div>' +
+        '<div style="display: flex; flex-direction: column; gap: 0.55rem;">';
+
+      bullets.forEach(b => {
+        insHtml +=
+          '<div style="display: flex; align-items: flex-start; gap: 0.65rem; font-size: 0.84rem; line-height: 1.5; color: #1E293B;">' +
+          '<div style="min-width: 20px; height: 20px; border-radius: 50%; background: #FFFFFF; display: flex; align-items: center; justify-content: center; color: ' + b.color + '; box-shadow: 0 1px 2px rgba(0,0,0,0.06); margin-top: 1px;"><i class="fa-solid ' + b.icon + '" style="font-size: 0.65rem;"></i></div>' +
+          '<div>' + b.text + '</div>' +
+          '</div>';
+      });
+      insHtml += '</div>';
+      insightsCard.innerHTML = insHtml;
+    }
+
+    renderTimeKpis(data);
+  }
+
+  function renderTimeKpis(data) {
+    const kpiElem = document.getElementById('reportTimeKpiGrid');
+    if (!kpiElem) return;
+
+    const m = data.metrics;
+    const prev = data.prevMetrics;
+
+    // Zigzag lightning-bolt trend arrow icon (Up when positive, Down when negative)
+    const getTrendBoltIcon = (direction) => {
+      if (direction === 'up') {
+        return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">' +
+          '<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline>' +
+          '<polyline points="16 7 22 7 22 13"></polyline>' +
+          '</svg>';
+      }
+      if (direction === 'down') {
+        return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">' +
+          '<polyline points="22 17 13.5 8.5 8.5 13.5 2 7"></polyline>' +
+          '<polyline points="16 17 22 17 22 11"></polyline>' +
+          '</svg>';
+      }
+      return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">' +
+        '<line x1="5" y1="12" x2="19" y2="12"></line>' +
+        '</svg>';
+    };
+
+    const renderComparisonBadge = (currentVal, prevVal, isPercent, compact) => {
+      if (!prev || prevVal === undefined || prevVal === null || prevVal === 0) return '';
+      const diff = currentVal - prevVal;
+      const pctChange = isPercent ? diff : (diff / prevVal) * 100;
+      const rounded = Number(pctChange.toFixed(1));
+      const direction = rounded > 0 ? 'up' : (rounded < 0 ? 'down' : 'flat');
+      const color = direction === 'up' ? '#059669' : (direction === 'down' ? '#DC2626' : '#475569');
+      const bgColor = direction === 'up' ? '#ECFDF5' : (direction === 'down' ? '#FEF2F2' : '#F1F5F9');
+      const signStr = rounded > 0 ? '+' : (rounded < 0 ? '-' : '');
+      const suffix = isPercent ? '% pt' : '%';
+      const fontSize = compact ? '0.76rem' : '0.82rem';
+      const pad = compact ? '2px 6px' : '3px 8px';
+      return '<span style="font-size: ' + fontSize + '; font-weight: 700; color: ' + color + '; background: ' + bgColor + '; padding: ' + pad + '; border-radius: 5px; display: inline-flex; align-items: center; gap: 0.28rem; line-height: 1.25; white-space: nowrap;" title="So với ' + (data.prevPeriodLabel || 'kỳ trước') + '">' +
+        getTrendBoltIcon(direction) + signStr + Math.abs(rounded).toFixed(1) + suffix + ' vs kỳ trước</span>';
+    };
+
+    // Semi-circular Gauge SVG for Rate (TỶ LỆ) KPI Cards
+    const renderTimeGaugeHtml = (percentVal, displayStr, theme) => {
+      const pNum = typeof percentVal === 'number' ? percentVal : parseFloat(percentVal) || 0;
+      const clamped = Math.min(100, Math.max(0, pNum));
+      const arcLen = 138.23; // PI * 44
+      const dashOffset = (arcLen * (1 - clamped / 100)).toFixed(1);
+      let strokeColor = '#059669';
+      if (theme === 'purple') {
+        strokeColor = clamped >= 80 ? '#7E22CE' : (clamped >= 50 ? '#A855F7' : '#EF4444');
+      } else if (theme === 'emerald') {
+        strokeColor = clamped >= 95 ? '#059669' : (clamped >= 70 ? '#10B981' : '#EF4444');
+      } else {
+        strokeColor = pNum >= 100 ? '#059669' : (pNum >= 80 ? '#10B981' : (pNum >= 50 ? '#F59E0B' : '#EF4444'));
+      }
+
+      return '<div style="display: flex; flex-direction: column; align-items: center; justify-content: center; margin: 0.25rem 0 0.3rem 0;">' +
+        '<div style="position: relative; width: 118px; height: 62px;">' +
+        '<svg viewBox="0 0 116 62" style="width: 118px; height: 62px; overflow: visible;">' +
+        '<path d="M 14 54 A 44 44 0 0 1 102 54" fill="none" stroke="#E2E8F0" stroke-width="8.5" stroke-linecap="round" />' +
+        '<path d="M 14 54 A 44 44 0 0 1 102 54" fill="none" stroke="' + strokeColor + '" stroke-width="8.5" stroke-linecap="round" stroke-dasharray="' + arcLen + '" stroke-dashoffset="' + dashOffset + '" />' +
+        '<text x="58" y="49" text-anchor="middle" font-family="\'Plus Jakarta Sans\', sans-serif" font-size="16" font-weight="800" fill="#1E293B">' + displayStr + '</text>' +
+        '</svg>' +
+        '</div>' +
+        '</div>';
+    };
+
+    const renderTimeCard = (cfg) => {
+      const topRight = cfg.badgeText
+        ? '<span class="badge" style="background: ' + cfg.badgeBg + '; color: ' + cfg.badgeColor + '; font-size: 0.72rem; padding: 2px 6px;">' + cfg.badgeText + '</span>'
+        : '<div style="width: 30px; height: 30px; border-radius: 50%; background: ' + cfg.iconBg + '; display: flex; align-items: center; justify-content: center; color: ' + cfg.borderColor + '; flex-shrink: 0;"><i class="fa-solid ' + cfg.icon + '"></i></div>';
+
+      const subAlign = cfg.isGauge ? 'justify-content: center; text-align: center;' : 'justify-content: flex-start;';
+
+      return '<div class="kpi-card" style="border-left: 3px solid ' + cfg.borderColor + '; padding: 0.9rem; display: flex; flex-direction: column; justify-content: space-between; min-height: 132px;">' +
+        '<div style="display: flex; justify-content: space-between; align-items: center; gap: 0.35rem;">' +
+        '<span style="font-size: 0.76rem; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.01em;">' + cfg.title + '</span>' +
+        topRight +
+        '</div>' +
+        cfg.valueHtml +
+        '<div style="display: flex; flex-wrap: wrap; align-items: center; ' + subAlign + ' gap: 0.4rem; margin-top: 0.35rem; font-size: 0.85rem; color: #475569; font-weight: 500; line-height: 1.4;">' +
+        '<span>' + cfg.subtitle + '</span>' +
+        (cfg.comparisonHtml || '') +
+        '</div>' +
+        '</div>';
+    };
+
+    // ================= DOMAIN 1: QUY MÔ ĐÀO TẠO & HOÀN THÀNH KẾ HOẠCH (6 CARDS) =================
+    const domain1LeftCards = [
+      {
+        title: 'TỔNG SỐ CHƯƠNG TRÌNH',
+        borderColor: '#7C3AED',
+        icon: 'fa-graduation-cap',
+        iconBg: '#F3E8FF',
+        valueHtml: '<div style="font-size: 1.7rem; font-weight: 800; color: #7C3AED; margin: 0.3rem 0;">' + (m.programsCount || 0) + '</div>',
+        subtitle: 'Chương trình đào tạo',
+        comparisonHtml: (prev && prev.programsCount > 0) ? renderComparisonBadge(m.programsCount, prev.programsCount, false) : ''
+      },
+      {
+        title: 'TỔNG SỐ LỚP HỌC',
+        borderColor: 'var(--brand-primary)',
+        icon: 'fa-chalkboard',
+        iconBg: '#FFF1F2',
+        valueHtml: '<div style="font-size: 1.7rem; font-weight: 800; color: #1E293B; margin: 0.3rem 0;">' + m.classesCount + '</div>',
+        subtitle: 'Lớp độc bản tổ chức',
+        comparisonHtml: prev ? renderComparisonBadge(m.classesCount, prev.classesCount, false) : ''
+      },
+      {
+        title: 'HỌC VIÊN KẾ HOẠCH',
+        borderColor: '#8C1D40',
+        icon: 'fa-user-group',
+        iconBg: '#FFF1F2',
+        valueHtml: '<div style="font-size: 1.7rem; font-weight: 800; color: #8C1D40; margin: 0.3rem 0;">' + m.hvKh.toLocaleString('vi-VN') + '</div>',
+        subtitle: 'Chỉ tiêu kế hoạch đào tạo',
+        comparisonHtml: prev ? renderComparisonBadge(m.hvKh, prev.hvKh, false) : ''
+      },
+      {
+        title: 'LƯỢT HỌC VIÊN THỰC TẾ',
+        borderColor: '#0284C7',
+        icon: 'fa-users',
+        iconBg: '#E0F2FE',
+        valueHtml: '<div style="font-size: 1.7rem; font-weight: 800; color: #1E293B; margin: 0.3rem 0;">' + m.hvThucTe.toLocaleString('vi-VN') + '</div>',
+        subtitle: 'Học viên tham dự thực tế',
+        comparisonHtml: prev ? renderComparisonBadge(m.hvThucTe, prev.hvThucTe, false) : ''
+      },
+      {
+        title: 'TỶ LỆ HỌC VIÊN THAM DỰ',
+        borderColor: '#059669',
+        icon: 'fa-gauge-high',
+        iconBg: '#ECFDF5',
+        isGauge: true,
+        valueHtml: renderTimeGaugeHtml(m.completionRate, m.completionRate.toFixed(1) + '%', 'green'),
+        subtitle: 'Thực tế / Kế hoạch',
+        comparisonHtml: prev ? renderComparisonBadge(m.completionRate, prev.completionRate, true) : ''
+      }
+    ];
+
+    // Card 6: Split Top (Số lượng Giảng viên) & Bottom (Số tiết) in same card size
+    const renderLecturerSplitCard = () => {
+      const gvCountBadge = (prev && prev.activeLecturersCount > 0) ? renderComparisonBadge(m.activeLecturersCount, prev.activeLecturersCount, false, true) : '';
+      const hoursBadge = (prev && prev.teachingHours > 0) ? renderComparisonBadge(m.teachingHours, prev.teachingHours, false, true) : '';
+
+      return '<div class="kpi-card" style="border-left: 3px solid #BE185D; padding: 0.7rem 0.85rem; display: flex; flex-direction: column; justify-content: space-between; min-height: 132px;">' +
+        '<div style="display: flex; flex-direction: column; justify-content: center; padding-bottom: 0.4rem; border-bottom: 1px dashed #CBD5E1; flex: 1;">' +
+        '<div style="display: flex; justify-content: space-between; align-items: center; gap: 0.25rem;">' +
+        '<span style="font-size: 0.76rem; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.01em;">Số lượng Giảng viên</span>' +
+        '<div style="width: 24px; height: 24px; border-radius: 50%; background: #FDF2F8; display: flex; align-items: center; justify-content: center; color: #BE185D; flex-shrink: 0; font-size: 0.72rem;"><i class="fa-solid fa-person-chalkboard"></i></div>' +
+        '</div>' +
+        '<div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.25rem 0.35rem; margin-top: 0.2rem;">' +
+        '<span style="font-size: 1.4rem; font-weight: 800; color: #1E293B; line-height: 1.1;">' + m.activeLecturersCount.toLocaleString('vi-VN') + '</span>' +
+        gvCountBadge +
+        '</div>' +
+        '</div>' +
+        '<div style="display: flex; flex-direction: column; justify-content: center; padding-top: 0.4rem; flex: 1;">' +
+        '<div style="display: flex; justify-content: space-between; align-items: center; gap: 0.25rem;">' +
+        '<span style="font-size: 0.76rem; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.01em;">Số tiết</span>' +
+        '<div style="width: 24px; height: 24px; border-radius: 50%; background: #FDF2F8; display: flex; align-items: center; justify-content: center; color: #BE185D; flex-shrink: 0; font-size: 0.72rem;"><i class="fa-solid fa-clock"></i></div>' +
+        '</div>' +
+        '<div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.25rem 0.35rem; margin-top: 0.2rem;">' +
+        '<span style="font-size: 1.4rem; font-weight: 800; color: #BE185D; line-height: 1.1;">' + m.teachingHours.toLocaleString('vi-VN') + '</span>' +
+        hoursBadge +
+        '</div>' +
+        '</div>' +
+        '</div>';
+    };
+
+    // ================= DOMAIN 2: MỨC ĐỘ THAM GIA ĐÁNH GIÁ & KHẢO SÁT (3 CARDS) =================
+    const domain2Cards = [
+      {
+        title: 'LƯỢT ĐÁNH GIÁ HỢP LỆ',
+        borderColor: '#0284C7',
+        icon: 'fa-file-lines',
+        iconBg: '#E0F2FE',
+        valueHtml: '<div style="font-size: 1.75rem; font-weight: 800; color: #1E293B; margin: 0.3rem 0;">' + m.votes.toLocaleString('vi-VN') + '</div>',
+        subtitle: 'Phiếu khảo sát kiểm định',
+        comparisonHtml: prev ? renderComparisonBadge(m.votes, prev.votes, false) : ''
+      },
+      {
+        title: 'TỶ LỆ PHẢN HỒI TB',
+        borderColor: '#7E22CE',
+        icon: 'fa-chart-pie',
+        iconBg: '#F3E8FF',
+        isGauge: true,
+        valueHtml: renderTimeGaugeHtml(m.responseRate, m.responseRate.toFixed(1) + '%', 'purple'),
+        subtitle: 'Phiếu / HV lớp có phản hồi',
+        comparisonHtml: prev ? renderComparisonBadge(m.responseRate, prev.responseRate, true) : ''
+      },
+      {
+        title: 'TỶ LỆ LỚP CÓ KHẢO SÁT',
+        borderColor: '#10B981',
+        icon: 'fa-circle-check',
+        iconBg: '#D1FAE5',
+        isGauge: true,
+        valueHtml: renderTimeGaugeHtml(m.surveyedClassesRate, m.surveyedClassesRate.toFixed(1) + '%', 'emerald'),
+        subtitle: m.surveyedClassesCount + ' / ' + m.classesCount + ' lớp có dữ liệu khảo sát',
+        comparisonHtml: prev ? renderComparisonBadge(m.surveyedClassesRate, prev.surveyedClassesRate, true) : ''
+      }
+    ];
+
+    // ================= DOMAIN 3: CHẤT LƯỢNG ĐÀO TẠO 5 PHÂN HỆ (5 CARDS RIÊNG BIỆT) =================
+    const domain3Configs = [
+      { title: 'NỘI DUNG ĐÀO TẠO', scale: '4.0', color: '#0284C7', bg: '#E0F2FE', metric: m.nddt, prevMetric: prev ? prev.nddt : null, posLabel: '(Tốt + Khá)' },
+      { title: 'PHƯƠNG PHÁP & HÌNH THỨC', scale: '4.0', color: '#D97706', bg: '#FEF3C7', metric: m.ppht, prevMetric: prev ? prev.ppht : null, posLabel: '(Tốt + Khá)' },
+      { title: 'TỔ CHỨC & CSVC', scale: '4.0', color: '#059669', bg: '#ECFDF5', metric: m.csvc, prevMetric: prev ? prev.csvc : null, posLabel: '(Tốt + Khá)' },
+      { title: 'ĐÁNH GIÁ GIẢNG VIÊN', scale: '5.0', color: 'var(--brand-primary)', bg: '#FFF1F2', metric: m.gv, prevMetric: prev ? prev.gv : null, posLabel: '(Mức 4-5)' },
+      { title: 'ĐÁNH GIÁ CHUNG', scale: '5.0', color: '#6366F1', bg: '#EEF2FF', metric: m.dgc, prevMetric: prev ? prev.dgc : null, posLabel: '(Mức 4-5)' }
+    ];
+
+    const domain3Cards = domain3Configs.map(cfg => {
+      const hasScore = cfg.metric && cfg.metric.score > 0;
+      const valHtml = hasScore
+        ? '<div style="font-size: 1.7rem; font-weight: 800; color: ' + cfg.color + '; margin: 0.3rem 0;">' + cfg.metric.score.toFixed(2) + '<span style="font-size: 0.95rem; color: #64748B; font-weight: 600;">/' + cfg.scale + '</span></div>'
+        : '<div style="font-size: 1.35rem; font-weight: 800; color: #94A3B8; margin: 0.35rem 0;">—</div>';
+      const subText = hasScore
+        ? ('Tỷ lệ tích cực: <strong>' + (cfg.metric.posRate || 0).toFixed(1) + '%</strong> ' + cfg.posLabel)
+        : 'Chưa có dữ liệu kỳ này';
+      const compHtml = (hasScore && cfg.prevMetric && cfg.prevMetric.score > 0)
+        ? renderComparisonBadge(cfg.metric.score, cfg.prevMetric.score, false)
+        : '';
+
+      return {
+        title: cfg.title,
+        borderColor: cfg.color,
+        badgeText: 'Thang ' + cfg.scale,
+        badgeBg: cfg.bg,
+        badgeColor: cfg.color,
+        valueHtml: valHtml,
+        subtitle: subText,
+        comparisonHtml: compHtml
+      };
+    });
+
+    let html = '';
+
+    html += '<div class="report-print-visual" style="margin-bottom: 1rem;">' +
+      '<div style="font-size: 0.84rem; font-weight: 800; color: var(--brand-primary); margin-bottom: 0.55rem; text-transform: uppercase; display: flex; align-items: center; gap: 0.35rem;">' +
+      '<i class="fa-solid fa-shapes"></i> I. QUY MÔ ĐÀO TẠO & HOÀN THÀNH KẾ HOẠCH' +
+      '</div>' +
+      '<div class="report-kpi-grid-6">' +
+      domain1LeftCards.map(renderTimeCard).join('') +
+      renderLecturerSplitCard() +
+      '</div></div>';
+
+    html += '<div class="report-print-visual" style="margin-bottom: 1rem;">' +
+      '<div style="font-size: 0.84rem; font-weight: 800; color: #0284C7; margin-bottom: 0.55rem; text-transform: uppercase; display: flex; align-items: center; gap: 0.35rem;">' +
+      '<i class="fa-solid fa-comments"></i> II. MỨC ĐỘ THAM GIA ĐÁNH GIÁ & KHẢO SÁT' +
+      '</div>' +
+      '<div class="report-kpi-grid-3">' +
+      domain2Cards.map(renderTimeCard).join('') +
+      '</div></div>';
+
+    html += '<div class="report-print-visual">' +
+      '<div style="font-size: 0.84rem; font-weight: 800; color: #059669; margin-bottom: 0.55rem; text-transform: uppercase; display: flex; align-items: center; gap: 0.35rem;">' +
+      '<i class="fa-solid fa-award"></i> III. CHẤT LƯỢNG ĐÀO TẠO 5 PHÂN HỆ' +
+      '</div>' +
+      '<div class="report-kpi-grid">' +
+      domain3Cards.map(renderTimeCard).join('') +
+      '</div></div>';
+
+    kpiElem.innerHTML = html;
+  }
+
+  function renderTimeReportCharts(data) {
+    if (typeof Chart === 'undefined') return;
+
+    // Visual 1: Training Volume & Attendance Trend (Combo Bar + Line)
+    if (reportCharts.timeVolumeTrend) {
+      reportCharts.timeVolumeTrend.destroy();
+      reportCharts.timeVolumeTrend = null;
+    }
+    const ctx1 = document.getElementById('timeVolumeTrendChart');
+    if (ctx1) {
+      reportCharts.timeVolumeTrend = new Chart(ctx1, {
+        data: {
+          labels: data.periodsTrend.map(p => p.shortLabel || p.label),
+          datasets: [
+            {
+              type: 'line',
+              label: 'Lượt học viên thực tế (Người)',
+              data: data.periodsTrend.map(p => p.metrics.hvThucTe),
+              borderColor: '#059669',
+              backgroundColor: '#059669',
+              borderWidth: 3.5,
+              pointRadius: 5,
+              pointHoverRadius: 7,
+              pointBackgroundColor: '#FFFFFF',
+              pointBorderColor: '#059669',
+              pointBorderWidth: 2.5,
+              tension: 0.3,
+              yAxisID: 'yStudents',
+              order: 1
+            },
+            {
+              type: 'bar',
+              label: 'Số lớp học (Lớp)',
+              data: data.periodsTrend.map(p => p.metrics.classesCount),
+              backgroundColor: 'rgba(140, 29, 64, 0.85)',
+              hoverBackgroundColor: '#8C1D40',
+              borderRadius: 6,
+              yAxisID: 'yClasses',
+              order: 10
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: { position: 'top', labels: { boxWidth: 12, font: { weight: 600 } } },
+            tooltip: {
+              callbacks: {
+                afterBody: function(items) {
+                  const idx = items[0].dataIndex;
+                  const p = data.periodsTrend[idx];
+                  return [
+                    'Tỉ lệ HV tham dự: ' + p.metrics.completionRate.toFixed(1) + '%',
+                    'Số phiếu khảo sát: ' + p.metrics.votes.toLocaleString('vi-VN')
+                  ];
+                }
+              }
+            }
+          },
+          scales: {
+            yClasses: {
+              type: 'linear',
+              position: 'left',
+              beginAtZero: true,
+              title: { display: true, text: 'Số lớp học', font: { weight: 600 } },
+              grid: { color: '#F1F5F9' }
+            },
+            yStudents: {
+              type: 'linear',
+              position: 'right',
+              beginAtZero: true,
+              title: { display: true, text: 'Lượt học viên', font: { weight: 600 } },
+              grid: { drawOnChartArea: false }
+            }
+          }
+        }
+      });
+    }
+
+    // Visual 2: Training Delivery Modes Breakdown (100% Stacked Bar)
+    if (reportCharts.timeFormatComposition) {
+      reportCharts.timeFormatComposition.destroy();
+      reportCharts.timeFormatComposition = null;
+    }
+    const ctx2 = document.getElementById('timeFormatCompositionChart');
+    if (ctx2) {
+      const directCounts = data.periodsTrend.map(p => p.metrics.formatComparison.direct.classesCount);
+      const hybridCounts = data.periodsTrend.map(p => p.metrics.formatComparison.hybrid.classesCount);
+      const directPcts = data.periodsTrend.map((p, i) => {
+        const tot = directCounts[i] + hybridCounts[i];
+        return tot > 0 ? Number(((directCounts[i] / tot) * 100).toFixed(1)) : 0;
+      });
+      const hybridPcts = data.periodsTrend.map((p, i) => {
+        const tot = directCounts[i] + hybridCounts[i];
+        return tot > 0 ? Number(((hybridCounts[i] / tot) * 100).toFixed(1)) : 0;
+      });
+
+      reportCharts.timeFormatComposition = new Chart(ctx2, {
+        type: 'bar',
+        data: {
+          labels: data.periodsTrend.map(p => p.shortLabel || p.label),
+          datasets: [
+            {
+              label: 'Trực tiếp (%)',
+              data: directPcts,
+              backgroundColor: '#059669',
+              borderRadius: { topLeft: 4, bottomLeft: 4 }
+            },
+            {
+              label: 'Trực tiếp kết hợp Trực tuyến (%)',
+              data: hybridPcts,
+              backgroundColor: '#7E22CE',
+              borderRadius: { topRight: 4, bottomRight: 4 }
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'top', labels: { boxWidth: 12, font: { weight: 600 } } },
+            tooltip: {
+              callbacks: {
+                afterLabel: function(item) {
+                  const idx = item.dataIndex;
+                  const isDir = item.datasetIndex === 0;
+                  const cnt = isDir ? directCounts[idx] : hybridCounts[idx];
+                  const tot = directCounts[idx] + hybridCounts[idx];
+                  return 'Số lượng: ' + cnt + ' / ' + tot + ' lớp';
+                }
+              }
+            }
+          },
+          scales: {
+            x: { stacked: true },
+            y: { stacked: true, max: 100, title: { display: true, text: 'Tỷ trọng hình thức (%)' }, grid: { color: '#F1F5F9' } }
+          }
+        }
+      });
+    }
+
+    // Visual 3: Quality Trend Across 5 Modules
+    if (reportCharts.timeQualityTrend) {
+      reportCharts.timeQualityTrend.destroy();
+      reportCharts.timeQualityTrend = null;
+    }
+    const ctx3 = document.getElementById('timeQualityTrendChart');
+    if (ctx3) {
+      const isNorm = (reportState.timeQualityMode === 'norm');
+      const scaleFactor = (score, maxScale) => {
+        if (!score || score <= 0) return null;
+        return isNorm ? Number(((score / maxScale) * 100).toFixed(1)) : score;
+      };
+
+      reportCharts.timeQualityTrend = new Chart(ctx3, {
+        type: 'line',
+        data: {
+          labels: data.periodsTrend.map(p => p.shortLabel || p.label),
+          datasets: [
+            {
+              label: isNorm ? 'NDĐT (% Chuẩn)' : 'NDĐT (Thang 4.0)',
+              data: data.periodsTrend.map(p => scaleFactor(p.metrics.nddt.score, 4.0)),
+              borderColor: '#0284C7',
+              backgroundColor: '#0284C7',
+              borderWidth: 2.5,
+              pointRadius: 4,
+              tension: 0.25
+            },
+            {
+              label: isNorm ? 'PPHT (% Chuẩn)' : 'PPHT (Thang 4.0)',
+              data: data.periodsTrend.map(p => scaleFactor(p.metrics.ppht.score, 4.0)),
+              borderColor: '#D97706',
+              backgroundColor: '#D97706',
+              borderWidth: 2.5,
+              pointRadius: 4,
+              tension: 0.25
+            },
+            {
+              label: isNorm ? 'CSVC (% Chuẩn)' : 'CSVC (Thang 4.0)',
+              data: data.periodsTrend.map(p => scaleFactor(p.metrics.csvc.score, 4.0)),
+              borderColor: '#059669',
+              backgroundColor: '#059669',
+              borderWidth: 2.5,
+              pointRadius: 4,
+              tension: 0.25
+            },
+            {
+              label: isNorm ? 'GV (% Chuẩn)' : 'GV (Thang 5.0)',
+              data: data.periodsTrend.map(p => scaleFactor(p.metrics.gv.score, 5.0)),
+              borderColor: '#8C1D40',
+              backgroundColor: '#8C1D40',
+              borderWidth: 2.5,
+              pointRadius: 4,
+              tension: 0.25
+            },
+            {
+              label: isNorm ? 'ĐGC (% Chuẩn)' : 'ĐGC (Thang 5.0)',
+              data: data.periodsTrend.map(p => scaleFactor(p.metrics.dgc.score, 5.0)),
+              borderColor: '#6366F1',
+              backgroundColor: '#6366F1',
+              borderWidth: 2.5,
+              pointRadius: 4,
+              tension: 0.25
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'top', labels: { boxWidth: 12, font: { weight: 600 } } }
+          },
+          scales: {
+            y: {
+              min: isNorm ? 60 : 3.0,
+              max: isNorm ? 100 : 5.0,
+              title: { display: true, text: isNorm ? 'Điểm chuẩn hóa (%)' : 'Điểm trung bình (Gốc)' },
+              grid: { color: '#F1F5F9' }
+            }
+          }
+        }
+      });
+    }
+
+    // Visual 4: Rating Distribution Over Time
+    if (reportCharts.timeRatingDistribution) {
+      reportCharts.timeRatingDistribution.destroy();
+      reportCharts.timeRatingDistribution = null;
+    }
+    const ctx4 = document.getElementById('timeRatingDistributionChart');
+    if (ctx4) {
+      const modKey = reportState.timeRatingDistModule || 'all';
+      const distData = data.periodsTrend.map(p => {
+        const d = (p.metrics.ratingDist && p.metrics.ratingDist[modKey]) ? p.metrics.ratingDist[modKey] : { n4: 0, n3: 0, n2: 0, n1: 0, total: 0 };
+        const tot = d.total > 0 ? d.total : 1;
+        return {
+          totScore: d.total,
+          p4: Number(((d.n4 / tot) * 100).toFixed(1)),
+          p3: Number(((d.n3 / tot) * 100).toFixed(1)),
+          p2: Number(((d.n2 / tot) * 100).toFixed(1)),
+          p1: Number(((d.n1 / tot) * 100).toFixed(1))
+        };
+      });
+
+      reportCharts.timeRatingDistribution = new Chart(ctx4, {
+        type: 'bar',
+        data: {
+          labels: data.periodsTrend.map(p => p.shortLabel || p.label),
+          datasets: [
+            { label: 'Tốt (Mức 4)', data: distData.map(d => d.p4), backgroundColor: '#15803D' },
+            { label: 'Khá (Mức 3)', data: distData.map(d => d.p3), backgroundColor: '#22C55E' },
+            { label: 'Bình thường (Mức 2)', data: distData.map(d => d.p2), backgroundColor: '#F59E0B' },
+            { label: 'Hạn chế (Mức 1)', data: distData.map(d => d.p1), backgroundColor: '#EF4444' }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'top', labels: { boxWidth: 12, font: { weight: 600 } } },
+            tooltip: {
+              callbacks: {
+                afterBody: function(items) {
+                  const idx = items[0].dataIndex;
+                  return 'Tổng lượt đánh giá: ' + distData[idx].totScore.toLocaleString('vi-VN');
+                }
+              }
+            }
+          },
+          scales: {
+            x: { stacked: true },
+            y: { stacked: true, max: 100, title: { display: true, text: 'Tỷ lệ đánh giá (%)' }, grid: { color: '#F1F5F9' } }
+          }
+        }
+      });
+    }
+
+    // Visual 5: Direct vs Hybrid Quality Comparison (Grouped Bar)
+    if (reportCharts.timeFormatComparison) {
+      reportCharts.timeFormatComparison.destroy();
+      reportCharts.timeFormatComparison = null;
+    }
+    const ctx5 = document.getElementById('timeFormatComparisonChart');
+    if (ctx5) {
+      const dir = data.metrics.formatComparison.direct;
+      const hyb = data.metrics.formatComparison.hybrid;
+      reportCharts.timeFormatComparison = new Chart(ctx5, {
+        type: 'bar',
+        data: {
+          labels: ['NDĐT (4.0)', 'PPHT (4.0)', 'CSVC (4.0)', 'GV (5.0)', 'ĐGC (5.0)'],
+          datasets: [
+            {
+              label: 'Trực tiếp',
+              data: [dir.nddt, dir.ppht, dir.csvc, dir.gv, dir.dgc],
+              backgroundColor: '#059669',
+              borderRadius: 6
+            },
+            {
+              label: 'Trực tiếp kết hợp Trực tuyến',
+              data: [hyb.nddt, hyb.ppht, hyb.csvc, hyb.gv, hyb.dgc],
+              backgroundColor: '#7E22CE',
+              borderRadius: 6
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'top', labels: { boxWidth: 12, font: { weight: 600 } } }
+          },
+          scales: {
+            y: { min: 2.5, max: 5.0, title: { display: true, text: 'Điểm trung bình' }, grid: { color: '#F1F5F9' } }
+          }
+        }
+      });
+    }
+
+    // Visual 6: Lecturer Evaluation (matching Đánh giá giảng viên screen)
+    renderTimeGvEvaluationChart(data);
+  }
+
+  /**
+   * Sync UI active styles for Time Analytics Visual 6 (Đánh giá giảng viên) slicers.
+   */
+  function syncTimeGvSlicerUi() {
+    const mode = reportState.timeGvCompareMode || 'lecturer';
+    const metric = reportState.timeGvRankMetric || 'gpa';
+    const limit = reportState.timeGvTopLimit || '15';
+
+    const btnLec = document.getElementById('btnTimeGvToggleLecturer');
+    const btnUnit = document.getElementById('btnTimeGvToggleUnit');
+    if (btnLec && btnUnit) {
+      const isLec = mode !== 'unit';
+      btnLec.classList.toggle('active', isLec);
+      btnLec.style.background = isLec ? 'var(--brand-primary)' : 'transparent';
+      btnLec.style.color = isLec ? 'white' : '#475569';
+      btnUnit.classList.toggle('active', !isLec);
+      btnUnit.style.background = !isLec ? 'var(--brand-primary)' : 'transparent';
+      btnUnit.style.color = !isLec ? 'white' : '#475569';
+    }
+
+    const rankBtns = [
+      { id: 'btnTimeGvRankGpa', key: 'gpa', color: '#8C1D40' },
+      { id: 'btnTimeGvRankClasses', key: 'classes', color: '#0284C7' },
+      { id: 'btnTimeGvRankHours', key: 'hours', color: '#059669' }
+    ];
+    rankBtns.forEach(item => {
+      const btn = document.getElementById(item.id);
+      if (!btn) return;
+      const isActive = metric === item.key;
+      btn.classList.toggle('active', isActive);
+      btn.style.background = isActive ? item.color : 'transparent';
+      btn.style.color = isActive ? 'white' : '#475569';
+    });
+
+    const selLimit = document.getElementById('selectTimeGvTopLimit');
+    if (selLimit && selLimit.value !== limit) {
+      selLimit.value = limit;
+    }
+  }
+
+  /**
+   * Render Visual 6 (Đánh giá giảng viên) in Time-Based Training Analytics.
+   */
+  function renderTimeGvEvaluationChart(data) {
+    if (reportCharts.timeGvAnalytics) {
+      try { reportCharts.timeGvAnalytics.destroy(); } catch (e) { }
+      reportCharts.timeGvAnalytics = null;
+    }
+
+    const canvas = document.getElementById('timeGvAnalyticsChart');
+    const scrollInner = document.getElementById('timeGvComparisonScrollInner');
+    const scrollOuter = document.getElementById('timeGvComparisonScrollOuter');
+    const hintTextElem = document.getElementById('timeGvScrollHintText');
+    const emptyState = document.getElementById('timeGvEmptyState');
+    if (!canvas || !scrollInner) return;
+
+    syncTimeGvSlicerUi();
+
+    const compareMode = reportState.timeGvCompareMode || 'lecturer';
+    const rankMetric = reportState.timeGvRankMetric || 'gpa';
+    const topLimit = reportState.timeGvTopLimit || '15';
+    const gvEval = (data && data.metrics && data.metrics.gvEvaluation) ? data.metrics.gvEvaluation : { lecturers: [], units: [] };
+    const sourceList = compareMode === 'unit' ? (gvEval.units || []) : (gvEval.lecturers || []);
+    const { displayList, totalCount, isLimited } = sortAndLimitGvEvaluationList(sourceList, rankMetric, topLimit);
+
+    if (displayList.length === 0) {
+      if (hintTextElem) hintTextElem.innerHTML = 'Không có dữ liệu (<strong id="timeGvScrollCountHint">0</strong> mục)';
+      if (scrollOuter) scrollOuter.style.display = 'none';
+      if (emptyState) emptyState.style.display = 'flex';
+      return;
+    }
+
+    if (emptyState) emptyState.style.display = 'none';
+    if (scrollOuter) scrollOuter.style.display = 'block';
+
+    if (hintTextElem) {
+      if (isLimited) {
+        hintTextElem.innerHTML = 'Top <strong id="timeGvScrollCountHint">' + displayList.length + ' / ' + totalCount + '</strong> mục';
+      } else {
+        hintTextElem.innerHTML = 'Xem tất cả <strong id="timeGvScrollCountHint">' + totalCount + '</strong> mục';
+      }
+    }
+
+    if (displayList.length <= 15) {
+      scrollInner.style.width = '100%';
+    } else {
+      const containerWidth = scrollOuter ? (scrollOuter.clientWidth || 850) : 850;
+      scrollInner.style.width = Math.max(containerWidth, displayList.length * 75) + 'px';
+    }
+
+    const ctx6 = canvas.getContext('2d');
+    reportCharts.timeGvAnalytics = new Chart(ctx6, buildGvEvaluationComboChartConfig(displayList, compareMode));
+    enableHorizontalDragScroll(scrollOuter);
+  }
+
+  /**
+   * Render compact semi-circular SVG mini-gauge for Tỉ lệ tham dự table cells.
+   */
+  function renderTimeMiniGaugeHtml(rateVal, hasData) {
+    if (hasData === false) {
+      return '<span style="color: #94A3B8;">-</span>';
+    }
+    const safeRate = Number(rateVal) || 0;
+    const clamped = Math.min(100, Math.max(0, safeRate));
+    const dashOffset = (81.68 * (1 - clamped / 100)).toFixed(1);
+    const color = safeRate >= 95 ? '#059669' : (safeRate >= 80 ? '#D97706' : '#DC2626');
+    const textFill = safeRate > 0 ? '#1E293B' : '#94A3B8';
+    const labelStr = safeRate.toFixed(1) + '%';
+    return '<div style="display: inline-flex; align-items: center; justify-content: center;" title="Tỉ lệ tham dự: ' + labelStr + '">' +
+      '<svg viewBox="0 0 68 36" style="width: 62px; height: 34px; overflow: visible;">' +
+      '<path d="M 8 32 A 26 26 0 0 1 60 32" fill="none" stroke="#E2E8F0" stroke-width="4.4" stroke-linecap="round" />' +
+      (clamped > 0
+        ? '<path d="M 8 32 A 26 26 0 0 1 60 32" fill="none" stroke="' + color + '" stroke-width="4.4" stroke-linecap="round" stroke-dasharray="81.68" stroke-dashoffset="' + dashOffset + '" />'
+        : '') +
+      '<text x="34" y="30" text-anchor="middle" font-family="\'Plus Jakarta Sans\', sans-serif" font-size="9.2" font-weight="800" fill="' + textFill + '">' + labelStr + '</text>' +
+      '</svg>' +
+      '</div>';
+  }
+
+  function renderTimeSummaryTable(data) {
+    const tbody = document.getElementById('reportTimeSummaryTableBody');
+    if (!tbody) return;
+
+    if (!data.periodsTrend || data.periodsTrend.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="14" style="text-align: center; padding: 2rem; color: #64748B;">Không có dữ liệu trong kỳ được chọn</td></tr>';
+      return;
+    }
+
+    const renderGradientScoreCell = (score, maxScale, colorHex) => {
+      if (!score || score <= 0) return '<span style="color: #94A3B8;">-</span>';
+      const pct = Math.min(100, Math.max(0, (score / maxScale) * 100));
+      return '<div style="position: relative; width: 100%; height: 26px; display: flex; align-items: center; justify-content: center; background: #F1F5F9; border-radius: 4px; overflow: hidden;">' +
+        '<div style="position: absolute; left: 0; top: 0; bottom: 0; width: ' + pct + '%; background: ' + colorHex + '; opacity: 0.22; border-radius: 4px;"></div>' +
+        '<span style="position: relative; z-index: 1; font-weight: 800; font-size: 0.85rem; color: #1E293B;">' + score.toFixed(2) + '</span>' +
+        '</div>';
+    };
+
+    let html = '';
+    data.periodsTrend.forEach((p, idx) => {
+      const m = p.metrics;
+      const isSelected = (p.periodKey === data.period);
+
+      html += '<tr style="cursor: pointer;' + (isSelected ? ' background: #FFF1F2;' : '') + '" onclick="drilldownToTimePeriod(\'' + p.periodKey + '\')">';
+      html += '<td style="text-align: center; font-weight: 700;">' + (idx + 1) + '</td>';
+      html += '<td><div style="display: flex; flex-direction: column; align-items: flex-start; gap: 3px;">' +
+        '<strong style="color: var(--brand-primary); font-size: 0.88rem; white-space: nowrap;">' + p.label + '</strong>' +
+        (isSelected ? '<span class="badge" style="background: var(--brand-primary); color: white; font-size: 0.65rem; padding: 2px 6px; white-space: nowrap; display: inline-block; line-height: 1.2;">Đang xem</span>' : '') +
+        '</div></td>';
+      html += '<td style="text-align: center; font-weight: 800; color: #7C3AED;">' + (m.programsCount || 0) + '</td>';
+      html += '<td style="text-align: center; font-weight: 800;">' + m.classesCount + '</td>';
+      html += '<td style="text-align: center; font-weight: 700;">' + m.hvThucTe.toLocaleString('vi-VN') + '</td>';
+
+      // Completion Rate Mini-Gauge Visual
+      html += '<td style="text-align: center; padding: 0.35rem 0.4rem;">' + renderTimeMiniGaugeHtml(m.completionRate, true) + '</td>';
+
+      html += '<td style="text-align: center; font-weight: 700;' + (m.votes > 0 ? '' : ' color: #94A3B8;') + '">' + m.votes.toLocaleString('vi-VN') + '</td>';
+      html += '<td style="text-align: center; font-weight: 700; color: ' + (m.responseRate >= 80 ? '#059669' : (m.responseRate >= 60 ? '#D97706' : '#DC2626')) + ';">' + m.responseRate.toFixed(1) + '%</td>';
+
+      // 5 Modules Score Cells
+      html += '<td style="text-align: center; padding: 4px 6px;">' + renderGradientScoreCell(m.nddt.score, 4.0, '#0284C7') + '</td>';
+      html += '<td style="text-align: center; padding: 4px 6px;">' + renderGradientScoreCell(m.ppht.score, 4.0, '#D97706') + '</td>';
+      html += '<td style="text-align: center; padding: 4px 6px;">' + renderGradientScoreCell(m.csvc.score, 4.0, '#059669') + '</td>';
+      html += '<td style="text-align: center; padding: 4px 6px;">' + renderGradientScoreCell(m.gv.score, 5.0, '#8C1D40') + '</td>';
+      html += '<td style="text-align: center; padding: 4px 6px;">' + renderGradientScoreCell(m.dgc.score, 5.0, '#6366F1') + '</td>';
+
+      // Action Cell
+      html += '<td style="text-align: center;" class="no-print">' +
+        '<button type="button" class="btn btn-sm" onclick="event.stopPropagation(); drilldownToTimePeriod(\'' + p.periodKey + '\');" style="background: #F1F5F9; color: var(--brand-primary); font-weight: 700; border: 1px solid #CBD5E1; padding: 0.25rem 0.55rem; border-radius: 4px; font-size: 0.75rem;">' +
+        '<i class="fa-solid fa-list-ul"></i> Xem lớp' +
+        '</button>' +
+        '</td>';
+      html += '</tr>';
+    });
+
+    tbody.innerHTML = html;
+  }
+
+  function buildTimePeriodProgramsList(targetClasses) {
+    if (!Array.isArray(targetClasses) || targetClasses.length === 0) return [];
+
+    const officialProgMap = new Map();
+    if (typeof getAllReportProgramList === 'function') {
+      getAllReportProgramList().forEach(p => {
+        if (p && p.code) {
+          officialProgMap.set(normalizeReportProgramKey(p.code), p);
+        }
+      });
+    }
+
+    const progGroups = new Map();
+    targetClasses.forEach(c => {
+      const rawCode = (c.programCode || (c.classCode ? c.classCode.split('/')[0] : '')).trim();
+      const normKey = normalizeReportProgramKey(rawCode);
+      if (!normKey) return;
+
+      if (!progGroups.has(normKey)) {
+        const official = officialProgMap.get(normKey);
+        progGroups.set(normKey, {
+          normKey: normKey,
+          programCode: (official && official.code) || rawCode,
+          programName: (official && official.name) || c.className || rawCode,
+          classes: []
+        });
+      }
+      const grp = progGroups.get(normKey);
+      grp.classes.push(c);
+      if ((!grp.programName || grp.programName === grp.programCode) && c.className && c.className !== c.classCode) {
+        grp.programName = c.className;
+      }
+    });
+
+    const gvData = typeof allGvItems !== 'undefined' ? allGvItems : [];
+    const results = [];
+
+    progGroups.forEach(grp => {
+      const metrics = aggregatePeriodClassMetrics(grp.classes, gvData);
+      let hasDirect = false;
+      let hasOnlineOrHybrid = false;
+      grp.classes.forEach(cls => {
+        const fmt = (cls.format || '').toLowerCase();
+        if (fmt.includes('kết hợp')) {
+          hasDirect = true;
+          hasOnlineOrHybrid = true;
+        } else if (fmt.includes('trực tuyến') || fmt.includes('online')) {
+          hasOnlineOrHybrid = true;
+        } else {
+          hasDirect = true;
+        }
+      });
+
+      let progFormat = 'Trực tiếp';
+      if (hasDirect && hasOnlineOrHybrid) {
+        progFormat = 'Trực tiếp kết hợp Trực tuyến';
+      } else if (hasOnlineOrHybrid) {
+        progFormat = 'Trực tuyến';
+      }
+
+      results.push({
+        programCode: grp.programCode,
+        programName: grp.programName,
+        classesCount: grp.classes.length,
+        format: progFormat,
+        hvKh: metrics.hvKh,
+        hvThucTe: metrics.hvThucTe,
+        completionRate: metrics.completionRate,
+        votes: metrics.votes,
+        nddtScore: metrics.nddt.score,
+        pphtScore: metrics.ppht.score,
+        csvcScore: metrics.csvc.score,
+        gvScore: metrics.gv.score,
+        dgcScore: metrics.dgc.score
+      });
+    });
+
+    return results.sort((a, b) => (b.classesCount - a.classesCount) || (b.hvThucTe - a.hvThucTe) || a.programCode.localeCompare(b.programCode));
+  }
+
+  function drilldownToTimePeriod(periodKey) {
+    reportState.timeDrilldownPeriod = periodKey;
+    renderTimeClassDrilldown(periodKey, { shouldScroll: true });
+  }
+  window.drilldownToTimePeriod = drilldownToTimePeriod;
+
+  function renderTimeClassDrilldown(periodKey, options) {
+    const opts = options || {};
+    const shouldScroll = opts.shouldScroll === true;
+
+    const drilldownSec = document.getElementById('reportTimeClassDrilldownSection');
+    const titleElem = document.getElementById('reportTimeDrilldownTitle');
+    const subTitleElem = document.getElementById('reportTimeDrilldownSubtitle');
+    const progTbody = document.getElementById('reportTimeProgramsTableBody');
+    const progCountBadge = document.getElementById('reportTimeProgramsCountBadge');
+    const tbody = document.getElementById('reportTimeClassesTableBody');
+    const clsCountBadge = document.getElementById('reportTimeClassesCountBadge');
+
+    if (!drilldownSec || !tbody) return;
+
+    const data = reportState.currentTimeData;
+    if (!data) return;
+
+    let targetClasses = [];
+    let pLabel = '';
+
+    if (periodKey && periodKey !== 'all') {
+      const targetTrend = data.periodsTrend.find(p => p.periodKey === periodKey);
+      if (targetTrend) {
+        targetClasses = targetTrend.classes;
+        pLabel = targetTrend.label;
+      }
+    } else {
+      targetClasses = data.currentClasses;
+      pLabel = data.periodLabel;
+    }
+
+    const programsList = buildTimePeriodProgramsList(targetClasses);
+    reportState.currentTimePrograms = programsList;
+
+    if (titleElem) titleElem.textContent = 'CHI TIẾT CHƯƠNG TRÌNH & LỚP HỌC TRONG KỲ — ' + pLabel.toUpperCase();
+    if (subTitleElem) subTitleElem.textContent = 'Tổng hợp ' + programsList.length + ' chương trình với ' + targetClasses.length + ' lớp học được tổ chức trong ' + pLabel;
+    if (progCountBadge) progCountBadge.textContent = programsList.length + ' chương trình';
+    if (clsCountBadge) clsCountBadge.textContent = targetClasses.length + ' lớp học';
+
+    const escapeAttr = (str) => String(str || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+
+    // Render Table 1: Programs List
+    if (progTbody) {
+      if (programsList.length === 0) {
+        progTbody.innerHTML = '<tr><td colspan="15" style="text-align: center; padding: 2rem; color: #64748B;">Không có chương trình nào trong kỳ này</td></tr>';
+      } else {
+        let pHtml = '';
+        programsList.forEach((p, idx) => {
+          const hasAtt = p.hvKh > 0 || p.hvThucTe > 0;
+
+          pHtml += '<tr>';
+          pHtml += '<td style="text-align: center; font-weight: 700;">' + (idx + 1) + '</td>';
+          pHtml += '<td><strong style="color: #7C3AED; font-size: 0.79rem;">' + p.programCode + '</strong></td>';
+          pHtml += '<td><div style="font-weight: 600; font-size: 0.78rem; width: 100%; line-height: 1.35; overflow-wrap: break-word;">' + p.programName + '</div></td>';
+          pHtml += '<td style="text-align: center; font-weight: 800;">' + p.classesCount + '</td>';
+          pHtml += '<td style="text-align: center;">' + getReportFormatBadge(p.format) + '</td>';
+          pHtml += '<td style="text-align: center; font-weight: 600;">' + p.hvKh.toLocaleString('vi-VN') + '</td>';
+          pHtml += '<td style="text-align: center; font-weight: 700;">' + p.hvThucTe.toLocaleString('vi-VN') + '</td>';
+          pHtml += '<td style="text-align: center; padding: 0.35rem 0.25rem;">' + renderTimeMiniGaugeHtml(p.completionRate, hasAtt) + '</td>';
+          pHtml += renderVotesCountCell(p.votes, '-');
+          pHtml += '<td style="text-align: center; font-weight: 700; color: #0284C7;">' + (p.nddtScore > 0 ? p.nddtScore.toFixed(2) : '-') + '</td>';
+          pHtml += '<td style="text-align: center; font-weight: 700; color: #D97706;">' + (p.pphtScore > 0 ? p.pphtScore.toFixed(2) : '-') + '</td>';
+          pHtml += '<td style="text-align: center; font-weight: 700; color: #059669;">' + (p.csvcScore > 0 ? p.csvcScore.toFixed(2) : '-') + '</td>';
+          pHtml += '<td style="text-align: center; font-weight: 700; color: var(--brand-primary);">' + (p.gvScore > 0 ? p.gvScore.toFixed(2) : '-') + '</td>';
+          pHtml += '<td style="text-align: center; font-weight: 700; color: #6366F1;">' + (p.dgcScore > 0 ? p.dgcScore.toFixed(2) : '-') + '</td>';
+          pHtml += '<td style="text-align: center;" class="no-print">' +
+            '<button type="button" class="btn btn-sm btn-view-program" onclick="jumpToProgramReport(\'' + escapeAttr(p.programCode) + '\')" style="background: #7C3AED; color: white; font-weight: 700; padding: 0.28rem 0.38rem; border-radius: 4px; font-size: 0.7rem; border: none; cursor: pointer; white-space: normal; line-height: 1.2;" title="Xem báo cáo tổng hợp chương trình này">' +
+            '<i class="fa-solid fa-arrow-right"></i> <span>Xem chương trình</span>' +
+            '</button>' +
+            '</td>';
+          pHtml += '</tr>';
+        });
+        progTbody.innerHTML = pHtml;
+      }
+    }
+
+    // Render Table 2: Classes List
+    if (targetClasses.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="14" style="text-align: center; padding: 2rem; color: #64748B;">Không có lớp học nào trong kỳ này</td></tr>';
+      drilldownSec.style.display = 'block';
+      if (shouldScroll) drilldownSec.scrollIntoView({ behavior: 'smooth' });
+      return;
+    }
+
+    let html = '';
+    targetClasses.forEach((c, idx) => {
+      const gvTb = (c.gvList && c.gvList.length > 0) ? Number((c.gvList.reduce((acc, g) => acc + (g.diem_tb || 0), 0) / c.gvList.length).toFixed(2)) : (c.gv && c.gv.overall ? c.gv.overall.avgTb : 0);
+
+      html += '<tr>';
+      html += '<td style="text-align: center; font-weight: 700;">' + (idx + 1) + '</td>';
+      html += '<td><strong style="color: var(--brand-primary); font-size: 0.82rem;">' + c.classCode + '</strong></td>';
+      html += '<td><div style="font-weight: 600; font-size: 0.8rem; max-width: 260px; line-height: 1.3;">' + (c.className || c.programCode) + '</div></td>';
+      html += '<td style="text-align: center;">' + getReportFormatBadge(c.format) + '</td>';
+      html += '<td style="text-align: center; font-size: 0.78rem; white-space: nowrap;">' + (typeof formatReportDateRange === 'function' ? formatReportDateRange(c.startDate, c.endDate, '2026') : (c.startDate || '2026')) + '</td>';
+      html += '<td style="font-size: 0.78rem;">' + (c.location || 'Trường ĐT&BDNV') + '</td>';
+      html += '<td style="text-align: center; font-weight: 700;">' + c.hvThucTe.toLocaleString('vi-VN') + '</td>';
+      html += renderVotesCountCell(c.votes, '-');
+      html += '<td style="text-align: center; font-weight: 700; color: #0284C7;">' + (c.nddt && c.nddt.score > 0 ? c.nddt.score.toFixed(2) : '-') + '</td>';
+      html += '<td style="text-align: center; font-weight: 700; color: #D97706;">' + (c.ppht && c.ppht.score > 0 ? c.ppht.score.toFixed(2) : '-') + '</td>';
+      html += '<td style="text-align: center; font-weight: 700; color: #059669;">' + (c.csvc && c.csvc.score > 0 ? c.csvc.score.toFixed(2) : '-') + '</td>';
+      html += '<td style="text-align: center; font-weight: 700; color: var(--brand-primary);">' + (gvTb > 0 ? gvTb.toFixed(2) : '-') + '</td>';
+      html += '<td style="text-align: center; font-weight: 700; color: #6366F1;">' + (c.dgc && c.dgc.score > 0 ? c.dgc.score.toFixed(2) : '-') + '</td>';
+      html += '<td style="text-align: center;" class="no-print">' +
+        '<button type="button" class="btn btn-sm" onclick="jumpToClassReport(\'' + escapeAttr(c.classCode) + '\')" style="background: var(--brand-primary); color: white; font-weight: 700; padding: 0.25rem 0.55rem; border-radius: 4px; font-size: 0.75rem; border: none; cursor: pointer;" title="Xem báo cáo chi tiết lớp học này">' +
+        '<i class="fa-solid fa-arrow-right"></i> Xem lớp' +
+        '</button>' +
+        '</td>';
+      html += '</tr>';
+    });
+
+    tbody.innerHTML = html;
+    drilldownSec.style.display = 'block';
+    if (shouldScroll) drilldownSec.scrollIntoView({ behavior: 'smooth' });
+  }
+
+  function syncReportModeUI(mode) {
+    const modes = [
+      { key: 'class', btnId: 'btnReportModeClass', selId: 'reportClassSelectorArea' },
+      { key: 'program', btnId: 'btnReportModeProgram', selId: 'reportProgramSelectorArea' },
+      { key: 'time', btnId: 'btnReportModeTime', selId: 'reportTimeSelectorArea' }
+    ];
+    modes.forEach(item => {
+      const btn = document.getElementById(item.btnId);
+      const sel = document.getElementById(item.selId);
+      const isActive = item.key === mode;
+      if (btn) {
+        btn.classList.toggle('active', isActive);
+        btn.style.background = isActive ? 'var(--brand-primary)' : 'transparent';
+        btn.style.color = isActive ? 'white' : '#475569';
+      }
+      if (sel) sel.style.display = isActive ? 'block' : 'none';
+    });
+
+    const contentClassProg = document.getElementById('reportContentArea');
+    const contentTime = document.getElementById('reportTimeContentArea');
+    const emptyState = document.getElementById('reportEmptyState');
+
+    if (mode === 'time') {
+      if (contentClassProg) contentClassProg.style.display = 'none';
+      if (contentTime) contentTime.style.display = 'block';
+      if (emptyState) emptyState.style.display = 'none';
+    } else {
+      if (contentTime) contentTime.style.display = 'none';
+      const hasTarget = (mode === 'class' && reportState.selectedClass && reportState.currentClassData) ||
+        (mode === 'program' && reportState.selectedProgram && reportState.currentProgramData);
+      if (contentClassProg) contentClassProg.style.display = hasTarget ? 'block' : 'none';
+      if (emptyState) emptyState.style.display = hasTarget ? 'none' : 'block';
+    }
+  }
+
+  function jumpToClassReport(classCode) {
+    if (!classCode) return;
+    reportState.mode = 'class';
+    reportState.selectedClass = classCode;
+    syncReportModeUI('class');
+
+    const selClassDropdown = document.getElementById('selectReportClass');
+    if (selClassDropdown) selClassDropdown.value = classCode;
+
+    loadClassReport(classCode);
+    if (typeof window.scrollTo === 'function') window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+  window.jumpToClassReport = jumpToClassReport;
+
+  function jumpToProgramReport(programCode) {
+    if (!programCode) return;
+    reportState.mode = 'program';
+    reportState.selectedProgram = programCode;
+    syncReportModeUI('program');
+
+    let targetCode = programCode;
+    const selProgDropdown = document.getElementById('selectReportProgram');
+    if (selProgDropdown) {
+      const normTarget = normalizeReportProgramKey(programCode);
+      const matchOpt = Array.from(selProgDropdown.options).find(
+        o => o.value === programCode || normalizeReportProgramKey(o.value) === normTarget
+      );
+      if (matchOpt) {
+        selProgDropdown.value = matchOpt.value;
+        targetCode = matchOpt.value;
+      }
+    }
+
+    loadProgramReport(targetCode);
+    if (typeof window.scrollTo === 'function') window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+  window.jumpToProgramReport = jumpToProgramReport;
+
+  function clearSingleTimeFilter(filterKey) {
+    if (filterKey === 'range') {
+      reportState.timeDateFrom = '';
+      reportState.timeDateTo = '';
+      const inFrom = document.getElementById('inputTimeDateFrom');
+      const inTo = document.getElementById('inputTimeDateTo');
+      if (inFrom) inFrom.value = '';
+      if (inTo) inTo.value = '';
+      document.querySelectorAll('.time-range-preset-btn').forEach(b => b.classList.remove('active'));
+    } else if (filterKey === 'period') {
+      reportState.timePeriod = 'all';
+      const selPer = document.getElementById('selectTimePeriod');
+      if (selPer) selPer.value = 'all';
+    } else if (filterKey === 'program') {
+      reportState.timeProgram = '';
+      const selProg = document.getElementById('filterTimeProgram');
+      if (selProg) selProg.value = '';
+    } else if (filterKey === 'format') {
+      reportState.timeFormat = '';
+      const selFmt = document.getElementById('filterTimeFormat');
+      if (selFmt) selFmt.value = '';
+    } else if (filterKey === 'location') {
+      reportState.timeLocation = '';
+      const selLoc = document.getElementById('filterTimeLocation');
+      if (selLoc) selLoc.value = '';
+    }
+    loadTimeReport();
+  }
+  window.clearSingleTimeFilter = clearSingleTimeFilter;
+
+  function renderTimeActiveFiltersBar(data) {
+    const bar = document.getElementById('reportTimeActiveFiltersBar');
+    const btnClearRange = document.getElementById('btnClearTimeDateRange');
+    const inFrom = document.getElementById('inputTimeDateFrom');
+    const inTo = document.getElementById('inputTimeDateTo');
+
+    if (inFrom && data.dateFrom !== undefined && inFrom.value !== data.dateFrom) inFrom.value = data.dateFrom;
+    if (inTo && data.dateTo !== undefined && inTo.value !== data.dateTo) inTo.value = data.dateTo;
+    if (btnClearRange) {
+      btnClearRange.style.display = data.isCustomRange ? 'inline-flex' : 'none';
+    }
+
+    if (!bar) return;
+    const chips = [];
+    if (data.isCustomRange) {
+      chips.push({ key: 'range', label: 'Khoảng ngày: ' + data.periodLabel });
+    } else if (data.period && data.period !== 'all') {
+      chips.push({ key: 'period', label: 'Kỳ: ' + data.periodLabel });
+    }
+    if (data.programFilter) {
+      chips.push({ key: 'program', label: 'Chương trình: ' + data.programFilter });
+    }
+    if (data.formatFilter) {
+      chips.push({ key: 'format', label: 'Hình thức: ' + (data.formatFilter === 'direct' ? 'Trực tiếp' : 'Trực tiếp kết hợp Trực tuyến') });
+    }
+    if (data.locationFilter) {
+      chips.push({ key: 'location', label: 'Địa điểm: ' + data.locationFilter });
+    }
+
+    if (chips.length === 0) {
+      bar.style.display = 'none';
+      bar.innerHTML = '';
+      return;
+    }
+
+    const chipsHtml = chips.map(ch =>
+      '<span class="time-filter-chip">' +
+      ch.label +
+      '<button type="button" onclick="clearSingleTimeFilter(\'' + ch.key + '\')" title="Bỏ bộ lọc này"><i class="fa-solid fa-xmark"></i></button>' +
+      '</span>'
+    ).join('');
+
+    bar.style.display = 'flex';
+    bar.innerHTML =
+      '<div style="display: flex; align-items: center; flex-wrap: wrap; gap: 0.45rem;">' +
+      '<span style="font-weight: 700; color: #92400E;"><i class="fa-solid fa-filter"></i> Phạm vi đang lọc:</span>' +
+      chipsHtml +
+      '</div>' +
+      '<span style="font-weight: 700; color: #475569;">' + data.metrics.classesCount + ' lớp • ' + data.metrics.hvThucTe.toLocaleString('vi-VN') + ' lượt HV</span>';
+  }
+
+  function loadTimeReport(options) {
+    const opts = options || {};
+    if (opts.granularity) reportState.timeGranularity = opts.granularity;
+    if (opts.year) reportState.timeYear = opts.year;
+    if (opts.period !== undefined) reportState.timePeriod = opts.period;
+    if (opts.dateFrom !== undefined) reportState.timeDateFrom = toIsoDateKey(opts.dateFrom);
+    if (opts.dateTo !== undefined) reportState.timeDateTo = toIsoDateKey(opts.dateTo);
+    if (opts.programFilter !== undefined) reportState.timeProgram = opts.programFilter;
+    if (opts.formatFilter !== undefined) reportState.timeFormat = opts.formatFilter;
+    if (opts.locationFilter !== undefined) reportState.timeLocation = opts.locationFilter;
+
+    if (reportState.timeDateFrom && reportState.timeDateTo && reportState.timeDateFrom > reportState.timeDateTo) {
+      const tmp = reportState.timeDateFrom;
+      reportState.timeDateFrom = reportState.timeDateTo;
+      reportState.timeDateTo = tmp;
+    }
+
+    const data = getTimeBasedAnalytics({
+      granularity: reportState.timeGranularity,
+      year: reportState.timeYear,
+      period: reportState.timePeriod,
+      dateFrom: reportState.timeDateFrom,
+      dateTo: reportState.timeDateTo,
+      programFilter: reportState.timeProgram,
+      formatFilter: reportState.timeFormat,
+      locationFilter: reportState.timeLocation
+    });
+
+    reportState.currentTimeData = data;
+
+    // Show Time Content, hide others
+    const emptyState = document.getElementById('reportEmptyState');
+    const contentClassProg = document.getElementById('reportContentArea');
+    const contentTime = document.getElementById('reportTimeContentArea');
+
+    if (emptyState) emptyState.style.display = 'none';
+    if (contentClassProg) contentClassProg.style.display = 'none';
+    if (contentTime) contentTime.style.display = 'block';
+
+    renderTimeActiveFiltersBar(data);
+    renderTimeExecutiveOverview(data);
+    renderTimeReportCharts(data);
+    renderTimeSummaryTable(data);
+
+    // Populate Programs & Classes detail tables without auto-scrolling the viewport
+    renderTimeClassDrilldown(data.period || 'all', { shouldScroll: false });
+  }
+  window.loadTimeReport = loadTimeReport;
+  window.getTimeBasedAnalytics = getTimeBasedAnalytics;
+
   // --- ATTACH EVENT LISTENERS ---
   function attachReportEventListeners() {
     // Mode toggles
     const btnModeClass = document.getElementById('btnReportModeClass');
     const btnModeProg = document.getElementById('btnReportModeProgram');
-    const selClass = (document.getElementById('reportClassSelectorArea') || document.getElementById('selectorReportClass'));
-    const selProg = (document.getElementById('reportProgramSelectorArea') || document.getElementById('selectorReportProgram'));
+    const btnModeTime = document.getElementById('btnReportModeTime');
 
     if (btnModeClass) {
       btnModeClass.addEventListener('click', () => {
         reportState.mode = 'class';
-        btnModeClass.classList.add('active');
-        if (btnModeProg) btnModeProg.classList.remove('active');
-        if (selClass) selClass.style.display = 'block';
-        if (selProg) selProg.style.display = 'none';
+        syncReportModeUI('class');
       });
     }
 
     if (btnModeProg) {
       btnModeProg.addEventListener('click', () => {
         reportState.mode = 'program';
-        btnModeProg.classList.add('active');
-        if (btnModeClass) btnModeClass.classList.remove('active');
-        if (selClass) selClass.style.display = 'none';
-        if (selProg) selProg.style.display = 'block';
+        syncReportModeUI('program');
+      });
+    }
+
+    if (btnModeTime) {
+      btnModeTime.addEventListener('click', () => {
+        reportState.mode = 'time';
+        syncReportModeUI('time');
+        loadTimeReport();
+      });
+    }
+
+    // Time Granularity Segmented Control (THÁNG, QUÝ, NĂM)
+    const btnGranMonth = document.getElementById('btnTimeGranMonth');
+    const btnGranQuarter = document.getElementById('btnTimeGranQuarter');
+    const btnGranYear = document.getElementById('btnTimeGranYear');
+
+    const setGranularityActive = (gran) => {
+      reportState.timeGranularity = gran;
+      if (btnGranMonth) {
+        if (gran === 'month') {
+          btnGranMonth.classList.add('active');
+          btnGranMonth.style.background = 'var(--brand-primary)';
+          btnGranMonth.style.color = 'white';
+        } else {
+          btnGranMonth.classList.remove('active');
+          btnGranMonth.style.background = 'transparent';
+          btnGranMonth.style.color = '#475569';
+        }
+      }
+      if (btnGranQuarter) {
+        if (gran === 'quarter') {
+          btnGranQuarter.classList.add('active');
+          btnGranQuarter.style.background = 'var(--brand-primary)';
+          btnGranQuarter.style.color = 'white';
+        } else {
+          btnGranQuarter.classList.remove('active');
+          btnGranQuarter.style.background = 'transparent';
+          btnGranQuarter.style.color = '#475569';
+        }
+      }
+      if (btnGranYear) {
+        if (gran === 'year') {
+          btnGranYear.classList.add('active');
+          btnGranYear.style.background = 'var(--brand-primary)';
+          btnGranYear.style.color = 'white';
+        } else {
+          btnGranYear.classList.remove('active');
+          btnGranYear.style.background = 'transparent';
+          btnGranYear.style.color = '#475569';
+        }
+      }
+      reportState.timePeriod = 'all';
+      updateTimePeriodOptions();
+      loadTimeReport();
+    };
+
+    if (btnGranMonth) btnGranMonth.addEventListener('click', () => setGranularityActive('month'));
+    if (btnGranQuarter) btnGranQuarter.addEventListener('click', () => setGranularityActive('quarter'));
+    if (btnGranYear) btnGranYear.addEventListener('click', () => setGranularityActive('year'));
+
+    const inDateFrom = document.getElementById('inputTimeDateFrom');
+    const inDateTo = document.getElementById('inputTimeDateTo');
+    const btnApplyDateRange = document.getElementById('btnApplyTimeDateRange');
+    const btnClearDateRange = document.getElementById('btnClearTimeDateRange');
+    const selTimeYr = document.getElementById('selectTimeYear');
+    const selTimePer = document.getElementById('selectTimePeriod');
+
+    const clearCustomDateInputs = () => {
+      reportState.timeDateFrom = '';
+      reportState.timeDateTo = '';
+      if (inDateFrom) inDateFrom.value = '';
+      if (inDateTo) inDateTo.value = '';
+      document.querySelectorAll('.time-range-preset-btn').forEach(b => b.classList.remove('active'));
+    };
+
+    const applyCustomDateRangeFromInputs = (fromVal, toVal, activePresetKey) => {
+      let f = toIsoDateKey(fromVal);
+      let t = toIsoDateKey(toVal);
+      if (f && t && f > t) {
+        const tmp = f;
+        f = t;
+        t = tmp;
+        if (typeof showToast === 'function') {
+          showToast('Đã tự động sắp xếp Từ ngày ≤ Đến ngày', 'info');
+        }
+      }
+      reportState.timeDateFrom = f;
+      reportState.timeDateTo = t;
+      if (inDateFrom) inDateFrom.value = f;
+      if (inDateTo) inDateTo.value = t;
+      if (f || t) {
+        reportState.timePeriod = 'all';
+        if (selTimePer) selTimePer.value = 'all';
+      }
+      document.querySelectorAll('.time-range-preset-btn').forEach(b => {
+        b.classList.toggle('active', !!activePresetKey && b.getAttribute('data-range') === activePresetKey);
+      });
+      loadTimeReport();
+    };
+
+    // Year Dropdown
+    if (selTimeYr) {
+      selTimeYr.addEventListener('change', () => {
+        clearCustomDateInputs();
+        reportState.timeYear = selTimeYr.value;
+        reportState.timePeriod = 'all';
+        updateTimePeriodOptions();
+        loadTimeReport();
+      });
+    }
+
+    // Period Dropdown
+    if (selTimePer) {
+      selTimePer.addEventListener('change', () => {
+        clearCustomDateInputs();
+        reportState.timePeriod = selTimePer.value;
+        loadTimeReport();
+      });
+    }
+
+    // Custom Date Range Inputs, Apply & Clear
+    if (btnApplyDateRange) {
+      btnApplyDateRange.addEventListener('click', () => {
+        applyCustomDateRangeFromInputs(inDateFrom ? inDateFrom.value : '', inDateTo ? inDateTo.value : '', null);
+      });
+    }
+
+    [inDateFrom, inDateTo].forEach(inp => {
+      if (!inp) return;
+      inp.addEventListener('change', () => {
+        applyCustomDateRangeFromInputs(inDateFrom ? inDateFrom.value : '', inDateTo ? inDateTo.value : '', null);
+      });
+      inp.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter') {
+          ev.preventDefault();
+          applyCustomDateRangeFromInputs(inDateFrom ? inDateFrom.value : '', inDateTo ? inDateTo.value : '', null);
+        }
+      });
+    });
+
+    if (btnClearDateRange) {
+      btnClearDateRange.addEventListener('click', () => {
+        clearCustomDateInputs();
+        loadTimeReport();
+      });
+    }
+
+    // Quick Date Range Preset Buttons
+    document.querySelectorAll('.time-range-preset-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const key = btn.getAttribute('data-range');
+        const yr = reportState.timeYear || '2026';
+        const allDates = (typeof getAllReportClassList === 'function' ? getAllReportClassList() : [])
+          .map(c => resolveItemDateBounds(c).endIso)
+          .filter(Boolean)
+          .sort();
+        const datesInYr = allDates.filter(d => d.startsWith(yr + '-'));
+
+        let f = '';
+        let t = '';
+        if (key === 'h1') {
+          f = yr + '-01-01';
+          t = yr + '-06-30';
+        } else if (key === 'h2') {
+          f = yr + '-07-01';
+          t = yr + '-12-31';
+        } else if (key === 'ytd') {
+          f = yr + '-01-01';
+          t = datesInYr.length > 0 ? datesInYr[datesInYr.length - 1] : (yr + '-12-31');
+        } else if (key === 'last3m') {
+          const maxD = allDates.length > 0 ? allDates[allDates.length - 1] : (yr + '-12-31');
+          let m = parseInt(maxD.slice(5, 7), 10) - 2;
+          let y = parseInt(maxD.slice(0, 4), 10);
+          if (m <= 0) {
+            m += 12;
+            y -= 1;
+          }
+          f = y + '-' + String(m).padStart(2, '0') + '-01';
+          t = maxD;
+        }
+        applyCustomDateRangeFromInputs(f, t, key);
+      });
+    });
+
+    // Combined Filters: Program, Format, Location
+    const filterTimeProg = document.getElementById('filterTimeProgram');
+    if (filterTimeProg) {
+      filterTimeProg.addEventListener('change', () => {
+        reportState.timeProgram = filterTimeProg.value;
+        loadTimeReport();
+      });
+    }
+
+    const filterTimeFmt = document.getElementById('filterTimeFormat');
+    if (filterTimeFmt) {
+      filterTimeFmt.addEventListener('change', () => {
+        reportState.timeFormat = filterTimeFmt.value;
+        loadTimeReport();
+      });
+    }
+
+    const filterTimeLoc = document.getElementById('filterTimeLocation');
+    if (filterTimeLoc) {
+      filterTimeLoc.addEventListener('change', () => {
+        reportState.timeLocation = filterTimeLoc.value;
+        loadTimeReport();
+      });
+    }
+
+    // Apply & Reset Buttons for Time Report
+    const btnApplyTime = document.getElementById('btnApplyTimeReport');
+    if (btnApplyTime) {
+      btnApplyTime.addEventListener('click', () => {
+        const f = inDateFrom ? toIsoDateKey(inDateFrom.value) : '';
+        const t = inDateTo ? toIsoDateKey(inDateTo.value) : '';
+        loadTimeReport({ dateFrom: f, dateTo: t });
+      });
+    }
+
+    const btnResetTime = document.getElementById('btnResetTimeFilters');
+    if (btnResetTime) {
+      btnResetTime.addEventListener('click', () => {
+        clearCustomDateInputs();
+        reportState.timeYear = '2026';
+        reportState.timePeriod = 'all';
+        reportState.timeProgram = '';
+        reportState.timeFormat = '';
+        reportState.timeLocation = '';
+        if (selTimeYr) selTimeYr.value = '2026';
+        if (filterTimeProg) filterTimeProg.value = '';
+        if (filterTimeFmt) filterTimeFmt.value = '';
+        if (filterTimeLoc) filterTimeLoc.value = '';
+        updateTimePeriodOptions();
+        loadTimeReport();
+      });
+    }
+
+    // Quality Trend Switcher (Raw Score vs Normalized %)
+    const btnScoreRaw = document.getElementById('btnTimeQualityScoreRaw');
+    const btnScoreNorm = document.getElementById('btnTimeQualityScoreNorm');
+    if (btnScoreRaw && btnScoreNorm) {
+      btnScoreRaw.addEventListener('click', () => {
+        reportState.timeQualityMode = 'raw';
+        btnScoreRaw.classList.add('active');
+        btnScoreRaw.style.background = 'var(--brand-primary)';
+        btnScoreRaw.style.color = 'white';
+        btnScoreNorm.classList.remove('active');
+        btnScoreNorm.style.background = 'transparent';
+        btnScoreNorm.style.color = '#475569';
+        if (reportState.currentTimeData) renderTimeReportCharts(reportState.currentTimeData);
+      });
+      btnScoreNorm.addEventListener('click', () => {
+        reportState.timeQualityMode = 'norm';
+        btnScoreNorm.classList.add('active');
+        btnScoreNorm.style.background = 'var(--brand-primary)';
+        btnScoreNorm.style.color = 'white';
+        btnScoreRaw.classList.remove('active');
+        btnScoreRaw.style.background = 'transparent';
+        btnScoreRaw.style.color = '#475569';
+        if (reportState.currentTimeData) renderTimeReportCharts(reportState.currentTimeData);
+      });
+    }
+
+    // Rating Distribution Module Filter
+    const selRatingMod = document.getElementById('selectTimeRatingDistModule');
+    if (selRatingMod) {
+      selRatingMod.addEventListener('change', () => {
+        reportState.timeRatingDistModule = selRatingMod.value;
+        if (reportState.currentTimeData) renderTimeReportCharts(reportState.currentTimeData);
+      });
+    }
+
+    // Visual 6 (Đánh giá giảng viên) Slicers inside Time Analytics
+    const btnTimeGvLec = document.getElementById('btnTimeGvToggleLecturer');
+    const btnTimeGvUnit = document.getElementById('btnTimeGvToggleUnit');
+    if (btnTimeGvLec) {
+      btnTimeGvLec.addEventListener('click', () => {
+        reportState.timeGvCompareMode = 'lecturer';
+        if (reportState.currentTimeData) renderTimeGvEvaluationChart(reportState.currentTimeData);
+        else syncTimeGvSlicerUi();
+      });
+    }
+    if (btnTimeGvUnit) {
+      btnTimeGvUnit.addEventListener('click', () => {
+        reportState.timeGvCompareMode = 'unit';
+        if (reportState.currentTimeData) renderTimeGvEvaluationChart(reportState.currentTimeData);
+        else syncTimeGvSlicerUi();
+      });
+    }
+
+    document.querySelectorAll('[data-time-gv-rank]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const metric = btn.dataset.timeGvRank;
+        if (!metric) return;
+        reportState.timeGvRankMetric = metric;
+        if (reportState.currentTimeData) renderTimeGvEvaluationChart(reportState.currentTimeData);
+        else syncTimeGvSlicerUi();
+      });
+    });
+
+    const selTimeGvLimit = document.getElementById('selectTimeGvTopLimit');
+    if (selTimeGvLimit) {
+      selTimeGvLimit.addEventListener('change', () => {
+        reportState.timeGvTopLimit = selTimeGvLimit.value;
+        if (reportState.currentTimeData) renderTimeGvEvaluationChart(reportState.currentTimeData);
+      });
+    }
+
+    // Drilldown Return Button
+    const btnReturnSummary = document.getElementById('btnTimeReturnToSummary');
+    if (btnReturnSummary) {
+      btnReturnSummary.addEventListener('click', () => {
+        const tableCard = document.getElementById('reportTimeSummaryTableCard');
+        if (tableCard) tableCard.scrollIntoView({ behavior: 'smooth' });
       });
     }
 
@@ -12836,6 +15702,21 @@ document.addEventListener('DOMContentLoaded', () => {
         compareMetric: 'all',
         currentClassData: null,
         currentProgramData: null,
+        currentTimeData: null,
+        timeGranularity: 'quarter',
+        timeYear: '2026',
+        timePeriod: 'all',
+        timeDateFrom: '',
+        timeDateTo: '',
+        timeProgram: '',
+        timeFormat: '',
+        timeLocation: '',
+        timeQualityMode: 'raw',
+        timeRatingDistModule: 'all',
+        timeGvCompareMode: 'lecturer',
+        timeGvRankMetric: 'gpa',
+        timeGvTopLimit: '15',
+        timeDrilldownPeriod: null,
         pphtFormatFilter: 'all',
         nddtFormatFilter: 'all'
       };
@@ -12846,15 +15727,22 @@ document.addEventListener('DOMContentLoaded', () => {
         nddtStacked: null,
         pphtStacked: null,
         csvcLocation: null,
-        gvComparison: null
+        gvComparison: null,
+        timeVolumeTrend: null,
+        timeFormatComposition: null,
+        timeQualityTrend: null,
+        timeRatingDistribution: null,
+        timeFormatComparison: null,
+        timeGvAnalytics: null
       };
     }
     populateReportDropdowns();
+    populateTimeReportDropdowns();
     attachReportEventListeners();
 
-    // Default: if no class or program selected, load first program or class
+    // Default: if no class or program selected, keep empty state initially
     if (!reportState.selectedClass && !reportState.selectedProgram) {
-      // Keep empty state initially so user can choose
+      // Keep empty state initially
     }
   }
 
@@ -12862,7 +15750,95 @@ document.addEventListener('DOMContentLoaded', () => {
   function exportReportToExcel() {
     if (typeof XLSX !== 'undefined') {
       try {
-        if (reportState.mode === 'class') {
+        if (reportState.mode === 'time') {
+          const td = reportState.currentTimeData;
+          if (!td) return;
+
+          const summaryRows = td.periodsTrend.map((p, idx) => ({
+            'STT': idx + 1,
+            'Kỳ Báo Cáo': p.label,
+            'Số Chương Trình': p.metrics.programsCount || 0,
+            'Số Lớp': p.metrics.classesCount,
+            'Lượt HV Thực Tế': p.metrics.hvThucTe,
+            'Học Viên Kế Hoạch': p.metrics.hvKh,
+            'Tỉ Lệ Tham Dự (%)': p.metrics.completionRate,
+            'Số Phiếu Khảo Sát': p.metrics.votes,
+            'Tỷ Lệ Phản Hồi (%)': p.metrics.responseRate,
+            'Điểm NDĐT (4.0)': p.metrics.nddt.score || null,
+            'Điểm PPHT (4.0)': p.metrics.ppht.score || null,
+            'Điểm CSVC (4.0)': p.metrics.csvc.score || null,
+            'Điểm Giảng Viên (5.0)': p.metrics.gv.score || null,
+            'Điểm ĐGC (5.0)': p.metrics.dgc.score || null
+          }));
+
+          const wb = XLSX.utils.book_new();
+          const wsSummary = XLSX.utils.json_to_sheet(summaryRows);
+          XLSX.utils.book_append_sheet(wb, wsSummary, "TongHopTheoKy");
+
+          const progList = Array.isArray(reportState.currentTimePrograms) ? reportState.currentTimePrograms : buildTimePeriodProgramsList(td.currentClasses);
+          if (progList && progList.length > 0) {
+            const progRows = progList.map((p, idx) => ({
+              'STT': idx + 1,
+              'Mã Chương Trình': p.programCode,
+              'Tên Chương Trình': p.programName,
+              'Số Lớp': p.classesCount,
+              'Hình Thức': p.format,
+              'HV Kế Hoạch': p.hvKh || 0,
+              'HV Thực Tế': p.hvThucTe,
+              'Tỉ Lệ Tham Dự (%)': p.completionRate,
+              'Phiếu': p.votes,
+              'NDĐT (4.0)': p.nddtScore || null,
+              'PPHT (4.0)': p.pphtScore || null,
+              'CSVC (4.0)': p.csvcScore || null,
+              'GV (5.0)': p.gvScore || null,
+              'ĐGC (5.0)': p.dgcScore || null
+            }));
+            const wsProgs = XLSX.utils.json_to_sheet(progRows);
+            XLSX.utils.book_append_sheet(wb, wsProgs, "DanhSachChuongTrinh");
+          }
+
+          if (td.currentClasses && td.currentClasses.length > 0) {
+            const classRows = td.currentClasses.map((c, idx) => {
+              const gvTb = (c.gvList && c.gvList.length > 0) ? Number((c.gvList.reduce((acc, g) => acc + (g.diem_tb || 0), 0) / c.gvList.length).toFixed(2)) : (c.gv && c.gv.overall ? c.gv.overall.avgTb : null);
+              return {
+                'STT': idx + 1,
+                'Mã Lớp': c.classCode,
+                'Chương Trình': c.className || c.programCode,
+                'Hình Thức': c.format,
+                'Thời Gian': c.startDate + (c.endDate ? ' - ' + c.endDate : ''),
+                'Địa Điểm': c.location,
+                'HV Kế Hoạch': c.hvKh || 0,
+                'HV Thực Tế': c.hvThucTe,
+                'Số Phiếu': c.votes,
+                'Tỷ Lệ Phản Hồi (%)': Number(c.responseRate.toFixed(1)),
+                'Điểm NDĐT (4.0)': c.nddt ? c.nddt.score : null,
+                'Điểm PPHT (4.0)': c.ppht ? c.ppht.score : null,
+                'Điểm CSVC (4.0)': c.csvc ? c.csvc.score : null,
+                'Điểm Giảng Viên (5.0)': gvTb,
+                'Điểm ĐGC (5.0)': c.dgc ? c.dgc.score : null
+              };
+            });
+            const wsClasses = XLSX.utils.json_to_sheet(classRows);
+            XLSX.utils.book_append_sheet(wb, wsClasses, "DanhSachLopChiTiet");
+          }
+
+          if (td.metrics.topLecturers && td.metrics.topLecturers.length > 0) {
+            const gvRows = td.metrics.topLecturers.map((g, idx) => ({
+              'STT': idx + 1,
+              'Họ và Tên Giảng Viên': g.name,
+              'Số Tiết Giảng Dạy (Chuẩn)': g.hours,
+              'Số Lớp Giảng Dạy': g.classesCount,
+              'Điểm Đánh Giá TB (5.0)': g.avgScore || null
+            }));
+            const wsGv = XLSX.utils.json_to_sheet(gvRows);
+            XLSX.utils.book_append_sheet(wb, wsGv, "GiangVienTieuBieu");
+          }
+
+          XLSX.writeFile(wb, 'Bao_cao_dao_tao_theo_thoi_gian_' + td.periodLabel.replace(/[^a-zA-Z0-9]/g, '_') + '.xlsx');
+          if (typeof showToast === 'function') showToast('Đã xuất thành công báo cáo Excel', 'success');
+          return;
+
+        } else if (reportState.mode === 'class') {
           const d = reportState.currentClassData;
           if (!d) return;
 
@@ -12967,14 +15943,136 @@ document.addEventListener('DOMContentLoaded', () => {
     exportReportToCsv();
   }
 
-  // --- EXPORT 2: PDF PRINT ---
+  // --- EXPORT 2: PDF PRINT (100% DASHBOARD FIDELITY ON A4) ---
+  let isPrintPrepared = false;
+  let origDocumentTitle = '';
+
+  function prepareReportForPrint() {
+    const screenRep = document.getElementById('screenGeneralReport');
+    if (!screenRep || !screenRep.classList.contains('active')) return;
+    if (isPrintPrepared) return;
+    isPrintPrepared = true;
+
+    document.body.classList.add('report-printing-active');
+
+    origDocumentTitle = document.title;
+    if (reportState.mode === 'program' && reportState.currentProgramData) {
+      document.title = 'Bao_cao_Chuong_trinh_' + reportState.currentProgramData.programCode.replace(/[^a-zA-Z0-9_-]/g, '_');
+    } else if (reportState.mode === 'class' && reportState.currentClassData) {
+      document.title = 'Bao_cao_Lop_' + reportState.currentClassData.classCode.replace(/[^a-zA-Z0-9_-]/g, '_');
+    } else if (reportState.mode === 'time' && reportState.currentTimeData) {
+      document.title = 'Bao_cao_Thoi_gian_' + reportState.currentTimeData.periodLabel.replace(/[^a-zA-Z0-9_-]/g, '_');
+    }
+
+    const scrollableReportCharts = [
+      { id: 'reportCsvcScrollInner', chartKey: 'csvcLocation' },
+      { id: 'timeGvComparisonScrollInner', chartKey: 'timeGvAnalytics' }
+    ];
+    scrollableReportCharts.forEach(item => {
+      const inner = document.getElementById(item.id);
+      if (!inner) return;
+      inner.dataset.origWidth = inner.style.width || '';
+      inner.style.width = '100%';
+      const chartInst = reportCharts[item.chartKey];
+      if (chartInst && typeof chartInst.resize === 'function') {
+        try {
+          chartInst.resize();
+          chartInst.update('none');
+        } catch (e) { }
+      }
+    });
+
+    screenRep.querySelectorAll('canvas').forEach(canvas => {
+      if (!canvas || !canvas.parentNode || canvas.width === 0 || canvas.height === 0) return;
+      if (canvas.offsetParent === null) return;
+      try {
+        const dataUrl = canvas.toDataURL('image/png', 1.0);
+        const img = document.createElement('img');
+        img.className = 'report-print-chart-img';
+        img.src = dataUrl;
+        img.alt = canvas.id || 'Biểu đồ báo cáo';
+        img.style.width = '100%';
+        img.style.height = 'auto';
+        img.style.display = 'block';
+        canvas.dataset.origDisplay = canvas.style.display || '';
+        canvas.style.display = 'none';
+        if (canvas.parentNode.style && canvas.parentNode.dataset.origHeight === undefined) {
+          canvas.parentNode.dataset.origHeight = canvas.parentNode.style.height || '';
+          canvas.parentNode.style.height = 'auto';
+        }
+        canvas.parentNode.insertBefore(img, canvas.nextSibling);
+      } catch (e) { }
+    });
+  }
+  window.prepareReportForPrint = prepareReportForPrint;
+
+  function restoreReportAfterPrint() {
+    if (!isPrintPrepared) return;
+    isPrintPrepared = false;
+    document.body.classList.remove('report-printing-active');
+    if (origDocumentTitle) {
+      document.title = origDocumentTitle;
+      origDocumentTitle = '';
+    }
+
+    const screenRep = document.getElementById('screenGeneralReport');
+    if (screenRep) {
+      screenRep.querySelectorAll('.report-print-chart-img').forEach(img => {
+        if (img.parentNode) img.parentNode.removeChild(img);
+      });
+      screenRep.querySelectorAll('canvas[data-orig-display]').forEach(canvas => {
+        canvas.style.display = canvas.dataset.origDisplay || '';
+        delete canvas.dataset.origDisplay;
+        if (canvas.parentNode && canvas.parentNode.dataset && canvas.parentNode.dataset.origHeight !== undefined) {
+          canvas.parentNode.style.height = canvas.parentNode.dataset.origHeight;
+          delete canvas.parentNode.dataset.origHeight;
+        }
+      });
+    }
+
+    ['reportCsvcScrollInner', 'timeGvComparisonScrollInner'].forEach((id, idx) => {
+      const inner = document.getElementById(id);
+      const chartInst = idx === 0 ? reportCharts.csvcLocation : reportCharts.timeGvAnalytics;
+      if (inner && inner.dataset.origWidth !== undefined) {
+        inner.style.width = inner.dataset.origWidth;
+        delete inner.dataset.origWidth;
+        if (chartInst && typeof chartInst.resize === 'function') {
+          try {
+            chartInst.resize();
+            chartInst.update('none');
+          } catch (e) { }
+        }
+      }
+    });
+  }
+  window.restoreReportAfterPrint = restoreReportAfterPrint;
+
+  if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+    window.addEventListener('beforeprint', prepareReportForPrint);
+    window.addEventListener('afterprint', restoreReportAfterPrint);
+  }
+
   function exportReportToPdf() {
-    window.print();
+    prepareReportForPrint();
+    try {
+      window.print();
+    } finally {
+      setTimeout(restoreReportAfterPrint, 300);
+    }
   }
 
   // --- EXPORT 3: CSV FALLBACK ---
   function exportReportToCsv() {
-    if (reportState.mode === 'class') {
+    if (reportState.mode === 'time') {
+      const td = reportState.currentTimeData;
+      if (!td || !td.periodsTrend) return;
+      let csv = 'STT,Ky Bao Cao,So Chuong Trinh,So Lop,HV Thuc Te,HV Ke Hoach,Ti Le Tham Du (%),So Phieu,Ty Le Phan Hoi (%),Diem NDDT,Diem PPHT,Diem CSVC,Diem GV,Diem DGC\n';
+      td.periodsTrend.forEach((p, idx) => {
+        csv += (idx + 1) + ',"' + p.label + '",' + (p.metrics.programsCount || 0) + ',' + p.metrics.classesCount + ',' + p.metrics.hvThucTe + ',' + p.metrics.hvKh + ',' + p.metrics.completionRate.toFixed(1) + '%,' + p.metrics.votes + ',' + p.metrics.responseRate.toFixed(1) + '%,' +
+          (p.metrics.nddt.score || '') + ',' + (p.metrics.ppht.score || '') + ',' + (p.metrics.csvc.score || '') + ',' + (p.metrics.gv.score || '') + ',' + (p.metrics.dgc.score || '') + '\n';
+      });
+      downloadCsvFile(csv, 'Bao_cao_thoi_gian_' + td.periodLabel.replace(/[^a-zA-Z0-9]/g, '_') + '.csv');
+    } else if (reportState.mode === 'class') {
       const d = reportState.currentClassData;
       if (!d) return;
       const csv = 'Ma Lop,Chuong Trinh,Hinh Thuc,Dia Diem,HV Thuc Te,So Phieu,Diem TB NDDT,Diem TB PPHT,Diem TB CSVC\n' +
