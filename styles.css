@@ -2052,15 +2052,31 @@ tbody tr:hover {
 
 #nddtClassesTable th:nth-child(2),
 #nddtClassesTable td:nth-child(2) {
-  width: 22.5% !important;
+  width: 20.5% !important;
   overflow: hidden;
 }
 
 #nddtClassesTable th:nth-child(3),
 #nddtClassesTable td:nth-child(3) {
-  width: 9% !important;
+  width: 10.5% !important;
   text-align: center;
-  padding: 0.45rem 0.15rem !important;
+  padding: 0.45rem 0.2rem !important;
+  white-space: normal !important;
+  overflow: hidden;
+}
+
+#nddtClassesTable .badge-format-hybrid,
+#nddtClassesTable .badge-format-direct,
+#nddtClassesTable .badge-format-online {
+  white-space: normal !important;
+  word-break: normal !important;
+  display: inline-block !important;
+  text-align: center !important;
+  line-height: 1.25 !important;
+  padding: 0.24rem 0.4rem !important;
+  font-size: 0.67rem !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
 }
 
 #nddtClassesTable th:nth-child(4),

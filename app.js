@@ -2907,10 +2907,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return '<div class="mini-score-bar-wrapper"><span class="mini-score-val">' + score.toFixed(2) + '</span><div class="mini-score-track"><div class="mini-score-fill" style="width: ' + pct + '%; background: ' + color + ';"></div></div></div>';
       };
 
-      let badgeHtml = getFormatBadge(r);
-      if (badgeHtml && badgeHtml.includes('TRỰC TIẾP KẾT HỢP TRỰC TUYẾN')) {
-        badgeHtml = badgeHtml.replace('TRỰC TIẾP KẾT HỢP TRỰC TUYẾN', 'TRỰC TIẾP KẾT HỢP<br>TRỰC TUYẾN');
-      }
+      const badgeHtml = getFormatBadge(r);
 
       return '<tr onclick="window.openNddtModalById(' + r.id + ')" style="cursor: pointer;">' +
         '<td style="text-align: center; color: var(--text-muted); font-size: 0.76rem;">' + (idx + 1) + '</td>' +
