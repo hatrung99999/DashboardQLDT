@@ -2440,6 +2440,30 @@ tbody tr:hover {
   background: #A12846;
 }
 
+/* Wraptext for PPHTDT Format badge across all viewports */
+#pphtdtClassesTable th:nth-child(3),
+#pphtdtClassesTable td:nth-child(3) {
+  white-space: normal !important;
+  word-break: normal !important;
+  text-align: center !important;
+  vertical-align: middle !important;
+  overflow: hidden !important;
+}
+
+#pphtdtClassesTable .badge-format-hybrid,
+#pphtdtClassesTable .badge-format-direct,
+#pphtdtClassesTable .badge-format-online {
+  white-space: normal !important;
+  word-break: normal !important;
+  display: inline-block !important;
+  text-align: center !important;
+  line-height: 1.25 !important;
+  padding: 0.24rem 0.4rem !important;
+  font-size: 0.68rem !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+
 /* Table Layout Fixed for PPHTDT (Phân hệ Phương pháp, hình thức đào tạo) */
 @media (min-width: 1100px) {
   .pphtdt-table-wrapper {
