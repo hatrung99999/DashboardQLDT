@@ -309,6 +309,14 @@ window.closeNddtModalOnOverlay = function (e) {
 
 
 document.addEventListener('DOMContentLoaded', () => {
+  // Global Chart.js high-DPI crisp rendering defaults
+  if (typeof Chart !== 'undefined' && Chart.defaults) {
+    if (!Chart.defaults.font) Chart.defaults.font = {};
+    Chart.defaults.font.family = "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+    Chart.defaults.devicePixelRatio = Math.max(window.devicePixelRatio || 1, 2);
+    Chart.defaults.color = '#1E293B';
+  }
+
   // Helper to get Today's Date in Hanoi GMT+7 timezone (YYYY-MM-DD)
   function getTodayGMT7Str() {
     try {
@@ -4818,42 +4826,47 @@ document.addEventListener('DOMContentLoaded', () => {
           {
             label: 'Tốt (4đ)',
             data: [p1_4, p2_4, p3_4],
-            backgroundColor: '#1E5E47',
+            backgroundColor: '#0F5132',
             rawCounts: [c1[4], c2[4], c3[4]],
             totalVotes: [c1.tot, c2.tot, c3.tot],
             barThickness: 22,
-            maxBarThickness: 26
+            maxBarThickness: 26,
+            borderRadius: 3
           },
           {
             label: 'Khá (3đ)',
             data: [p1_3, p2_3, p3_3],
-            backgroundColor: '#48A97C',
+            backgroundColor: '#2563EB',
             rawCounts: [c1[3], c2[3], c3[3]],
             totalVotes: [c1.tot, c2.tot, c3.tot],
             barThickness: 22,
-            maxBarThickness: 26
+            maxBarThickness: 26,
+            borderRadius: 3
           },
           {
             label: 'Bình thường (2đ)',
             data: [p1_2, p2_2, p3_2],
-            backgroundColor: '#D68B35',
+            backgroundColor: '#D97706',
             rawCounts: [c1[2], c2[2], c3[2]],
             totalVotes: [c1.tot, c2.tot, c3.tot],
             barThickness: 22,
-            maxBarThickness: 26
+            maxBarThickness: 26,
+            borderRadius: 3
           },
           {
             label: 'Hạn chế (1đ)',
             data: [p1_1, p2_1, p3_1],
-            backgroundColor: '#C84646',
+            backgroundColor: '#DC2626',
             rawCounts: [c1[1], c2[1], c3[1]],
             totalVotes: [c1.tot, c2.tot, c3.tot],
             barThickness: 22,
-            maxBarThickness: 26
+            maxBarThickness: 26,
+            borderRadius: 3
           }
         ]
       },
       options: {
+        devicePixelRatio: Math.max(window.devicePixelRatio || 1, 2),
         indexAxis: 'y',
         responsive: true,
         maintainAspectRatio: false,
@@ -4866,15 +4879,16 @@ document.addEventListener('DOMContentLoaded', () => {
             max: 100,
             ticks: {
               callback: (v) => v + '%',
-              font: { family: 'Plus Jakarta Sans', weight: '600', size: 10 }
+              font: { family: 'Plus Jakarta Sans', weight: '700', size: 10.5 },
+              color: '#334155'
             },
             grid: { color: '#F1F5F9' }
           },
           y: {
             stacked: true,
             ticks: {
-              font: { family: 'Plus Jakarta Sans', weight: '700', size: 10.5 },
-              color: '#374151'
+              font: { family: 'Plus Jakarta Sans', weight: '700', size: 11 },
+              color: '#1E293B'
             },
             grid: { display: false }
           }
@@ -4883,19 +4897,22 @@ document.addEventListener('DOMContentLoaded', () => {
           legend: {
             position: 'top',
             labels: {
-              boxWidth: 12,
+              boxWidth: 10,
+              boxHeight: 10,
               usePointStyle: true,
-              font: { family: 'Plus Jakarta Sans', weight: '700', size: 11 },
-              color: '#374151',
+              font: { family: 'Plus Jakarta Sans', weight: '700', size: 11.5 },
+              color: '#1E293B',
               padding: 12
             }
           },
           tooltip: {
-            backgroundColor: '#1E293B',
-            titleFont: { family: 'Plus Jakarta Sans', weight: '700' },
-            bodyFont: { family: 'Plus Jakarta Sans' },
+            backgroundColor: 'rgba(15, 23, 42, 0.95)',
+            titleFont: { family: 'Plus Jakarta Sans', weight: '800', size: 12.5 },
+            bodyFont: { family: 'Plus Jakarta Sans', weight: '600', size: 11.5 },
+            borderColor: '#475569',
+            borderWidth: 1,
             padding: 10,
-            cornerRadius: 6,
+            cornerRadius: 8,
             callbacks: {
               label: function (context) {
                 const dataset = context.dataset;
@@ -4993,8 +5010,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Set dynamic width for horizontal scroll
     if (scrollInner) {
-      const minW = Math.max(750, itemList.length * 68);
-      scrollInner.style.width = minW + 'px';
+      const containerWidth = scrollOuter ? (scrollOuter.clientWidth || 750) : 750;
+      const minRequiredWidth = itemList.length * 74;
+      if (itemList.length <= 8 || minRequiredWidth <= containerWidth) {
+        scrollInner.style.width = '100%';
+      } else {
+        scrollInner.style.width = minRequiredWidth + 'px';
+      }
     }
 
     // Multi-line labels: Name + Number of classes directly on axis
@@ -5006,9 +5028,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const validScores = [...dataC1, ...dataC2, ...dataC3].filter(s => s !== null && s > 0);
     const minVal = validScores.length ? Math.min(...validScores) : 3.0;
-    const yMin = Math.max(2.5, Math.floor((minVal - 0.15) * 10) / 10);
-    const maxClassVal = dataClasses.length ? Math.max(...dataClasses) : 10;
-    const yClassMax = Math.max(10, Math.ceil(maxClassVal * 1.3));
+    let yMin = Math.floor((minVal - 0.15) / 0.2) * 0.2;
+    if (yMin < 2.0) yMin = 2.0;
+    yMin = Number(yMin.toFixed(1));
+
+    const maxClassVal = dataClasses.length ? Math.max(...dataClasses) : 5;
+    let yClassStep = maxClassVal <= 4 ? 1 : (maxClassVal > 15 ? 5 : 2);
+    const yClassMax = Math.ceil(Math.max(4, maxClassVal * 1.35) / yClassStep) * yClassStep;
 
     const ctx = canvas.getContext('2d');
     csvcCharts.comparison = new Chart(ctx, {
@@ -5020,12 +5046,14 @@ document.addEventListener('DOMContentLoaded', () => {
             label: 'Số lớp tổ chức (cột mờ)',
             data: dataClasses,
             yAxisID: 'yClasses',
-            backgroundColor: 'rgba(140, 29, 64, 0.10)',
-            hoverBackgroundColor: 'rgba(140, 29, 64, 0.22)',
-            borderColor: 'rgba(140, 29, 64, 0.28)',
-            borderWidth: 1,
+            backgroundColor: 'rgba(140, 29, 64, 0.22)',
+            hoverBackgroundColor: 'rgba(140, 29, 64, 0.38)',
+            borderColor: 'rgba(140, 29, 64, 0.75)',
+            borderWidth: 1.5,
             borderRadius: 4,
-            barPercentage: 0.5,
+            barPercentage: 0.56,
+            categoryPercentage: 0.78,
+            maxBarThickness: 32,
             order: 10
           },
           {
@@ -5035,11 +5063,13 @@ document.addEventListener('DOMContentLoaded', () => {
             yAxisID: 'y',
             borderColor: '#0F5132',
             backgroundColor: '#0F5132',
-            borderWidth: 2.75,
-            pointRadius: 4.5,
-            pointHoverRadius: 7,
+            borderWidth: 3,
+            pointRadius: 5.5,
+            pointHoverRadius: 8,
             pointBackgroundColor: '#0F5132',
-            tension: 0.25,
+            pointBorderColor: '#FFFFFF',
+            pointBorderWidth: 2,
+            tension: 0.2,
             spanGaps: true,
             order: 1,
             clip: false
@@ -5051,11 +5081,13 @@ document.addEventListener('DOMContentLoaded', () => {
             yAxisID: 'y',
             borderColor: '#8C1D40',
             backgroundColor: '#8C1D40',
-            borderWidth: 2.75,
-            pointRadius: 4.5,
-            pointHoverRadius: 7,
+            borderWidth: 3,
+            pointRadius: 5.5,
+            pointHoverRadius: 8,
             pointBackgroundColor: '#8C1D40',
-            tension: 0.25,
+            pointBorderColor: '#FFFFFF',
+            pointBorderWidth: 2,
+            tension: 0.2,
             spanGaps: true,
             order: 2,
             clip: false
@@ -5067,12 +5099,14 @@ document.addEventListener('DOMContentLoaded', () => {
             yAxisID: 'y',
             borderColor: '#D97706',
             backgroundColor: '#D97706',
-            borderWidth: 2.75,
-            pointRadius: 4.5,
-            pointHoverRadius: 7,
+            borderWidth: 3,
+            pointRadius: 5.5,
+            pointHoverRadius: 8,
             pointBackgroundColor: '#D97706',
-            borderDash: [4, 4],
-            tension: 0.25,
+            pointBorderColor: '#FFFFFF',
+            pointBorderWidth: 2,
+            borderDash: [5, 4],
+            tension: 0.2,
             spanGaps: true,
             order: 3,
             clip: false
@@ -5080,6 +5114,7 @@ document.addEventListener('DOMContentLoaded', () => {
         ]
       },
       options: {
+        devicePixelRatio: Math.max(window.devicePixelRatio || 1, 2),
         responsive: true,
         maintainAspectRatio: false,
         layout: {
@@ -5103,22 +5138,24 @@ document.addEventListener('DOMContentLoaded', () => {
             title: {
               display: true,
               text: 'Điểm đánh giá (thang 4.0)',
-              font: { family: 'Plus Jakarta Sans', weight: '700', size: 10.5 },
-              color: '#475569'
+              font: { family: 'Plus Jakarta Sans', weight: '800', size: 11 },
+              color: '#1E293B'
             },
             ticks: {
               stepSize: 0.2,
               callback: function (v) {
-                if (v > 4.0) return '';
+                if (v > 4.05) return '';
                 return v.toFixed(1).replace('.', ',');
               },
-              font: { family: 'Plus Jakarta Sans', weight: '600', size: 10.5 }
+              font: { family: 'Plus Jakarta Sans', weight: '700', size: 11 },
+              color: '#334155'
             },
             grid: {
               color: function (context) {
-                if (context.tick && context.tick.value > 4.0) return 'transparent';
+                if (context.tick && context.tick.value > 4.05) return 'transparent';
                 return '#E2E8F0';
-              }
+              },
+              lineWidth: 1
             }
           },
           yClasses: {
@@ -5129,13 +5166,13 @@ document.addEventListener('DOMContentLoaded', () => {
             title: {
               display: true,
               text: 'Số lớp tổ chức',
-              font: { family: 'Plus Jakarta Sans', weight: '700', size: 10.5 },
+              font: { family: 'Plus Jakarta Sans', weight: '800', size: 11 },
               color: '#8C1D40'
             },
             ticks: {
-              stepSize: yClassMax > 15 ? 5 : 2,
+              stepSize: yClassStep,
               callback: (v) => v + ' lớp',
-              font: { family: 'Plus Jakarta Sans', weight: '700', size: 10 },
+              font: { family: 'Plus Jakarta Sans', weight: '700', size: 10.5 },
               color: '#8C1D40'
             },
             grid: { display: false }
@@ -5145,36 +5182,40 @@ document.addEventListener('DOMContentLoaded', () => {
               autoSkip: false,
               maxRotation: 45,
               minRotation: 45,
-              font: { family: 'Plus Jakarta Sans', weight: '700', size: 9.5 },
-              color: '#374151'
+              font: { family: 'Plus Jakarta Sans', weight: '700', size: 10.5 },
+              color: '#1E293B',
+              padding: 6
             },
-            grid: { color: '#F1F5F9' }
+            grid: { color: '#F1F5F9', lineWidth: 1 }
           }
         },
         plugins: {
           legend: {
             position: 'top',
             labels: {
-              boxWidth: 12,
+              boxWidth: 10,
+              boxHeight: 10,
               usePointStyle: true,
-              font: { family: 'Plus Jakarta Sans', weight: '700', size: 11 },
-              color: '#374151',
+              font: { family: 'Plus Jakarta Sans', weight: '700', size: 11.5 },
+              color: '#1E293B',
               padding: 12
             }
           },
           tooltip: {
-            backgroundColor: '#1E293B',
-            titleFont: { family: 'Plus Jakarta Sans', weight: '700' },
-            bodyFont: { family: 'Plus Jakarta Sans' },
+            backgroundColor: 'rgba(15, 23, 42, 0.95)',
+            titleFont: { family: 'Plus Jakarta Sans', weight: '800', size: 12.5 },
+            bodyFont: { family: 'Plus Jakarta Sans', weight: '600', size: 11.5 },
+            borderColor: '#475569',
+            borderWidth: 1,
             padding: 10,
-            cornerRadius: 6,
+            cornerRadius: 8,
             callbacks: {
               title: function (items) {
                 if (!items || items.length === 0) return '';
                 const idx = items[0].dataIndex;
                 const it = itemList[idx];
                 const prefix = isByLoc ? 'Địa điểm: ' : 'Chương trình: ';
-                return prefix + it.full_name + ' (' + it.classes + ' lớp - ' + it.votes + ' phiếu)';
+                return prefix + it.full_name + ' (' + it.classes + ' lớp – ' + it.votes + ' phiếu)';
               },
               label: function (context) {
                 const label = context.dataset.label || '';
@@ -8488,6 +8529,7 @@ document.addEventListener('DOMContentLoaded', () => {
     timeGvCompareMode: 'lecturer', // 'lecturer' | 'unit'
     timeGvRankMetric: 'gpa', // 'gpa' | 'classes' | 'hours'
     timeGvTopLimit: '15', // '10' | '15' | '20' | '30' | 'all'
+    timeLocCompareMode: 'location', // 'location' | 'program'
     timeDrilldownPeriod: null,
     pphtFormatFilter: 'all', // 'all' | 'direct' | 'hybrid'
     nddtFormatFilter: 'all'
@@ -8509,7 +8551,8 @@ document.addEventListener('DOMContentLoaded', () => {
     timeQualityTrend: null,
     timeRatingDistribution: null,
     timeFormatComparison: null,
-    timeGvAnalytics: null
+    timeGvAnalytics: null,
+    timeLocation: null
   };
   var reportCharts = window.reportCharts;
 
@@ -12090,7 +12133,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // LEFT COLUMN: Combination Chart
         '<div style="min-width: 0; background: #FAFBFD; border: 1px solid #E2E8F0; border-radius: 8px; padding: 0.65rem;">' +
         '<div id="reportCsvcScrollOuter" style="width: 100%; overflow-x: auto; cursor: grab;">' +
-        '<div id="reportCsvcScrollInner" style="height: 335px; position: relative;">' +
+        '<div id="reportCsvcScrollInner" style="min-width: 100%; height: 365px; position: relative;">' +
         '<canvas id="reportCsvcLocationChart"></canvas>' +
         '</div>' +
         '</div>' +
@@ -12104,7 +12147,7 @@ document.addEventListener('DOMContentLoaded', () => {
         '</div>' +
         '<span style="font-size: 0.72rem; color: #64748B; font-weight: 600;">' + locCount + ' địa điểm</span>' +
         '</div>' +
-        '<div style="' + (isProgram ? 'overflow-x: auto;' : 'max-height: 335px; overflow-y: auto; overflow-x: auto;') + '" class="table-container">' +
+        '<div style="' + (isProgram ? 'overflow-x: auto;' : 'max-height: 365px; overflow-y: auto; overflow-x: auto;') + '" class="table-container">' +
         '<table class="data-table" id="reportCsvcLocationTable" style="width: 100%; border-collapse: collapse; margin: 0;">' +
         '<thead style="position: sticky; top: 0; background: #F8FAFC; z-index: 2; border-bottom: 2px solid #E2E8F0;">' +
         '<tr>' +
@@ -12191,10 +12234,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const itemList = csvcData.locations;
 
-        // Dynamic width for scroll if more than 3 locations
+        // Dynamic width for scroll if locations exceed container width
         if (scrollInner) {
-          const minW = Math.max(540, itemList.length * 75);
-          scrollInner.style.width = (itemList.length > 3 ? minW + 'px' : '100%');
+          const containerWidth = scrollOuter ? (scrollOuter.clientWidth || 620) : 620;
+          const minRequiredWidth = itemList.length * 76;
+          if (itemList.length <= 6 || minRequiredWidth <= containerWidth) {
+            scrollInner.style.width = '100%';
+          } else {
+            scrollInner.style.width = minRequiredWidth + 'px';
+          }
         }
 
         // Multi-line labels: Name + (X lớp) directly on axis
@@ -12206,9 +12254,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const validScores = [...dataC1, ...dataC2, ...dataC3].filter(s => typeof s === 'number' && s > 0);
         const minVal = validScores.length ? Math.min(...validScores) : 3.0;
-        const yMin = Math.max(2.5, Math.floor((minVal - 0.15) * 10) / 10);
-        const maxClassVal = dataClasses.length ? Math.max(...dataClasses) : 5;
-        const yClassMax = Math.max(5, Math.ceil(maxClassVal * 1.35));
+        let yMin = Math.floor((minVal - 0.15) / 0.2) * 0.2;
+        if (yMin < 2.0) yMin = 2.0;
+        yMin = Number(yMin.toFixed(1));
+
+        const maxClassVal = dataClasses.length ? Math.max(...dataClasses) : 4;
+        let yClassStep = maxClassVal <= 4 ? 1 : (maxClassVal > 15 ? 5 : 2);
+        const yClassMax = Math.ceil(Math.max(4, maxClassVal * 1.35) / yClassStep) * yClassStep;
 
         const ctx = locCanvas.getContext('2d');
         reportCharts.csvcLocation = new Chart(ctx, {
@@ -12220,12 +12272,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 label: 'Số lớp tổ chức (cột mờ)',
                 data: dataClasses,
                 yAxisID: 'yClasses',
-                backgroundColor: 'rgba(140, 29, 64, 0.10)',
-                hoverBackgroundColor: 'rgba(140, 29, 64, 0.22)',
-                borderColor: 'rgba(140, 29, 64, 0.28)',
-                borderWidth: 1,
+                backgroundColor: 'rgba(140, 29, 64, 0.22)',
+                hoverBackgroundColor: 'rgba(140, 29, 64, 0.38)',
+                borderColor: 'rgba(140, 29, 64, 0.75)',
+                borderWidth: 1.5,
                 borderRadius: 4,
-                barPercentage: 0.5,
+                barPercentage: 0.56,
+                categoryPercentage: 0.78,
+                maxBarThickness: 32,
                 order: 10
               },
               {
@@ -12235,11 +12289,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 yAxisID: 'y',
                 borderColor: '#0F5132',
                 backgroundColor: '#0F5132',
-                borderWidth: 2.75,
-                pointRadius: 4.5,
-                pointHoverRadius: 7,
+                borderWidth: 3,
+                pointRadius: 5.5,
+                pointHoverRadius: 8,
                 pointBackgroundColor: '#0F5132',
-                tension: 0.25,
+                pointBorderColor: '#FFFFFF',
+                pointBorderWidth: 2,
+                tension: 0.2,
                 spanGaps: true,
                 order: 1,
                 clip: false
@@ -12251,11 +12307,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 yAxisID: 'y',
                 borderColor: '#8C1D40',
                 backgroundColor: '#8C1D40',
-                borderWidth: 2.75,
-                pointRadius: 4.5,
-                pointHoverRadius: 7,
+                borderWidth: 3,
+                pointRadius: 5.5,
+                pointHoverRadius: 8,
                 pointBackgroundColor: '#8C1D40',
-                tension: 0.25,
+                pointBorderColor: '#FFFFFF',
+                pointBorderWidth: 2,
+                tension: 0.2,
                 spanGaps: true,
                 order: 2,
                 clip: false
@@ -12267,12 +12325,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 yAxisID: 'y',
                 borderColor: '#D97706',
                 backgroundColor: '#D97706',
-                borderWidth: 2.75,
-                pointRadius: 4.5,
-                pointHoverRadius: 7,
+                borderWidth: 3,
+                borderDash: [5, 4],
+                pointRadius: 5.5,
+                pointHoverRadius: 8,
                 pointBackgroundColor: '#D97706',
-                borderDash: [4, 4],
-                tension: 0.25,
+                pointBorderColor: '#FFFFFF',
+                pointBorderWidth: 2,
+                tension: 0.2,
                 spanGaps: true,
                 order: 3,
                 clip: false
@@ -12280,6 +12340,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ]
           },
           options: {
+            devicePixelRatio: Math.max(window.devicePixelRatio || 1, 2),
             responsive: true,
             maintainAspectRatio: false,
             layout: {
@@ -12303,22 +12364,24 @@ document.addEventListener('DOMContentLoaded', () => {
                 title: {
                   display: true,
                   text: 'Điểm đánh giá (thang 4.0)',
-                  font: { family: 'Plus Jakarta Sans', weight: '700', size: 10.5 },
-                  color: '#475569'
+                  font: { family: 'Plus Jakarta Sans', weight: '800', size: 11 },
+                  color: '#1E293B'
                 },
                 ticks: {
                   stepSize: 0.2,
                   callback: function (v) {
-                    if (v > 4.0) return '';
+                    if (v > 4.05) return '';
                     return v.toFixed(1).replace('.', ',');
                   },
-                  font: { family: 'Plus Jakarta Sans', weight: '600', size: 10.5 }
+                  font: { family: 'Plus Jakarta Sans', weight: '700', size: 11 },
+                  color: '#334155'
                 },
                 grid: {
                   color: function (context) {
-                    if (context.tick && context.tick.value > 4.0) return 'transparent';
+                    if (context.tick && context.tick.value > 4.05) return 'transparent';
                     return '#E2E8F0';
-                  }
+                  },
+                  lineWidth: 1
                 }
               },
               yClasses: {
@@ -12329,13 +12392,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 title: {
                   display: true,
                   text: 'Số lớp tổ chức',
-                  font: { family: 'Plus Jakarta Sans', weight: '700', size: 10.5 },
+                  font: { family: 'Plus Jakarta Sans', weight: '800', size: 11 },
                   color: '#8C1D40'
                 },
                 ticks: {
-                  stepSize: yClassMax > 10 ? 5 : 2,
+                  stepSize: yClassStep,
                   callback: (v) => v + ' lớp',
-                  font: { family: 'Plus Jakarta Sans', weight: '700', size: 10 },
+                  font: { family: 'Plus Jakarta Sans', weight: '700', size: 10.5 },
                   color: '#8C1D40'
                 },
                 grid: { display: false }
@@ -12345,29 +12408,33 @@ document.addEventListener('DOMContentLoaded', () => {
                   autoSkip: false,
                   maxRotation: 45,
                   minRotation: 45,
-                  font: { family: 'Plus Jakarta Sans', weight: '700', size: 9.5 },
-                  color: '#374151'
+                  font: { family: 'Plus Jakarta Sans', weight: '700', size: 10.5 },
+                  color: '#1E293B',
+                  padding: 6
                 },
-                grid: { color: '#F1F5F9' }
+                grid: { color: '#F1F5F9', lineWidth: 1 }
               }
             },
             plugins: {
               legend: {
                 position: 'top',
                 labels: {
-                  boxWidth: 12,
+                  boxWidth: 10,
+                  boxHeight: 10,
                   usePointStyle: true,
-                  font: { family: 'Plus Jakarta Sans', weight: '700', size: 11 },
-                  color: '#374151',
+                  font: { family: 'Plus Jakarta Sans', weight: '700', size: 11.5 },
+                  color: '#1E293B',
                   padding: 12
                 }
               },
               tooltip: {
-                backgroundColor: '#1E293B',
-                titleFont: { family: 'Plus Jakarta Sans', weight: '700' },
-                bodyFont: { family: 'Plus Jakarta Sans' },
+                backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                titleFont: { family: 'Plus Jakarta Sans', weight: '800', size: 12.5 },
+                bodyFont: { family: 'Plus Jakarta Sans', weight: '600', size: 11.5 },
+                borderColor: '#475569',
+                borderWidth: 1,
                 padding: 10,
-                cornerRadius: 6,
+                cornerRadius: 8,
                 callbacks: {
                   title: function (items) {
                     if (!items || items.length === 0) return '';
@@ -12375,7 +12442,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const it = itemList[idx];
                     if (!it) return '';
                     const numCls = it.classes || it.classesCount || 1;
-                    return 'Địa điểm: ' + (it.full_name || it.name) + ' (' + numCls + ' lớp - ' + it.votes + ' phiếu)';
+                    return 'Địa điểm: ' + (it.full_name || it.name) + ' (' + numCls + ' lớp – ' + it.votes + ' phiếu)';
                   },
                   label: function (context) {
                     const label = context.dataset.label || '';
@@ -14419,7 +14486,7 @@ document.addEventListener('DOMContentLoaded', () => {
             legend: { position: 'top', labels: { boxWidth: 12, font: { weight: 600 } } },
             tooltip: {
               callbacks: {
-                afterBody: function(items) {
+                afterBody: function (items) {
                   const idx = items[0].dataIndex;
                   const p = data.periodsTrend[idx];
                   return [
@@ -14494,7 +14561,7 @@ document.addEventListener('DOMContentLoaded', () => {
             legend: { position: 'top', labels: { boxWidth: 12, font: { weight: 600 } } },
             tooltip: {
               callbacks: {
-                afterLabel: function(item) {
+                afterLabel: function (item) {
                   const idx = item.dataIndex;
                   const isDir = item.datasetIndex === 0;
                   const cnt = isDir ? directCounts[idx] : hybridCounts[idx];
@@ -14633,7 +14700,7 @@ document.addEventListener('DOMContentLoaded', () => {
             legend: { position: 'top', labels: { boxWidth: 12, font: { weight: 600 } } },
             tooltip: {
               callbacks: {
-                afterBody: function(items) {
+                afterBody: function (items) {
                   const idx = items[0].dataIndex;
                   return 'Tổng lượt đánh giá: ' + distData[idx].totScore.toLocaleString('vi-VN');
                 }
@@ -14691,6 +14758,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Visual 6: Lecturer Evaluation (matching Đánh giá giảng viên screen)
     renderTimeGvEvaluationChart(data);
+
+    // Visual 7: Location & Logistics Evaluation (matching Cơ sở vật chất screen)
+    renderTimeLocationChart(data);
   }
 
   /**
@@ -14785,6 +14855,423 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const ctx6 = canvas.getContext('2d');
     reportCharts.timeGvAnalytics = new Chart(ctx6, buildGvEvaluationComboChartConfig(displayList, compareMode));
+    enableHorizontalDragScroll(scrollOuter);
+  }
+
+  /**
+   * Render Visual 7: Location & Logistics Evaluation in Time-Based Training Analytics.
+   * Matches the multi-axis combo chart design from Screen 4 (Cơ sở vật chất).
+   */
+  function renderTimeLocationChart(data) {
+    if (reportCharts.timeLocation) {
+      try { reportCharts.timeLocation.destroy(); } catch (e) { }
+      reportCharts.timeLocation = null;
+    }
+
+    const canvas = document.getElementById('timeLocationChart');
+    const scrollInner = document.getElementById('timeLocationScrollInner');
+    const scrollOuter = document.getElementById('timeLocationScrollOuter');
+    const hintTextElem = document.getElementById('timeLocScrollHintText');
+    const emptyState = document.getElementById('timeLocationEmptyState');
+    if (!canvas || !scrollInner) return;
+
+    const isByLoc = (reportState.timeLocCompareMode || 'location') === 'location';
+    const btnLoc = document.getElementById('btnTimeLocToggleLoc');
+    const btnProg = document.getElementById('btnTimeLocToggleProg');
+    if (btnLoc && btnProg) {
+      if (isByLoc) {
+        btnLoc.classList.add('active');
+        btnLoc.style.background = 'var(--brand-primary)';
+        btnLoc.style.color = 'white';
+        btnProg.classList.remove('active');
+        btnProg.style.background = 'transparent';
+        btnProg.style.color = '#475569';
+      } else {
+        btnProg.classList.add('active');
+        btnProg.style.background = 'var(--brand-primary)';
+        btnProg.style.color = 'white';
+        btnLoc.classList.remove('active');
+        btnLoc.style.background = 'transparent';
+        btnLoc.style.color = '#475569';
+      }
+    }
+
+    const currentClasses = (data && Array.isArray(data.currentClasses)) ? data.currentClasses : [];
+    const classCodesSet = new Set(currentClasses.map(c => normalizeReportClassKey(c.classCode || c.ma_lop)));
+
+    const csvcSource = Array.isArray(window.allCsvcItems) && window.allCsvcItems.length > 0
+      ? window.allCsvcItems
+      : (typeof allCsvcItems !== 'undefined' && Array.isArray(allCsvcItems) && allCsvcItems.length > 0
+        ? allCsvcItems
+        : (typeof RAW_CSVC_DATA !== 'undefined' ? RAW_CSVC_DATA : []));
+
+    const groupKey = isByLoc ? 'dia_diem' : 'chuong_trinh';
+    const groups = {};
+
+    // Group items from CSVC records matching classes in current time period
+    csvcSource.forEach(item => {
+      if (!item.ma_lop) return;
+      const norm = normalizeReportClassKey(item.ma_lop);
+      if (!classCodesSet.has(norm)) return;
+
+      const rawK = item[groupKey] || (isByLoc ? 'Chưa xác định' : 'Khác');
+      const k = String(rawK).trim();
+      if (!groups[k]) {
+        groups[k] = {
+          name: k,
+          full_name: isByLoc ? k : (item.ten_ct_full || k),
+          classes: new Set(),
+          votes: 0,
+          c1_pts: 0, c1_votes: 0,
+          c2_pts: 0, c2_votes: 0,
+          c3_pts: 0, c3_votes: 0
+        };
+      }
+      groups[k].classes.add(norm);
+      groups[k].votes += (Number(item.so_phieu) || 0);
+
+      const n4_1 = Number(item.cttc_4) || 0, n3_1 = Number(item.cttc_3) || 0, n2_1 = Number(item.cttc_2) || 0, n1_1 = Number(item.cttc_1) || 0;
+      const t1 = n4_1 + n3_1 + n2_1 + n1_1;
+      const pts1 = 4 * n4_1 + 3 * n3_1 + 2 * n2_1 + 1 * n1_1;
+      if (t1 > 0) {
+        groups[k].c1_votes += t1;
+        groups[k].c1_pts += pts1;
+      } else if (typeof item.cttc_score === 'number' && item.cttc_score > 0) {
+        const v = Number(item.so_phieu) || 1;
+        groups[k].c1_votes += v;
+        groups[k].c1_pts += item.cttc_score * v;
+      }
+
+      const n4_2 = Number(item.csvc_4) || 0, n3_2 = Number(item.csvc_3) || 0, n2_2 = Number(item.csvc_2) || 0, n1_2 = Number(item.csvc_1) || 0;
+      const t2 = n4_2 + n3_2 + n2_2 + n1_2;
+      const pts2 = 4 * n4_2 + 3 * n3_2 + 2 * n2_2 + 1 * n1_2;
+      if (t2 > 0) {
+        groups[k].c2_votes += t2;
+        groups[k].c2_pts += pts2;
+      } else if (typeof item.csvc_score === 'number' && item.csvc_score > 0) {
+        const v = Number(item.so_phieu) || 1;
+        groups[k].c2_votes += v;
+        groups[k].c2_pts += item.csvc_score * v;
+      }
+
+      const n4_3 = Number(item.hc_4) || 0, n3_3 = Number(item.hc_3) || 0, n2_3 = Number(item.hc_2) || 0, n1_3 = Number(item.hc_1) || 0;
+      const t3 = n4_3 + n3_3 + n2_3 + n1_3;
+      const pts3 = 4 * n4_3 + 3 * n3_3 + 2 * n2_3 + 1 * n1_3;
+      if (t3 > 0) {
+        groups[k].c3_votes += t3;
+        groups[k].c3_pts += pts3;
+      } else if (typeof item.hc_score === 'number' && item.hc_score > 0) {
+        const v = Number(item.so_phieu) || 1;
+        groups[k].c3_votes += v;
+        groups[k].c3_pts += item.hc_score * v;
+      }
+    });
+
+    // Fallback: incorporate surveyed classes present in currentClasses that might not be in csvcSource
+    currentClasses.forEach(c => {
+      const norm = normalizeReportClassKey(c.classCode || c.ma_lop);
+      if (!norm) return;
+      let counted = false;
+      for (const g of Object.values(groups)) {
+        if (g.classes.has(norm)) { counted = true; break; }
+      }
+      if (!counted && c.csvc && c.csvc.score > 0) {
+        const rawK = isByLoc ? (c.location || 'Chưa xác định') : (c.programCode || 'Khác');
+        const k = String(rawK).trim();
+        if (!groups[k]) {
+          groups[k] = {
+            name: k,
+            full_name: isByLoc ? k : (c.className || k),
+            classes: new Set(),
+            votes: 0,
+            c1_pts: 0, c1_votes: 0,
+            c2_pts: 0, c2_votes: 0,
+            c3_pts: 0, c3_votes: 0
+          };
+        }
+        groups[k].classes.add(norm);
+        const cv = c.csvc.votes || c.votes || 0;
+        groups[k].votes += cv;
+        if (c.csvc.c1 && c.csvc.c1.score > 0) {
+          const v1 = c.csvc.c1.total || cv;
+          groups[k].c1_votes += v1;
+          groups[k].c1_pts += c.csvc.c1.score * v1;
+        }
+        if (c.csvc.c2 && c.csvc.c2.score > 0) {
+          const v2 = c.csvc.c2.total || cv;
+          groups[k].c2_votes += v2;
+          groups[k].c2_pts += c.csvc.c2.score * v2;
+        }
+        if (c.csvc.c3 && c.csvc.c3.score > 0) {
+          const v3 = c.csvc.c3.total || cv;
+          groups[k].c3_votes += v3;
+          groups[k].c3_pts += c.csvc.c3.score * v3;
+        }
+      }
+    });
+
+    const itemList = Object.values(groups).map(g => {
+      const s1 = g.c1_votes > 0 ? (g.c1_pts / g.c1_votes) : null;
+      const s2 = g.c2_votes > 0 ? (g.c2_pts / g.c2_votes) : null;
+      const s3 = g.c3_votes > 0 ? (g.c3_pts / g.c3_votes) : null;
+      const totPts = g.c1_pts + g.c2_pts + g.c3_pts;
+      const totVotes = g.c1_votes + g.c2_votes + g.c3_votes;
+      const sOverall = totVotes > 0 ? (totPts / totVotes) : null;
+
+      return {
+        name: g.name,
+        full_name: g.full_name,
+        classes: g.classes.size,
+        votes: g.votes,
+        score1: s1,
+        score2: s2,
+        score3: s3,
+        scoreOverall: sOverall
+      };
+    });
+
+    itemList.sort((a, b) => (b.votes - a.votes) || (b.classes - a.classes));
+
+    const unitLabel = isByLoc ? 'địa điểm' : 'chương trình';
+    if (itemList.length === 0) {
+      if (hintTextElem) hintTextElem.innerHTML = 'Kéo ngang xem tất cả <strong id="timeLocScrollCountHint">0</strong> ' + unitLabel;
+      if (scrollOuter) scrollOuter.style.display = 'none';
+      if (emptyState) {
+        emptyState.style.display = 'flex';
+        const span = emptyState.querySelector('span');
+        if (span) span.textContent = 'Không có dữ liệu đánh giá ' + unitLabel + ' trong kỳ báo cáo đã chọn';
+      }
+      return;
+    }
+
+    if (emptyState) emptyState.style.display = 'none';
+    if (scrollOuter) scrollOuter.style.display = 'block';
+
+    const containerWidth = scrollOuter ? (scrollOuter.clientWidth || 1050) : 1050;
+    const minRequiredWidth = itemList.length * 72;
+    const needsScroll = itemList.length > 10 && minRequiredWidth > containerWidth;
+
+    if (hintTextElem) {
+      if (needsScroll) {
+        hintTextElem.innerHTML = 'Kéo ngang xem tất cả <strong id="timeLocScrollCountHint">' + itemList.length + '</strong> ' + unitLabel;
+      } else {
+        hintTextElem.innerHTML = 'Hiển thị <strong id="timeLocScrollCountHint">' + itemList.length + '</strong> ' + unitLabel;
+      }
+    }
+
+    if (scrollInner) {
+      scrollInner.style.width = needsScroll ? (minRequiredWidth + 'px') : '100%';
+    }
+
+    const labels = itemList.map(it => [it.name, '(' + it.classes + ' lớp)']);
+    const dataClasses = itemList.map(it => it.classes);
+    const dataC1 = itemList.map(it => (it.score1 !== null && !isNaN(it.score1)) ? Number(it.score1.toFixed(2)) : null);
+    const dataC2 = itemList.map(it => (it.score2 !== null && !isNaN(it.score2)) ? Number(it.score2.toFixed(2)) : null);
+    const dataC3 = itemList.map(it => (it.score3 !== null && !isNaN(it.score3)) ? Number(it.score3.toFixed(2)) : null);
+
+    const validScores = [...dataC1, ...dataC2, ...dataC3].filter(s => s !== null && s > 0);
+    const minVal = validScores.length ? Math.min(...validScores) : 3.0;
+    let yMin = Math.floor((minVal - 0.15) / 0.2) * 0.2;
+    if (yMin < 2.0) yMin = 2.0;
+    yMin = Number(yMin.toFixed(1));
+
+    const maxClassVal = dataClasses.length ? Math.max(...dataClasses) : 4;
+    let yClassStep = maxClassVal <= 4 ? 1 : (maxClassVal > 15 ? 5 : 2);
+    const yClassMax = Math.ceil(Math.max(4, maxClassVal * 1.35) / yClassStep) * yClassStep;
+
+    const ctx = canvas.getContext('2d');
+    reportCharts.timeLocation = new Chart(ctx, {
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            type: 'bar',
+            label: 'Số lớp tổ chức (cột mờ)',
+            data: dataClasses,
+            yAxisID: 'yClasses',
+            backgroundColor: 'rgba(140, 29, 64, 0.22)',
+            hoverBackgroundColor: 'rgba(140, 29, 64, 0.38)',
+            borderColor: 'rgba(140, 29, 64, 0.75)',
+            borderWidth: 1.5,
+            borderRadius: 4,
+            barPercentage: 0.56,
+            categoryPercentage: 0.78,
+            maxBarThickness: 32,
+            order: 10
+          },
+          {
+            type: 'line',
+            label: '1. Công tác tổ chức (CTTC)',
+            data: dataC1,
+            yAxisID: 'y',
+            borderColor: '#0F5132',
+            backgroundColor: '#0F5132',
+            borderWidth: 3,
+            pointRadius: 5.5,
+            pointHoverRadius: 8,
+            pointBackgroundColor: '#0F5132',
+            pointBorderColor: '#FFFFFF',
+            pointBorderWidth: 2,
+            tension: 0.2,
+            spanGaps: true,
+            order: 1,
+            clip: false
+          },
+          {
+            type: 'line',
+            label: '2. Cơ sở vật chất (CSVC)',
+            data: dataC2,
+            yAxisID: 'y',
+            borderColor: '#8C1D40',
+            backgroundColor: '#8C1D40',
+            borderWidth: 3,
+            pointRadius: 5.5,
+            pointHoverRadius: 8,
+            pointBackgroundColor: '#8C1D40',
+            pointBorderColor: '#FFFFFF',
+            pointBorderWidth: 2,
+            tension: 0.2,
+            spanGaps: true,
+            order: 2,
+            clip: false
+          },
+          {
+            type: 'line',
+            label: '3. Công tác hậu cần (HC)',
+            data: dataC3,
+            yAxisID: 'y',
+            borderColor: '#D97706',
+            backgroundColor: '#D97706',
+            borderWidth: 3,
+            pointRadius: 5.5,
+            pointHoverRadius: 8,
+            pointBackgroundColor: '#D97706',
+            pointBorderColor: '#FFFFFF',
+            pointBorderWidth: 2,
+            borderDash: [5, 4],
+            tension: 0.2,
+            spanGaps: true,
+            order: 3,
+            clip: false
+          }
+        ]
+      },
+      options: {
+        devicePixelRatio: Math.max(window.devicePixelRatio || 1, 2),
+        responsive: true,
+        maintainAspectRatio: false,
+        layout: {
+          padding: {
+            top: 18,
+            right: 18,
+            left: 6,
+            bottom: 6
+          }
+        },
+        interaction: {
+          mode: 'index',
+          intersect: false
+        },
+        scales: {
+          y: {
+            type: 'linear',
+            position: 'left',
+            min: yMin,
+            max: 4.15,
+            title: {
+              display: true,
+              text: 'Điểm đánh giá (thang 4.0)',
+              font: { family: 'Plus Jakarta Sans', weight: '800', size: 11 },
+              color: '#1E293B'
+            },
+            ticks: {
+              stepSize: 0.2,
+              callback: function (v) {
+                if (v > 4.05) return '';
+                return v.toFixed(1).replace('.', ',');
+              },
+              font: { family: 'Plus Jakarta Sans', weight: '700', size: 11 },
+              color: '#334155'
+            },
+            grid: {
+              color: function (context) {
+                if (context.tick && context.tick.value > 4.05) return 'transparent';
+                return '#E2E8F0';
+              }
+            }
+          },
+          yClasses: {
+            type: 'linear',
+            position: 'right',
+            min: 0,
+            max: yClassMax,
+            title: {
+              display: true,
+              text: 'Số lớp tổ chức',
+              font: { family: 'Plus Jakarta Sans', weight: '800', size: 11 },
+              color: '#8C1D40'
+            },
+            ticks: {
+              stepSize: yClassStep,
+              callback: (v) => v + ' lớp',
+              font: { family: 'Plus Jakarta Sans', weight: '700', size: 10.5 },
+              color: '#8C1D40'
+            },
+            grid: { display: false }
+          },
+          x: {
+            ticks: {
+              autoSkip: false,
+              maxRotation: 45,
+              minRotation: 45,
+              font: { family: 'Plus Jakarta Sans', weight: '700', size: 10 },
+              color: '#1E293B'
+            },
+            grid: { color: '#F1F5F9' }
+          }
+        },
+        plugins: {
+          legend: {
+            position: 'top',
+            labels: {
+              boxWidth: 12,
+              usePointStyle: true,
+              font: { family: 'Plus Jakarta Sans', weight: '700', size: 11 },
+              color: '#1E293B',
+              padding: 14
+            }
+          },
+          tooltip: {
+            backgroundColor: '#1E293B',
+            titleFont: { family: 'Plus Jakarta Sans', weight: '800' },
+            bodyFont: { family: 'Plus Jakarta Sans', weight: '600' },
+            padding: 10,
+            cornerRadius: 6,
+            callbacks: {
+              title: function (items) {
+                if (!items || items.length === 0) return '';
+                const idx = items[0].dataIndex;
+                const it = itemList[idx];
+                const prefix = isByLoc ? 'Địa điểm: ' : 'Chương trình: ';
+                return prefix + it.full_name + ' (' + it.classes + ' lớp – ' + it.votes + ' phiếu)';
+              },
+              label: function (context) {
+                const label = context.dataset.label || '';
+                const val = context.parsed.y;
+                if (context.dataset.yAxisID === 'yClasses') {
+                  return 'Số lớp tổ chức: ' + val + ' lớp';
+                }
+                if (val === null || typeof val === 'undefined') {
+                  return label + ': Không áp dụng';
+                }
+                return label + ': ' + val.toFixed(2) + ' / 4.0';
+              }
+            }
+          }
+        }
+      }
+    });
+
     enableHorizontalDragScroll(scrollOuter);
   }
 
@@ -15601,6 +16088,22 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
 
+    // Visual 7 (Location & CSVC Evaluation) Toggle inside Time Analytics
+    const btnTimeLocLec = document.getElementById('btnTimeLocToggleLoc');
+    const btnTimeLocProg = document.getElementById('btnTimeLocToggleProg');
+    if (btnTimeLocLec) {
+      btnTimeLocLec.addEventListener('click', () => {
+        reportState.timeLocCompareMode = 'location';
+        if (reportState.currentTimeData) renderTimeLocationChart(reportState.currentTimeData);
+      });
+    }
+    if (btnTimeLocProg) {
+      btnTimeLocProg.addEventListener('click', () => {
+        reportState.timeLocCompareMode = 'program';
+        if (reportState.currentTimeData) renderTimeLocationChart(reportState.currentTimeData);
+      });
+    }
+
     // Drilldown Return Button
     const btnReturnSummary = document.getElementById('btnTimeReturnToSummary');
     if (btnReturnSummary) {
@@ -15713,6 +16216,7 @@ document.addEventListener('DOMContentLoaded', () => {
         timeGvCompareMode: 'lecturer',
         timeGvRankMetric: 'gpa',
         timeGvTopLimit: '15',
+        timeLocCompareMode: 'location',
         timeDrilldownPeriod: null,
         pphtFormatFilter: 'all',
         nddtFormatFilter: 'all'
@@ -15730,7 +16234,8 @@ document.addEventListener('DOMContentLoaded', () => {
         timeQualityTrend: null,
         timeRatingDistribution: null,
         timeFormatComparison: null,
-        timeGvAnalytics: null
+        timeGvAnalytics: null,
+        timeLocation: null
       };
     }
     populateReportDropdowns();
@@ -15963,7 +16468,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const scrollableReportCharts = [
       { id: 'reportCsvcScrollInner', chartKey: 'csvcLocation' },
-      { id: 'timeGvComparisonScrollInner', chartKey: 'timeGvAnalytics' }
+      { id: 'timeGvComparisonScrollInner', chartKey: 'timeGvAnalytics' },
+      { id: 'timeLocationScrollInner', chartKey: 'timeLocation' }
     ];
     scrollableReportCharts.forEach(item => {
       const inner = document.getElementById(item.id);
@@ -16027,9 +16533,13 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
 
-    ['reportCsvcScrollInner', 'timeGvComparisonScrollInner'].forEach((id, idx) => {
-      const inner = document.getElementById(id);
-      const chartInst = idx === 0 ? reportCharts.csvcLocation : reportCharts.timeGvAnalytics;
+    [
+      { id: 'reportCsvcScrollInner', chartKey: 'csvcLocation' },
+      { id: 'timeGvComparisonScrollInner', chartKey: 'timeGvAnalytics' },
+      { id: 'timeLocationScrollInner', chartKey: 'timeLocation' }
+    ].forEach(item => {
+      const inner = document.getElementById(item.id);
+      const chartInst = reportCharts[item.chartKey];
       if (inner && inner.dataset.origWidth !== undefined) {
         inner.style.width = inner.dataset.origWidth;
         delete inner.dataset.origWidth;
