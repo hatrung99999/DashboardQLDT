@@ -19,22 +19,171 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
   <!-- Dashboard Stylesheet -->
-  <link rel="stylesheet" href="styles.css?v=9669_v56">
+  <link rel="stylesheet" href="styles.css?v=9669_v57">
 </head>
 
 <body>
+
+  <!-- MOBILE NAVIGATION DRAWER BACKDROP & PANEL -->
+  <div id="mobileNavBackdrop" class="mobile-nav-backdrop" aria-hidden="true"></div>
+  <aside id="mobileNavDrawer" class="mobile-nav-drawer" aria-label="Menu điều hướng phân hệ" aria-hidden="true">
+    <div class="mobile-drawer-header">
+      <div class="mobile-drawer-brand">
+        <img src="agribank-logo.jpg" alt="Logo Agribank" class="mobile-drawer-logo">
+        <div class="mobile-drawer-titles">
+          <div class="mobile-drawer-org">TRƯỜNG ĐÀO TẠO CÁN BỘ AGRIBANK</div>
+          <div class="mobile-drawer-sub"><span class="dot-green"></span> Quản Lý Đào Tạo</div>
+        </div>
+      </div>
+      <button type="button" id="btnMobileMenuClose" class="mobile-drawer-close" aria-label="Đóng menu">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+
+    <div class="mobile-drawer-section-label">7 PHÂN HỆ QUẢN LÝ & BÁO CÁO</div>
+    <nav class="mobile-drawer-nav" id="mobileDrawerNavList">
+      <button type="button" class="mobile-drawer-item active" data-screen="screenClassStatus">
+        <span class="mdi-icon"><i class="fa-solid fa-graduation-cap"></i></span>
+        <span class="mdi-text">
+          <strong>1. Tình hình lớp học</strong>
+          <small>Kế hoạch, thực tế &amp; tiến độ lớp</small>
+        </span>
+        <i class="fa-solid fa-chevron-right mdi-arrow"></i>
+      </button>
+      <button type="button" class="mobile-drawer-item" data-screen="screenContentEval">
+        <span class="mdi-icon"><i class="fa-solid fa-book-open"></i></span>
+        <span class="mdi-text">
+          <strong>2. Nội dung đào tạo</strong>
+          <small>3 tiêu chí nội dung (Thang 4.0)</small>
+        </span>
+        <i class="fa-solid fa-chevron-right mdi-arrow"></i>
+      </button>
+      <button type="button" class="mobile-drawer-item" data-screen="screenPphtdt">
+        <span class="mdi-icon"><i class="fa-solid fa-chalkboard-user"></i></span>
+        <span class="mdi-text">
+          <strong>3. Phương pháp &amp; Hình thức</strong>
+          <small>Hoạt động &amp; hình thức đào tạo</small>
+        </span>
+        <i class="fa-solid fa-chevron-right mdi-arrow"></i>
+      </button>
+      <button type="button" class="mobile-drawer-item" data-screen="screenCsvc">
+        <span class="mdi-icon"><i class="fa-solid fa-building-columns"></i></span>
+        <span class="mdi-text">
+          <strong>4. Tổ chức &amp; CSVC</strong>
+          <small>Tổ chức, cơ sở vật chất &amp; hậu cần</small>
+        </span>
+        <i class="fa-solid fa-chevron-right mdi-arrow"></i>
+      </button>
+      <button type="button" class="mobile-drawer-item" data-screen="screenGv">
+        <span class="mdi-icon"><i class="fa-solid fa-user-tie"></i></span>
+        <span class="mdi-text">
+          <strong>5. Đánh giá Giảng viên</strong>
+          <small>Chuyên môn, sư phạm, số tiết</small>
+        </span>
+        <i class="fa-solid fa-chevron-right mdi-arrow"></i>
+      </button>
+      <button type="button" class="mobile-drawer-item" data-screen="screenDgc">
+        <span class="mdi-icon"><i class="fa-solid fa-clipboard-check"></i></span>
+        <span class="mdi-text">
+          <strong>6. Đánh giá chung</strong>
+          <small>Tự đánh giá &amp; ý kiến học viên</small>
+        </span>
+        <i class="fa-solid fa-chevron-right mdi-arrow"></i>
+      </button>
+      <button type="button" class="mobile-drawer-item" data-screen="screenGeneralReport">
+        <span class="mdi-icon"><i class="fa-solid fa-file-invoice"></i></span>
+        <span class="mdi-text">
+          <strong>7. Báo cáo chung</strong>
+          <small>Theo Lớp, Chương trình &amp; Thời gian</small>
+        </span>
+        <i class="fa-solid fa-chevron-right mdi-arrow"></i>
+      </button>
+    </nav>
+
+    <div class="mobile-drawer-footer">
+      <button type="button" id="btnMobileDrawerSync" class="btn btn-sync mobile-drawer-sync-btn">
+        <i class="fa-solid fa-arrows-rotate"></i>
+        <span>Đồng bộ Google Sheet</span>
+      </button>
+      <div class="mobile-drawer-status" id="mobileDrawerSyncStatus">
+        <span class="pulse-dot"></span>
+        <span>Sẵn sàng</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MOBILE FILTER BOTTOM SHEET CONTAINER -->
+  <div id="mobileFilterSheetOverlay" class="mobile-sheet-overlay" aria-hidden="true">
+    <div id="mobileFilterSheetPanel" class="mobile-sheet-panel" role="dialog" aria-modal="true" aria-labelledby="mobileFilterSheetTitle">
+      <div class="mobile-sheet-handle" aria-hidden="true"></div>
+      <div class="mobile-sheet-header">
+        <div class="mobile-sheet-title-wrap">
+          <i class="fa-solid fa-sliders"></i>
+          <div>
+            <h3 id="mobileFilterSheetTitle">BỘ LỌC DỮ LIỆU</h3>
+            <span id="mobileFilterSheetSubtitle">Chọn tiêu chí và nhấn Áp dụng</span>
+          </div>
+        </div>
+        <button type="button" id="btnMobileFilterSheetClose" class="mobile-sheet-close" aria-label="Đóng bộ lọc">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <div id="mobileFilterSheetBody" class="mobile-sheet-body"></div>
+      <div class="mobile-sheet-footer">
+        <button type="button" id="btnMobileFilterReset" class="btn mob-sheet-btn-reset">
+          <i class="fa-solid fa-rotate-left"></i> Xóa bộ lọc
+        </button>
+        <button type="button" id="btnMobileFilterApply" class="btn btn-primary mob-sheet-btn-apply">
+          <i class="fa-solid fa-check"></i> Áp dụng
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MOBILE TABLE COLUMN SELECTOR BOTTOM SHEET -->
+  <div id="mobileColSheetOverlay" class="mobile-sheet-overlay" aria-hidden="true">
+    <div id="mobileColSheetPanel" class="mobile-sheet-panel mobile-col-sheet-panel" role="dialog" aria-modal="true" aria-labelledby="mobileColSheetTitle">
+      <div class="mobile-sheet-handle" aria-hidden="true"></div>
+      <div class="mobile-sheet-header">
+        <div class="mobile-sheet-title-wrap">
+          <i class="fa-solid fa-table-columns"></i>
+          <div>
+            <h3 id="mobileColSheetTitle">TÙY CHỌN CỘT HIỂN THỊ</h3>
+            <span id="mobileColSheetSubtitle">Chọn các cột muốn xem ở chế độ bảng ngang</span>
+          </div>
+        </div>
+        <button type="button" id="btnMobileColSheetClose" class="mobile-sheet-close" aria-label="Đóng tùy chọn cột">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <div id="mobileColSheetBody" class="mobile-sheet-body"></div>
+      <div class="mobile-sheet-footer">
+        <button type="button" id="btnMobileColReset" class="btn mob-sheet-btn-reset">
+          <i class="fa-solid fa-rotate-left"></i> Khôi phục mặc định
+        </button>
+        <button type="button" id="btnMobileColDone" class="btn btn-primary mob-sheet-btn-apply">
+          <i class="fa-solid fa-check"></i> Xong
+        </button>
+      </div>
+    </div>
+  </div>
 
   <div class="dashboard-container">
 
     <!-- APP HEADER (Matching User Screenshot) -->
     <header class="app-header">
-      <div class="brand-title">
-        <div class="brand-logo-img">
-          <img src="agribank-logo.jpg" alt="Logo Agribank" class="logo-img">
-        </div>
-        <div class="brand-text">
-          <h1 class="brand-org-name">TRƯỜNG ĐÀO TẠO CÁN BỘ AGRIBANK</h1>
-          <div class="brand-dash-title"><span class="dot-green"></span> DASHBOARD QUẢN LÝ ĐÀO TẠO</div>
+      <div class="mobile-header-left">
+        <button type="button" id="btnMobileMenuOpen" class="mobile-menu-trigger" aria-label="Mở menu điều hướng" aria-expanded="false" aria-controls="mobileNavDrawer">
+          <i class="fa-solid fa-bars"></i>
+        </button>
+        <div class="brand-title">
+          <div class="brand-logo-img">
+            <img src="agribank-logo.jpg" alt="Logo Agribank" class="logo-img">
+          </div>
+          <div class="brand-text">
+            <h1 class="brand-org-name">TRƯỜNG ĐÀO TẠO CÁN BỘ AGRIBANK</h1>
+            <div class="brand-dash-title"><span class="dot-green"></span> <span class="brand-dash-full">DASHBOARD QUẢN LÝ ĐÀO TẠO</span><span class="brand-dash-short" id="mobileHeaderModuleLabel">Tình hình lớp học</span></div>
+          </div>
         </div>
       </div>
 
@@ -2878,6 +3027,7 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="data.js?v=9669_v29"></script>
   <script src="app.js?v=9669_v56"></script>
+  <script src="mobile-responsive.js?v=9669_v1"></script>
 </body>
 
 </html>
